@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
     for (const fecha of diasAProcesar) {
       const convocadosHoy = convocatoriasPorDia[fecha] || {};
       const agentesConvocados = (residentes || []).filter(
-        (r: { id_agente: number }) => r.id_agente in convocadosHoy
+        (r: { id_agente: number }) => convocadosHoy[r.id_agente] !== undefined
       );
 
       // Filter: only agents convocados AND not absent
