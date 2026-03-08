@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
       cargaGlobalPrevia[row.id_agente] =
         (cargaGlobalPrevia[row.id_agente] || 0) + 1;
     }
-    addLog(`✅ Historial previo del mes: ${(menuPrevio || []).length} filas`);
+    addLog(`✅ Historial previo del año ${year}: ${(menuPrevio || []).length} filas`);
 
     // =====================================================================
     // STEP 2: ASSIGNMENT ENGINE (3-Phase)
