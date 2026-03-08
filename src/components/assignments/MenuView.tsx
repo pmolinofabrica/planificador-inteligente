@@ -12,12 +12,6 @@ interface MenuViewProps {
 }
 
 const UNLOCK_CODE = '2350';
-const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
-const ORG_LABELS: Record<string, string> = {
-  'dispositivos fijos': 'Fija',
-  'rotacion simple': 'Rot. Simple',
-  'rotacion completa': 'Rot. Completa',
-};
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
