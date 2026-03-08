@@ -192,8 +192,28 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       </div>
       <div className="p-6 flex-1 overflow-y-auto bg-card">
         <div className="bg-muted rounded-xl p-4 mb-6 border border-border">
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2"><Activity className="w-4 h-4" /> Score</h4>
-          <span className={`text-3xl font-bold ${selectedResident.score >= 900 ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedResident.score} pts</span>
+          <h4 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Métricas de Rotación</h4>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${metrics.localReps <= 1 ? 'text-emerald-600' : metrics.localReps <= 2 ? 'text-amber-600' : 'text-destructive'}`}>
+                {metrics.localReps}×
+              </div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">en este disp.</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">{metrics.uniqueDevices}</div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">disp. únicos</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${metrics.diversityPct >= avgDiversity ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {metrics.diversityPct}%
+              </div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">diversidad</div>
+            </div>
+          </div>
+          <div className="mt-2 text-[10px] text-muted-foreground text-center">
+            {metrics.totalAssignments} asignaciones totales · Media diversidad: {avgDiversity}%
+          </div>
         </div>
         <h4 className="text-sm font-semibold mb-3 border-b border-border pb-2 flex items-center gap-2">
           <ArrowRightLeft className="w-4 h-4 text-primary" /> Alternativas
