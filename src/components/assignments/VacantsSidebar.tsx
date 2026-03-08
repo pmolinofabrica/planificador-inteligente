@@ -16,7 +16,7 @@ interface VacantsSidebarProps {
 export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
   data, selectedVacant, setSelectedVacant, setSelectedDevice, setSelectedResident, setShowVacantsSidebar, year,
 }) => {
-  const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices } = data;
+  const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices, isAgentAbsent } = data;
 
   return (
     <div className="w-96 bg-card border-r border-border shadow-2xl flex flex-col absolute left-0 h-full z-50 overflow-hidden">
