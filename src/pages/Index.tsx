@@ -4,6 +4,7 @@ import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
 import { ExecutionTab } from '@/components/assignments/ExecutionTab';
+import { MenuView } from '@/components/assignments/MenuView';
 import { DevicesTab } from '@/components/assignments/DevicesTab';
 import { ResidentSidebar } from '@/components/assignments/ResidentSidebar';
 import { DeviceSidebar } from '@/components/assignments/DeviceSidebar';
