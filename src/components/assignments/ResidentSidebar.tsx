@@ -68,7 +68,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB);
       pushUndo({ snapshots: [snapOriginal, filaNew] });
     } else {
-      await supabase.from('menu').insert([{ id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado' }]);
+      await supabase.from('menu').insert([{ id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
       pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true }] });
     }
     setSelectedResident(null);

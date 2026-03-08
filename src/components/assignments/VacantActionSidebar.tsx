@@ -42,7 +42,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
       await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
         .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
     } else {
-      await supabase.from('menu').insert([{ id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado' }]);
+      await supabase.from('menu').insert([{ id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
     }
     setSelectedVacant(null);
     refresh();
