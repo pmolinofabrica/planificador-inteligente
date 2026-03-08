@@ -218,6 +218,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             });
           } else {
             // tarde/manana: build from menu_semana
+            const menuSemanaConvMap: Record<string, Record<number, number>> = {};
             menuSemanaData.forEach(ms => {
               if (!ms.fecha_asignacion) return;
               const tipo = turnoTypeMap[ms.id_turno] || '';
@@ -232,6 +233,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
               }
 
+              // Store convocatoria ID from menu_semana
+              if (ms.id_convocatoria) {
+                if (!menuSemanaConvMap[uiDate]) menuSemanaConvMap[uiDate] = {};
+                menuSemanaConvMap[uiDate][ms.id_agente] = ms.id_convocatoria;
+              }
+
               if (ms.id_dispositivo && ms.id_dispositivo !== 999) {
                 const dId = String(ms.id_dispositivo);
                 if (!matrix[uiDate]) matrix[uiDate] = {};
@@ -244,6 +251,16 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 });
               }
             });
+            // Pre-seed agentConvocatoriaMap with menu_semana data
+            Object.entries(menuSemanaConvMap).forEach(([uiDate, agents]) => {
+              if (!menuSemanaConvMap[uiDate]) return;
+              Object.entries(agents).forEach(([agentIdStr, convId]) => {
+                if (!menuSemanaConvMap[uiDate]) menuSemanaConvMap[uiDate] = {};
+                menuSemanaConvMap[uiDate][Number(agentIdStr)] = convId;
+              });
+            });
+            // Store for merging in step 6
+            (window as any).__menuSemanaConvMap = menuSemanaConvMap;
           }
 
           // ═══════════════════════════════════════════════════════════
