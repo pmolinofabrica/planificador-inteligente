@@ -6,9 +6,9 @@ export const getFloorColor = (deviceName: string): string => {
 };
 
 export const getFloorColorBadge = (deviceName: string): string => {
-  if (deviceName.includes("(P1)")) return "bg-cyan-100 text-cyan-800";
-  if (deviceName.includes("(P2)")) return "bg-rose-100 text-rose-800";
-  if (deviceName.includes("(P3)")) return "bg-amber-100 text-amber-800";
+  if (deviceName.includes("(P1)")) return "bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))]";
+  if (deviceName.includes("(P2)")) return "bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))]";
+  if (deviceName.includes("(P3)")) return "bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))]";
   return "bg-muted text-muted-foreground";
 };
 
@@ -20,34 +20,34 @@ export const getScoreColor = (score: number): string => {
 
 export const getFloorAccent = (piso: number | string): string => {
   const p = String(piso);
-  if (p === '1') return "bg-cyan-600";
-  if (p === '2') return "bg-rose-600";
-  if (p === '3') return "bg-amber-600";
+  if (p === '1') return "bg-[hsl(var(--floor-1-accent))]";
+  if (p === '2') return "bg-[hsl(var(--floor-2-accent))]";
+  if (p === '3') return "bg-[hsl(var(--floor-3-accent))]";
   return "bg-muted-foreground";
 };
 
 export const getFloorPisoStyle = (pisoNum: string) => {
   const styles: Record<string, { name: string; bg: string; text: string; border: string; accent: string }> = {
-    '1': { name: 'PAPEL', bg: 'bg-cyan-50', text: 'text-cyan-900', border: 'border-cyan-200', accent: 'bg-cyan-600' },
-    '2': { name: 'MADERA', bg: 'bg-rose-50', text: 'text-rose-900', border: 'border-rose-200', accent: 'bg-rose-600' },
-    '3': { name: 'TEXTIL', bg: 'bg-amber-50', text: 'text-amber-900', border: 'border-amber-200', accent: 'bg-amber-600' },
+    '1': { name: 'PAPEL', bg: 'bg-[hsl(var(--floor-1-bg))]', text: 'text-[hsl(var(--floor-1-text))]', border: 'border-[hsl(var(--floor-1-border))]', accent: 'bg-[hsl(var(--floor-1-accent))]' },
+    '2': { name: 'MADERA', bg: 'bg-[hsl(var(--floor-2-bg))]', text: 'text-[hsl(var(--floor-2-text))]', border: 'border-[hsl(var(--floor-2-border))]', accent: 'bg-[hsl(var(--floor-2-accent))]' },
+    '3': { name: 'TEXTIL', bg: 'bg-[hsl(var(--floor-3-bg))]', text: 'text-[hsl(var(--floor-3-text))]', border: 'border-[hsl(var(--floor-3-border))]', accent: 'bg-[hsl(var(--floor-3-accent))]' },
   };
   return styles[pisoNum] || styles['1'];
 };
 
 export const getGroupColor = (num: number | null): string => {
   if (!num) return "bg-muted text-muted-foreground border-border";
-  if (num === 1) return "bg-cyan-500 text-white border-cyan-600";
-  if (num === 2) return "bg-rose-500 text-white border-rose-600";
-  if (num === 3) return "bg-amber-500 text-white border-amber-600";
+  if (num === 1) return "bg-[hsl(var(--floor-1-accent))] text-white border-[hsl(var(--floor-1-accent))]";
+  if (num === 2) return "bg-[hsl(var(--floor-2-accent))] text-white border-[hsl(var(--floor-2-accent))]";
+  if (num === 3) return "bg-[hsl(var(--floor-3-accent))] text-white border-[hsl(var(--floor-3-accent))]";
   return "bg-primary text-primary-foreground border-primary";
 };
 
 export const getGroupUnderline = (num: number | null): string => {
   if (!num) return "";
-  if (num === 1) return "border-b-2 border-cyan-500";
-  if (num === 2) return "border-b-2 border-rose-500";
-  if (num === 3) return "border-b-2 border-amber-500";
+  if (num === 1) return "border-b-2 border-[hsl(var(--floor-1-accent))]";
+  if (num === 2) return "border-b-2 border-[hsl(var(--floor-2-accent))]";
+  if (num === 3) return "border-b-2 border-[hsl(var(--floor-3-accent))]";
   return "border-b-2 border-primary";
 };
 
@@ -57,9 +57,9 @@ export const getPisoFromDeviceName = (name: string): string => {
 };
 
 export const getPisoBadgeColor = (piso: string): string => {
-  if (piso === 'P1') return 'bg-cyan-50 text-cyan-800 border-cyan-200';
-  if (piso === 'P2') return 'bg-rose-50 text-rose-800 border-rose-200';
-  if (piso === 'P3') return 'bg-amber-50 text-amber-800 border-amber-200';
+  if (piso === 'P1') return 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]';
+  if (piso === 'P2') return 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]';
+  if (piso === 'P3') return 'bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]';
   return 'bg-muted text-muted-foreground border-border';
 };
 

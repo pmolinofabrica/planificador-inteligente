@@ -35,11 +35,11 @@
 
     --radius: 1rem;
 
-    /* Floor colors — warm organic palette */
-    --floor-1-bg: 165 30% 93%;
-    --floor-1-text: 165 35% 28%;
-    --floor-1-border: 165 25% 78%;
-    --floor-1-accent: 165 35% 38%;
+    /* Floor colors — P1 celeste/blue, P2 terracotta, P3 amber */
+    --floor-1-bg: 205 45% 93%;
+    --floor-1-text: 205 45% 28%;
+    --floor-1-border: 205 35% 78%;
+    --floor-1-accent: 205 50% 48%;
 
     --floor-2-bg: 8 45% 94%;
     --floor-2-text: 8 40% 35%;
@@ -50,6 +50,12 @@
     --floor-3-text: 38 45% 30%;
     --floor-3-border: 38 35% 78%;
     --floor-3-accent: 38 60% 50%;
+
+    /* Group A/B colors for capacitación groups */
+    --group-a-text: 205 60% 35%;
+    --group-a-accent: 205 50% 48%;
+    --group-b-text: 8 50% 38%;
+    --group-b-accent: 8 50% 52%;
 
     /* Score colors — muted organic tones */
     --score-high-bg: 145 30% 92%;

@@ -309,8 +309,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
                               <span className={`font-bold truncate ${
                                       absent ? 'line-through text-muted-foreground'
-                                      : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
-                                      : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                      : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
+                                      : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                       : ''
                                     }`}>
                                        {absent && '🚫 '}{res.name}
@@ -333,8 +333,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                             }`}>
                               <span className={`font-bold truncate ${
                                 absent ? 'line-through text-muted-foreground'
-                                : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
-                                : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
+                                : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                 : ''
                               }`}>
                                 {absent && '🚫 '}{res.name}
@@ -405,10 +405,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   );
 };
 
-/** Returns a colored dot class for group number, matching the design system group colors */
+/** Returns a colored dot class for group number, matching floor accent colors */
 function getGroupDotColor(num: number | null): string {
-  if (num === 1) return 'bg-cyan-500';
-  if (num === 2) return 'bg-rose-500';
-  if (num === 3) return 'bg-amber-500';
+  if (num === 1) return 'bg-[hsl(var(--floor-1-accent))]';
+  if (num === 2) return 'bg-[hsl(var(--floor-2-accent))]';
+  if (num === 3) return 'bg-[hsl(var(--floor-3-accent))]';
   return 'bg-primary';
 }
