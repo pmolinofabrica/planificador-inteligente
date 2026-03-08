@@ -37,9 +37,9 @@ export const getFloorPisoStyle = (pisoNum: string) => {
 
 export const getGroupColor = (num: number | null): string => {
   if (!num) return "bg-muted text-muted-foreground border-border";
-  if (num === 1) return "bg-cyan-500 text-white border-cyan-600";
-  if (num === 2) return "bg-rose-500 text-white border-rose-600";
-  if (num === 3) return "bg-amber-500 text-white border-amber-600";
+  if (num === 1) return "bg-[hsl(var(--floor-1-accent))] text-white border-[hsl(var(--floor-1-accent))]";
+  if (num === 2) return "bg-[hsl(var(--floor-2-accent))] text-white border-[hsl(var(--floor-2-accent))]";
+  if (num === 3) return "bg-[hsl(var(--floor-3-accent))] text-white border-[hsl(var(--floor-3-accent))]";
   return "bg-primary text-primary-foreground border-primary";
 };
 
