@@ -161,6 +161,22 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     }
   });
 
+  // Debug: trace specific caps with devices
+  capsWithDevices.forEach(capId => {
+    const matchingConvs = convsData.filter(cv => planiToCap[cv.id_plani] === capId);
+    if (matchingConvs.length === 0) {
+      console.warn(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → 0 convocatorias matched via planiToCap`);
+    } else {
+      console.log(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → ${matchingConvs.length} convocatorias matched`);
+    }
+  });
+
+  // Debug: trace Enrique (id=89)
+  const enriqueRes = residentsMap[89];
+  if (enriqueRes) {
+    console.log(`[CapsBuilder:Enrique(89)] caps=`, JSON.stringify(enriqueRes.caps));
+  }
+
   console.log(`[CapsBuilder:path2] total convs=${convsData.length} noCapId=${path2NoCapId} vetoed=${path2Vetoed} skipped(noDate/noDispos)=${path2Skipped} assigned=${path2Count}`);
 
   // ── Step 7: Build agent groups ─────────────────────────────────────
