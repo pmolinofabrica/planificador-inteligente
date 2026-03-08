@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, LayoutGrid, Lock, Unlock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, Lock } from 'lucide-react';
 import { getFloorColor, getGroupColor } from '@/lib/floor-utils';
 import type { AssignmentEntry } from '@/types/assignments';
 
@@ -13,7 +13,6 @@ interface MenuViewProps {
 const UNLOCK_CODE = '2350';
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
-const pisoColors: Record<number, string> = { 1: 'border-cyan-400 bg-cyan-50', 2: 'border-rose-400 bg-rose-50', 3: 'border-amber-400 bg-amber-50' };
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked = false }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, calendarDb, allResidentsDb } = data;
@@ -32,7 +31,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   const convocados = convocadosDb[currentDate] || [];
   const convocadosCount = convocadosCountDb[currentDate] || 0;
 
-  // Build assigned IDs set
   const assignedIds = new Set<number>();
   Object.values(dateAssignments).forEach((arr: any) => {
     arr.forEach((r: any) => assignedIds.add(r.id));
@@ -42,13 +40,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   const pisoGroups: Record<number, typeof dbDevices> = {};
   dbDevices.forEach((dev: any) => {
     const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
-    if (assignments.length === 0) return; // Only show devices with residents
+    if (assignments.length === 0) return;
     const p = dev.piso || 0;
     if (!pisoGroups[p]) pisoGroups[p] = [];
     pisoGroups[p].push(dev);
   });
 
-  // Count stats
   let totalAssigned = 0;
   let totalCupos = 0;
   dbDevices.forEach((dev: any) => {
@@ -58,8 +55,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
   const totalVacant = totalCupos - totalAssigned;
 
-
-  // Absent convocados (assigned but absent)
   const absentAssigned: { name: string; device: string }[] = [];
   Object.entries(dateAssignments).forEach(([devId, arr]: [string, any]) => {
     const devObj = dbDevices.find((dd: any) => dd.id === devId);
@@ -70,15 +65,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     });
   });
 
-  // Free convocados (not assigned)
   const freeConvocados = convocados.filter((id: number) => !assignedIds.has(id));
   const freeConvocadosNames = freeConvocados.map((id: number) => {
     const res = allResidentsDb?.find((r: any) => r.id === id);
     return res ? res.name : `#${id}`;
   });
 
-  // Resting / other shift (not convocado, not assigned)
-  // We don't list all of them, just the count
   const restingCount = (allResidentsDb?.length || 0) - convocadosCount;
 
   const handleLockToggle = () => {
@@ -100,38 +92,49 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     }
   };
 
+  // Piso accent dot color using design tokens
+  const pisoAccent = (p: number) =>
+    p === 1 ? 'bg-[hsl(var(--floor-1-accent))]'
+    : p === 2 ? 'bg-[hsl(var(--floor-2-accent))]'
+    : 'bg-[hsl(var(--floor-3-accent))]';
+
+  const pisoBorder = (p: number) =>
+    p === 1 ? 'border-[hsl(var(--floor-1-border))] bg-[hsl(var(--floor-1-bg))]'
+    : p === 2 ? 'border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))]'
+    : 'border-[hsl(var(--floor-3-border))] bg-[hsl(var(--floor-3-bg))]';
+
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
-      <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-        {/* Header with lock button */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/10 p-2.5 rounded-xl border border-primary/20">
-              <LayoutGrid className="w-6 h-6 text-primary" />
+      <div className={`mx-auto px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5 ${isLocked ? 'max-w-4xl' : 'max-w-5xl'}`}>
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-primary/10 p-2 sm:p-2.5 rounded-xl border border-primary/20">
+              <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-foreground tracking-tight">Menú del Día</h2>
-              <p className="text-xs text-muted-foreground font-medium mt-0.5">Vista completa de asignaciones</p>
+              <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
             </div>
           </div>
-          {/* Lock/Unlock button */}
           <button
             onClick={handleLockToggle}
-            className={`p-2.5 rounded-xl border-2 transition-all ${
+            className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all ${
               isLocked
                 ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20'
                 : 'bg-muted border-border text-muted-foreground hover:bg-accent'
             }`}
             title={isLocked ? 'Desbloquear' : 'Bloquear vista'}
           >
-            {isLocked ? <Lock className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
+            {isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
         </div>
 
         {/* Unlock code input */}
         {showUnlockInput && (
-          <div className="mb-4 flex items-center gap-2 bg-card border border-border rounded-xl p-3 shadow-sm">
-            <LayoutGrid className="w-4 h-4 text-muted-foreground" />
+          <div className="mb-3 flex items-center gap-2 bg-card border border-border rounded-xl p-2.5 sm:p-3 shadow-warm">
+            <LayoutGrid className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <input
               type="password"
               maxLength={4}
@@ -139,51 +142,48 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               onChange={e => setUnlockCode(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleUnlockSubmit()}
               placeholder="Código"
-              className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm font-mono w-24 outline-none focus:ring-2 focus:ring-primary/30"
+              className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm font-mono w-20 outline-none focus:ring-2 focus:ring-primary/30"
               autoFocus
             />
-            <button onClick={handleUnlockSubmit} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-bold">
-              OK
-            </button>
-            <button onClick={() => setShowUnlockInput(false)} className="px-3 py-1.5 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">
-              ✕
-            </button>
+            <button onClick={handleUnlockSubmit} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-bold">OK</button>
+            <button onClick={() => setShowUnlockInput(false)} className="px-2.5 py-1.5 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">✕</button>
           </div>
         )}
 
-        {/* Date selector bar */}
-        <div className="flex items-center gap-3 mb-4 bg-card rounded-xl border border-border p-3 shadow-sm">
+        {/* ── Date Selector ── */}
+        <div className="flex items-center gap-2 sm:gap-3 mb-3 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
           <button onClick={prevDate} disabled={selectedDateIdx === 0}
-            className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border">
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border flex-shrink-0">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <div className="flex-1 text-center">
-            <span className="text-2xl font-black text-foreground tracking-tight">{currentDate}</span>
-            <div className="flex items-center justify-center gap-3 mt-1 flex-wrap">
-              <span className="text-xs font-bold text-muted-foreground">👥 {convocadosCount} convocados</span>
-              <span className="text-xs font-bold text-emerald-600">✅ {totalAssigned} asignados</span>
-              {totalVacant > 0 && <span className="text-xs font-bold text-destructive">⚠️ {totalVacant} vacantes</span>}
-              {freeConvocados.length > 0 && <span className="text-xs font-bold text-amber-600">🆓 {freeConvocados.length} libres</span>}
+          <div className="flex-1 text-center min-w-0">
+            <span className="text-xl sm:text-2xl font-black text-foreground tracking-tight">{currentDate}</span>
+            {/* Stats row — stacked on mobile, inline on tablet+ */}
+            <div className="flex items-center justify-center gap-2 sm:gap-3 mt-1 flex-wrap">
+              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 {convocadosCount}</span>
+              <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ {totalAssigned}</span>
+              {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ {totalVacant}</span>}
+              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {freeConvocados.length}</span>}
             </div>
             {orgType !== 'dispositivos fijos' && (
-              <span className="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md border bg-violet-100 text-violet-800 border-violet-300">
+              <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]">
                 🔄 {orgType}
               </span>
             )}
           </div>
           <button onClick={nextDate} disabled={selectedDateIdx >= activeDates.length - 1}
-            className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border">
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border flex-shrink-0">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Quick date chips */}
-        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 custom-scrollbar">
+        {/* ── Quick Date Chips ── scrollable on mobile */}
+        <div className="flex gap-1 sm:gap-1.5 mb-4 sm:mb-6 overflow-x-auto pb-1 custom-scrollbar -mx-1 px-1">
           {activeDates.map((d: string, idx: number) => (
             <button key={d} onClick={() => setSelectedDateIdx(idx)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border whitespace-nowrap transition-all ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold border whitespace-nowrap transition-all flex-shrink-0 ${
                 idx === selectedDateIdx
-                  ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105'
+                  ? 'bg-primary text-primary-foreground border-primary shadow-warm scale-105'
                   : 'bg-card text-muted-foreground border-border hover:bg-accent'
               }`}>
               {d}
@@ -191,14 +191,20 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           ))}
         </div>
 
-        {/* ===== ASSIGNED DEVICES BY PISO ===== */}
+        {/* ══════ ASSIGNED DEVICES BY PISO ══════ */}
         {Object.entries(pisoGroups).sort(([a], [b]) => Number(a) - Number(b)).map(([piso, devices]) => (
-          <div key={piso} className={`mb-6 rounded-xl border-2 overflow-hidden ${pisoColors[Number(piso)] || 'border-border bg-muted/30'}`}>
-            <div className="px-4 py-2.5 border-b border-border/50 flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${Number(piso) === 1 ? 'bg-cyan-500' : Number(piso) === 2 ? 'bg-rose-500' : 'bg-amber-500'}`} />
-              <span className="font-black text-sm tracking-wide">{pisoNames[Number(piso)] || `Piso ${piso}`}</span>
+          <div key={piso} className={`mb-4 sm:mb-6 rounded-xl border-2 overflow-hidden ${pisoBorder(Number(piso))}`}>
+            {/* Piso header */}
+            <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border/30 flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${pisoAccent(Number(piso))}`} />
+              <span className="font-black text-xs sm:text-sm tracking-wide">{pisoNames[Number(piso)] || `Piso ${piso}`}</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3">
+
+            {/* Device cards grid:
+                - Phone: 1 col
+                - Tablet (locked menu): 2 cols  
+                - Tablet landscape / Desktop: 2 cols */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 p-2 sm:p-3">
               {(devices as any[]).map((dev: any) => {
                 const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
                 const cupo = calendarDb[currentDate]?.[dev.id] || dev.max;
@@ -207,36 +213,38 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
 
                 return (
                   <div key={dev.id} className={`bg-card rounded-lg border-2 overflow-hidden transition-all ${
-                    isUnder ? 'border-destructive/40' : isFull ? 'border-emerald-400' : 'border-border'
+                    isUnder ? 'border-destructive/40' : isFull ? 'border-[hsl(var(--score-high-border))]' : 'border-border'
                   }`}>
-                    <div className={`px-3 py-2 flex items-center justify-between ${getFloorColor(dev.name)}`}>
-                      <span className="font-bold text-sm truncate">{dev.name}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                    {/* Device header */}
+                    <div className={`px-2.5 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 ${getFloorColor(dev.name)}`}>
+                      <span className="font-bold text-xs sm:text-sm truncate">{dev.name}</span>
+                      <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${
                         isUnder ? 'bg-destructive/10 text-destructive border-destructive/30'
-                        : 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                        : 'score-high'
                       }`}>
                         {assignments.length}/{cupo}
                       </span>
                     </div>
-                    <div className="p-2 space-y-1">
+                    {/* Resident list */}
+                    <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
                       {assignments.map((res, i) => {
                         const absent = isAgentAbsent(res.id, currentDate);
                         const group = agentGroups[String(res.id)];
                         return (
-                          <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border text-xs ${
+                          <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
                             absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                           }`}>
-                            <span className={`font-bold ${absent ? 'line-through text-muted-foreground' : ''}`}>
+                            <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
                               {absent && '🚫 '}{res.name}
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
                               {group && (
-                                <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-muted border border-border">
+                                <span className="text-[8px] sm:text-[9px] font-bold px-1 py-0.5 rounded bg-muted border border-border">
                                   {group}
                                 </span>
                               )}
                               {res.numero_grupo != null && (
-                                <span className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)}`}>
+                                <span className={`text-[8px] sm:text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)}`}>
                                   G{res.numero_grupo}
                                 </span>
                               )}
@@ -252,34 +260,34 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           </div>
         ))}
 
-        {/* ===== ABSENT ASSIGNED ===== */}
+        {/* ══════ ABSENT ASSIGNED ══════ */}
         {absentAssigned.length > 0 && (
-          <div className="mb-6 rounded-xl border-2 border-amber-400/40 bg-amber-50 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-amber-300/50 flex items-center gap-2">
-              <span className="text-base">🚫</span>
-              <span className="font-black text-sm tracking-wide text-amber-700">Inasistencias ({absentAssigned.length})</span>
+          <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] overflow-hidden">
+            <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--score-mid-border))]/50 flex items-center gap-2">
+              <span className="text-sm sm:text-base">🚫</span>
+              <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--score-mid-text))]">Inasistencias ({absentAssigned.length})</span>
             </div>
-            <div className="p-3 space-y-1">
+            <div className="p-2 sm:p-3 space-y-1">
               {absentAssigned.map((item, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded-md border border-amber-300/30 bg-card text-xs">
-                  <span className="font-bold line-through text-muted-foreground">{item.name}</span>
-                  <span className="text-[10px] font-medium text-amber-600">{item.device}</span>
+                <div key={i} className="flex items-center justify-between px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border border-[hsl(var(--score-mid-border))]/30 bg-card text-[11px] sm:text-xs">
+                  <span className="font-bold line-through text-muted-foreground truncate">{item.name}</span>
+                  <span className="text-[9px] sm:text-[10px] font-medium text-[hsl(var(--score-mid-text))] flex-shrink-0 ml-2">{item.device}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ===== FREE CONVOCADOS (not assigned) ===== */}
+        {/* ══════ FREE CONVOCADOS ══════ */}
         {freeConvocadosNames.length > 0 && (
-          <div className="mb-6 rounded-xl border-2 border-blue-400/40 bg-blue-50 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-blue-300/50 flex items-center gap-2">
-              <span className="text-base">🆓</span>
-              <span className="font-black text-sm tracking-wide text-blue-700">Convocados Libres ({freeConvocadosNames.length})</span>
+          <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--floor-1-border))] bg-[hsl(var(--floor-1-bg))] overflow-hidden">
+            <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--floor-1-border))]/50 flex items-center gap-2">
+              <span className="text-sm sm:text-base">🆓</span>
+              <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--floor-1-text))]">Convocados Libres ({freeConvocadosNames.length})</span>
             </div>
-            <div className="p-3 flex flex-wrap gap-2">
+            <div className="p-2 sm:p-3 flex flex-wrap gap-1.5 sm:gap-2">
               {freeConvocadosNames.map((name: string, i: number) => (
-                <span key={i} className="px-3 py-1.5 rounded-lg border border-blue-300/30 bg-card text-xs font-bold text-blue-700">
+                <span key={i} className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-[hsl(var(--floor-1-border))]/30 bg-card text-[10px] sm:text-xs font-bold text-[hsl(var(--floor-1-text))]">
                   {name}
                 </span>
               ))}
@@ -287,12 +295,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           </div>
         )}
 
-        {/* ===== REST / OTHER SHIFT ===== */}
+        {/* ══════ REST / OTHER SHIFT ══════ */}
         {restingCount > 0 && (
-          <div className="mb-6 rounded-xl border-2 border-border bg-muted/30 overflow-hidden">
-            <div className="px-4 py-2.5 flex items-center gap-2">
-              <span className="text-base">🌙</span>
-              <span className="font-black text-sm tracking-wide text-muted-foreground">Descanso / Otro turno ({restingCount})</span>
+          <div className="mb-4 sm:mb-6 rounded-xl border-2 border-border bg-muted/30 overflow-hidden">
+            <div className="px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2">
+              <span className="text-sm sm:text-base">🌙</span>
+              <span className="font-black text-xs sm:text-sm tracking-wide text-muted-foreground">Descanso / Otro turno ({restingCount})</span>
             </div>
           </div>
         )}
