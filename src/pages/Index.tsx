@@ -90,6 +90,7 @@ const Index = () => {
         <div className="flex overflow-x-auto bg-muted p-1 rounded-lg border border-border shadow-inner -mx-1 sm:mx-0">
           {[
             { key: 'plan' as ActiveTab, label: 'Planificación', color: 'text-primary' },
+            { key: 'menu' as ActiveTab, label: 'Menú', color: 'text-primary' },
             { key: 'exec' as ActiveTab, label: 'Apertura', color: 'text-destructive' },
             { key: 'devices' as ActiveTab, label: 'Dispositivos', color: 'text-primary' },
           ].map(tab => (
