@@ -69,7 +69,7 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
       {/* HEADER - hidden when menu is locked */}
       {!(menuLocked && activeTab === 'menu') && (
-      <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-sm gap-2 sm:gap-0">
+      <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-warm gap-2 sm:gap-0">
         <div className="flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
             <Calendar className="w-5 h-5" />
