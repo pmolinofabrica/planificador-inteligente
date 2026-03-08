@@ -19,10 +19,12 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   selectedDevice, selectedDate, setSelectedDevice, setSelectedDateFilter,
   setSelectedResident, data, pushUndo, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, tipoOrganizacionMap } = data;
   const deviceId = selectedDevice.id;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
   const isApertura = turnoFilter === 'apertura';
+  const orgType = tipoOrganizacionMap[selectedDate] || 'dispositivos fijos';
+  const isRotation = orgType.includes('rotacion');
 
   const [d, mStr] = selectedDate.split("/");
   const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
