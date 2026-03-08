@@ -166,6 +166,7 @@ const Index = () => {
             </div>
           )}
         </div>
+      </header>
       )}
 
       <div className="flex flex-1 relative overflow-hidden">
