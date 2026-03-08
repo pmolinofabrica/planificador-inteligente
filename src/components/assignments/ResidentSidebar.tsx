@@ -21,6 +21,10 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const date = selectedResident.date;
   const convocados = new Set(convocadosDb[date] || []);
 
+  // Build the DB-format date for cap comparison
+  const [dayStr, monthStr] = date.split("/");
+  const fechaDB = `${year}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
+
   const occupancies: Record<number, string> = {};
   Object.entries(assignmentsDb[date] || {}).forEach(([devIdStr, arr]: [string, any]) => {
     const devObj = dbDevices.find((d: any) => d.id === devIdStr);
@@ -32,10 +36,13 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   allResidentsDb.forEach((res: any) => {
     if (res.id === selectedResident.id) return;
     const isConvocado = convocados.has(res.id);
-    const isCapacitado = deviceId ? !!res.caps[deviceId] : false;
+    // Check capacitación WITH date: training must be on or before this date
+    const capDate = deviceId ? res.caps[deviceId] : undefined;
+    const isCapacitado = !!capDate && capDate <= fechaDB;
     const currentLocation = occupancies[res.id];
     const isBusy = !!currentLocation;
-    const alt = { name: res.name, id: res.id, reason: isConvocado ? (currentLocation ? `Ocupado: ${currentLocation}` : "Libre") : "Descanso", isBusy };
+    const capInfo = capDate ? ` (Cap: ${capDate})` : '';
+    const alt = { name: res.name, id: res.id, reason: isConvocado ? (currentLocation ? `Ocupado: ${currentLocation}` : "Libre") + capInfo : "Descanso" + capInfo, isBusy };
 
     if (isAgentAbsent(res.id, date)) return;
     if (isCapacitado && isConvocado) tier1.push(alt);

@@ -182,11 +182,39 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
         }
 
         // Fetch Asignaciones (menu table)
-        const { data: menuData } = await supabase
-          .from('menu')
-          .select('id_agente, id_dispositivo, fecha_asignacion, estado_ejecucion, orden')
-          .gte('fecha_asignacion', startOfMonth)
-          .lte('fecha_asignacion', endOfMonth);
+        const [menuRes, menuSemanaRes] = await Promise.all([
+          supabase.from('menu')
+            .select('id_agente, id_dispositivo, fecha_asignacion, estado_ejecucion, orden')
+            .gte('fecha_asignacion', startOfMonth)
+            .lte('fecha_asignacion', endOfMonth),
+          supabase.from('menu_semana')
+            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion')
+            .gte('fecha_asignacion', startOfMonth)
+            .lte('fecha_asignacion', endOfMonth)
+        ]);
+
+        const menuData = menuRes.data;
+        const menuSemanaData = menuSemanaRes.data;
+
+        // Build turno type lookup for menu_semana filtering
+        const turnosLookupRes = await supabase.from('turnos').select('id_turno, tipo_turno');
+        const turnoTypeMap: Record<number, string> = {};
+        if (turnosLookupRes.data) {
+          turnosLookupRes.data.forEach(t => { turnoTypeMap[t.id_turno] = t.tipo_turno; });
+        }
+
+        // Build numero_grupo map from menu_semana (keyed by "agentId-fecha-dispositivoId")
+        const grupoMap: Record<string, number | null> = {};
+        if (menuSemanaData) {
+          menuSemanaData.forEach(ms => {
+            if (!ms.fecha_asignacion) return;
+            // Only include apertura turno records
+            const tipo = (turnoTypeMap[ms.id_turno] || '').toLowerCase();
+            if (!tipo.includes('apertura')) return;
+            const key = `${ms.id_agente}-${ms.fecha_asignacion}-${ms.id_dispositivo}`;
+            grupoMap[key] = ms.numero_grupo;
+          });
+        }
 
         if (menuData && resiData) {
           const matrix: AssignmentsMatrix = {};
@@ -213,10 +241,13 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
               const dId = String(a.id_dispositivo);
               if (!matrix[uiDate]) matrix[uiDate] = {};
               if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
+              // Lookup numero_grupo from menu_semana
+              const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
               matrix[uiDate][dId].push({
                 id: a.id_agente,
                 name: nameDict[a.id_agente] || "Desconocido",
                 score: a.orden || 1000,
+                numero_grupo: grupoMap[grupoKey] ?? null,
               });
             }
           });
