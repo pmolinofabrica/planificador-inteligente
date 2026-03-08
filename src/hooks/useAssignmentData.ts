@@ -252,16 +252,23 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
             });
             // Pre-seed agentConvocatoriaMap with menu_semana data
-            Object.entries(menuSemanaConvMap).forEach(([uiDate, agents]) => {
-              if (!menuSemanaConvMap[uiDate]) return;
-              Object.entries(agents).forEach(([agentIdStr, convId]) => {
-                if (!menuSemanaConvMap[uiDate]) menuSemanaConvMap[uiDate] = {};
-                menuSemanaConvMap[uiDate][Number(agentIdStr)] = convId;
-              });
             });
-            // Store for merging in step 6
-            (window as any).__menuSemanaConvMap = menuSemanaConvMap;
           }
+          // Hoist menuSemanaConvMap for use in step 6
+          const _menuSemanaConvMap = !isApertura ? (() => {
+            const m: Record<string, Record<number, number>> = {};
+            menuSemanaData.forEach(ms => {
+              if (!ms.fecha_asignacion || !ms.id_convocatoria) return;
+              const tipo = turnoTypeMap[ms.id_turno] || '';
+              if (!matchesTurnoFilter(tipo)) return;
+              const [y, mm, d] = ms.fecha_asignacion.split("-");
+              if (y !== yFilt || mm !== mmFilt) return;
+              const uiDate = `${d}/${mm}`;
+              if (!m[uiDate]) m[uiDate] = {};
+              m[uiDate][ms.id_agente] = ms.id_convocatoria;
+            });
+            return m;
+          })() : {};
 
           // ═══════════════════════════════════════════════════════════
           // 6. CONVOCATORIA COMPLEMENTARIA
