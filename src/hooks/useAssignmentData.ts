@@ -251,8 +251,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 });
               }
             });
-            // Pre-seed agentConvocatoriaMap with menu_semana data
-            });
           }
           // Hoist menuSemanaConvMap for use in step 6
           const _menuSemanaConvMap = !isApertura ? (() => {
