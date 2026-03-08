@@ -69,9 +69,9 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
       {/* HEADER - hidden when menu is locked */}
       {!(menuLocked && activeTab === 'menu') && (
-      <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-sm gap-2 sm:gap-0">
+      <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-warm gap-2 sm:gap-0">
         <div className="flex items-center gap-3">
-          <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
+          <div className="bg-primary p-2.5 rounded-xl text-primary-foreground shadow-warm">
             <Calendar className="w-5 h-5" />
           </div>
           <div>
@@ -279,10 +279,10 @@ const Index = () => {
 
       {/* Loading Overlay */}
       {data.isLoading && (
-        <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-[100] flex items-center justify-center">
-          <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+        <div className="fixed inset-0 bg-background/60 backdrop-blur-md z-[100] flex items-center justify-center">
+          <div className="bg-card border border-border rounded-2xl p-8 shadow-warm-lg flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-bold text-muted-foreground">Cargando datos...</span>
+            <span className="text-sm font-semibold text-muted-foreground tracking-wide">Cargando datos...</span>
           </div>
         </div>
       )}
