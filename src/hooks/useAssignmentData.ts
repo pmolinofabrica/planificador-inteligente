@@ -218,7 +218,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             });
           } else {
             // tarde/manana: build from menu_semana
-            const menuSemanaConvMap: Record<string, Record<number, number>> = {};
             menuSemanaData.forEach(ms => {
               if (!ms.fecha_asignacion) return;
               const tipo = turnoTypeMap[ms.id_turno] || '';
@@ -231,12 +230,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (!convocadosList[uiDate].includes(ms.id_agente)) {
                 convocadosList[uiDate].push(ms.id_agente);
                 convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-              }
-
-              // Store convocatoria ID from menu_semana
-              if (ms.id_convocatoria) {
-                if (!menuSemanaConvMap[uiDate]) menuSemanaConvMap[uiDate] = {};
-                menuSemanaConvMap[uiDate][ms.id_agente] = ms.id_convocatoria;
               }
 
               if (ms.id_dispositivo && ms.id_dispositivo !== 999) {
