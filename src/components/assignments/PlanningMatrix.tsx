@@ -31,6 +31,50 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
+  const [isRunningEngine, setIsRunningEngine] = useState(false);
+
+  const isApertura = turnoFilter === 'apertura';
+
+  const handleRunEngine = async (dryRun: boolean) => {
+    if (isRunningEngine) return;
+    const confirmed = confirm(
+      dryRun
+        ? '¿Ejecutar el motor de asignación en modo SIMULACIÓN? (No modifica datos)'
+        : '⚠️ ¿Ejecutar el motor de asignación? Esto REEMPLAZARÁ las asignaciones "planificado" existentes del mes.'
+    );
+    if (!confirmed) return;
+
+    setIsRunningEngine(true);
+    try {
+      // Derive mes_objetivo from active dates
+      const sampleDate = activeDates[0];
+      if (!sampleDate) throw new Error('No hay fechas activas');
+      const [d, m] = sampleDate.split('/');
+      const mesObjetivo = `${m.padStart(2, '0')}-${year}`;
+
+      const { data: result, error } = await supabase.functions.invoke('motor-asignacion-apertura', {
+        body: { mes_objetivo: mesObjetivo, anio_cohorte: parseInt(year), dry_run: dryRun },
+      });
+
+      if (error) throw error;
+
+      if (result?.success) {
+        const msg = dryRun
+          ? `✅ Simulación completada: ${result.asignaciones} asignaciones + ${result.vacantes} vacantes`
+          : `✅ Motor ejecutado: ${result.insertados}/${result.asignaciones + result.vacantes} registros persistidos`;
+        toast.success(msg);
+        if (!dryRun) refresh();
+        console.log('[Motor Apertura] Log:', result.log);
+      } else {
+        throw new Error(result?.error || 'Error desconocido');
+      }
+    } catch (err: any) {
+      console.error('Error motor:', err);
+      toast.error(`Error del motor: ${err.message || err}`);
+    } finally {
+      setIsRunningEngine(false);
+    }
+  };
 
   const handleGroupChange = async (resId: number, date: string, deviceId: string, newGroup: number | null) => {
     setEditingGroup(null);
