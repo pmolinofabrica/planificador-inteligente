@@ -250,7 +250,7 @@ const Index = () => {
         )}
 
         {activeTab === 'menu' && (
-          <MenuView data={data} year={year} />
+          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} />
         )}
 
         {activeTab === 'exec' && (
