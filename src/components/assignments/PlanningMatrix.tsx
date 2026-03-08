@@ -35,12 +35,10 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 
   const isApertura = turnoFilter === 'apertura';
 
-  const handleRunEngine = async (dryRun: boolean) => {
+  const handleRunEngine = async () => {
     if (isRunningEngine) return;
     const confirmed = confirm(
-      dryRun
-        ? '¿Ejecutar el motor de asignación en modo SIMULACIÓN? (No modifica datos)'
-        : '⚠️ ¿Ejecutar el motor de asignación? Esto REEMPLAZARÁ las asignaciones "planificado" existentes del mes.'
+      '⚠️ ¿Ejecutar el motor de asignación? Esto REEMPLAZARÁ las asignaciones "planificado" existentes de fechas futuras.'
     );
     if (!confirmed) return;
 
