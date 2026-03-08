@@ -251,6 +251,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                             ) : (
                               assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
+                                const metrics = computeRotationMetrics(res.id, String(device.id), assignmentsDb, totalDeviceCount);
                                 return (
                                   <div
                                     key={idx}
@@ -260,7 +261,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       setSelectedDevice(null);
                                     }}
                                     className={`text-left px-2 py-1.5 rounded border text-sm flex justify-between items-center transition-all cursor-pointer
-                                      ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getScoreColor(res.score)}
+                                      ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getRepsColor(metrics.localReps)}
                                       ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
                                     }
                                   >
