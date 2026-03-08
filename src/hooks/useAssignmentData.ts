@@ -50,6 +50,15 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       let residentsMap: Record<number, ResidentInfo> = {};
       const { yFilt, mmFilt, startOfMonth, endOfMonth } = getMonthParts();
 
+      // Turno filter matching function
+      const matchesTurnoFilter = (tipo: string): boolean => {
+        const t = tipo.toLowerCase();
+        if (turnoFilter === 'apertura') return t.includes('apertura');
+        if (turnoFilter === 'tarde') return t.includes('turno tarde');
+        if (turnoFilter === 'manana') return t.includes('turno mañana') || t.includes('turno manana');
+        return t.includes('apertura');
+      };
+
       try {
         // Fetch Dispositivos
         const { data: dispoData } = await supabase
