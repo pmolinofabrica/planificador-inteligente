@@ -94,7 +94,13 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
 
   const freeConvocados = convocados.filter((id: number) => !assignedIds.has(id));
-  const freeConvocadosNames = freeConvocados.map((id: number) => {
+  const absentFreeIds = freeConvocados.filter((id: number) => isAgentAbsent(id, currentDate));
+  const actuallyFree = freeConvocados.filter((id: number) => !isAgentAbsent(id, currentDate));
+  const freeConvocadosNames = actuallyFree.map((id: number) => {
+    const res = allResidentsDb?.find((r: any) => r.id === id);
+    return res ? res.name : `#${id}`;
+  });
+  const absentFreeNames = absentFreeIds.map((id: number) => {
     const res = allResidentsDb?.find((r: any) => r.id === id);
     return res ? res.name : `#${id}`;
   });
