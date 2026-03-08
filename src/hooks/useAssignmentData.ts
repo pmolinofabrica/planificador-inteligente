@@ -285,22 +285,29 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               filteredPlaniIds.push(p.id_plani);
             });
 
+            // Start with menu_semana convocatoria IDs if available
+            const dateAgentConv: Record<string, Record<number, number>> = 
+              { ...((window as any).__menuSemanaConvMap || {}) };
+            delete (window as any).__menuSemanaConvMap;
+
             if (filteredPlaniIds.length > 0) {
               const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
-              const dateAgentConv: Record<string, Record<number, number>> = {};
               matchingConvs.forEach(c => {
                 const uiDate = planiToUiDate[c.id_plani];
                 if (!uiDate) return;
                 if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
-                dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                // Don't overwrite if already set from menu_semana
+                if (!dateAgentConv[uiDate][c.id_agente]) {
+                  dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                }
                 if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
                 if (!convocadosList[uiDate].includes(c.id_agente)) {
                   convocadosList[uiDate].push(c.id_agente);
                   convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
                 }
               });
-              setAgentConvocatoriaMap(dateAgentConv);
             }
+            setAgentConvocatoriaMap(dateAgentConv);
           } catch (e) {
             console.error("Error cargando convocatoria:", e);
           }
