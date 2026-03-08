@@ -318,7 +318,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           setCalendarDb(newCalendarDb);
 
           // ═══════════════════════════════════════════════════════════
-          // 8. ACTIVE DATES (from planificación)
+          // 8. ACTIVE DATES (from planificación + menu_semana for non-apertura)
           // ═══════════════════════════════════════════════════════════
           const allActiveDates = new Set<string>();
           const turnoPerDate: Record<string, number> = {};
@@ -337,6 +337,20 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             allActiveDates.add(uiDate);
             turnoPerDate[uiDate] = p.id_turno;
           });
+
+          // Also add dates from menu_semana for non-apertura (in case no planificacion rows exist)
+          if (!isApertura) {
+            menuSemanaData.forEach(ms => {
+              if (!ms.fecha_asignacion) return;
+              const tipo = turnoTypeMap[ms.id_turno] || '';
+              if (!matchesTurnoFilter(tipo)) return;
+              const [fy, fm, fd] = ms.fecha_asignacion.split('-');
+              if (fy !== yFilt || fm !== mmFilt) return;
+              const uiDate = `${fd}/${fm}`;
+              allActiveDates.add(uiDate);
+              if (!turnoPerDate[uiDate]) turnoPerDate[uiDate] = ms.id_turno;
+            });
+          }
           setDateTurnoMap(turnoPerDate);
 
           // Filter matrix to valid dates
