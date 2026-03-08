@@ -41,16 +41,24 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
           const vacantes = convocados.filter((id: number) => !assignedIds.has(id));
           if (vacantes.length === 0) return null;
 
+          const absentCount = vacantes.filter((id: number) => isAgentAbsent(id, date)).length;
+
           return (
             <div key={idx} className="border border-border rounded-xl overflow-hidden">
               <div className="bg-muted px-3 py-2 border-b border-border font-bold text-sm text-foreground flex justify-between items-center">
                 {date}
-                <span className="bg-destructive/10 text-destructive px-2 py-0.5 rounded-full text-xs shadow-sm">{vacantes.length} sueltos</span>
+                <div className="flex gap-1">
+                  {absentCount > 0 && (
+                    <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full text-xs shadow-sm">🚫 {absentCount}</span>
+                  )}
+                  <span className="bg-destructive/10 text-destructive px-2 py-0.5 rounded-full text-xs shadow-sm">{vacantes.length - absentCount} sueltos</span>
+                </div>
               </div>
               <div className="p-2 space-y-2 bg-card">
                 {vacantes.map((vid: number) => {
                   const res = allResidentsDb.find((r: any) => r.id === vid);
                   if (!res) return null;
+                  const absent = isAgentAbsent(res.id, date);
                   const fechaDB = `${year}-${date.split("/")[1]}-${date.split("/")[0]}`;
                   const pisosCap: Record<string, number> = {};
                   Object.keys(res.caps).forEach((dId: string) => {
@@ -67,13 +75,20 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                     <button key={`${date}-${vid}`}
                       onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date }); setSelectedDevice(null); setSelectedResident(null); }}
                       className={`w-full text-left p-3 rounded-xl border transition-all shadow-sm ${
-                        selectedVacant?.id === res.id && selectedVacant?.date === date
-                          ? 'border-primary ring-2 ring-primary/20 bg-primary/5 scale-[1.02]'
-                          : 'border-border bg-card hover:border-primary/40 hover:shadow-md'
+                        absent
+                          ? 'border-stone-300 bg-stone-50 border-dashed opacity-80'
+                          : selectedVacant?.id === res.id && selectedVacant?.date === date
+                            ? 'border-primary ring-2 ring-primary/20 bg-primary/5 scale-[1.02]'
+                            : 'border-border bg-card hover:border-primary/40 hover:shadow-md'
                       }`}>
                       <div className="font-bold text-sm text-foreground mb-1.5 flex items-center justify-between">
-                        {res.name}
-                        <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                        <span className={absent ? 'line-through text-stone-500' : ''}>
+                          {absent && <span className="mr-1">🚫</span>}{res.name}
+                        </span>
+                        {absent
+                          ? <span className="text-[9px] bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded border border-stone-300 font-bold">AUSENTE</span>
+                          : <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                        }
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {Object.keys(pisosCap).length === 0
@@ -85,8 +100,6 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                           ))}
                       </div>
                     </button>
-                      );
-                    })()}
                   );
                 })}
               </div>
