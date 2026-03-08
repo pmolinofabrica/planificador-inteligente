@@ -88,7 +88,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(4000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(2000),
           supabase.from('dias').select('id_dia, fecha').in('id_dia', diaIds),
-          supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani').eq('estado', 'vigente'),
+          supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani').eq('estado', 'vigente').limit(10000),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo')
         ]);
 
