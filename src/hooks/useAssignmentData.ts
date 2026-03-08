@@ -8,9 +8,10 @@ import type {
 
 interface UseAssignmentDataProps {
   selectedMonth: string;
+  turnoFilter?: string;
 }
 
-export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
+export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
@@ -48,6 +49,15 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
       setIsLoading(true);
       let residentsMap: Record<number, ResidentInfo> = {};
       const { yFilt, mmFilt, startOfMonth, endOfMonth } = getMonthParts();
+
+      // Turno filter matching function
+      const matchesTurnoFilter = (tipo: string): boolean => {
+        const t = tipo.toLowerCase();
+        if (turnoFilter === 'apertura') return t.includes('apertura');
+        if (turnoFilter === 'tarde') return t.includes('turno tarde');
+        if (turnoFilter === 'manana') return t.includes('turno mañana') || t.includes('turno manana');
+        return t.includes('apertura');
+      };
 
       try {
         // Fetch Dispositivos
@@ -87,7 +97,7 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(4000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(2000),
           supabase.from('dias').select('id_dia, fecha').in('id_dia', diaIds),
-          supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani').eq('estado', 'vigente'),
+          supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani').eq('estado', 'vigente').limit(10000),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo')
         ]);
 
@@ -206,14 +216,15 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
           turnosLookupRes.data.forEach(t => { turnoTypeMap[t.id_turno] = t.tipo_turno; });
         }
 
+
+
         // Build numero_grupo map from menu_semana (keyed by "agentId-fecha-dispositivoId")
         const grupoMap: Record<string, number | null> = {};
         if (menuSemanaData) {
           menuSemanaData.forEach(ms => {
             if (!ms.fecha_asignacion) return;
-            // Only include apertura turno records
-            const tipo = (turnoTypeMap[ms.id_turno] || '').toLowerCase();
-            if (!tipo.includes('apertura')) return;
+            const tipo = turnoTypeMap[ms.id_turno] || '';
+            if (!matchesTurnoFilter(tipo)) return;
             const key = `${ms.id_agente}-${ms.fecha_asignacion}-${ms.id_dispositivo}`;
             grupoMap[key] = ms.numero_grupo;
           });
@@ -273,8 +284,8 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
               const aperturaPlaniIds: number[] = [];
 
               planiConv.data.forEach(p => {
-                const tipo = (tDict[p.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = tDict[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const fecha = dMap[p.id_dia];
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
@@ -329,8 +340,8 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
             if (calData) {
               calData.forEach(row => {
                 if (!row.fecha) return;
-                const tipo = (calTurnoDict[row.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = calTurnoDict[row.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const [fy, fm, fd] = row.fecha.substring(0, 10).split('-');
                 const uiDate = `${fd}/${fm}`;
                 if (!newCalendarDb[uiDate]) newCalendarDb[uiDate] = {};
@@ -367,8 +378,8 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
               allDiasRes.data.forEach(d => { if (d.fecha) dDict[d.id_dia] = d.fecha.substring(0, 10); });
 
               planiRes.data.forEach(p => {
-                const tipo = (turnoDict[p.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = turnoDict[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const fecha = dDict[p.id_dia];
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
@@ -429,7 +440,7 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
     }
 
     loadInitialData();
-  }, [selectedMonth, refreshCounter, getMonthParts]);
+  }, [selectedMonth, refreshCounter, getMonthParts, turnoFilter]);
 
   const isAgentAbsent = useCallback((agentId: number, uiDate: string): boolean => {
     return (inasistenciasDb[uiDate] || []).some(x => x.id_agente === agentId);
