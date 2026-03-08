@@ -340,8 +340,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             if (calData) {
               calData.forEach(row => {
                 if (!row.fecha) return;
-                const tipo = (calTurnoDict[row.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = calTurnoDict[row.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const [fy, fm, fd] = row.fecha.substring(0, 10).split('-');
                 const uiDate = `${fd}/${fm}`;
                 if (!newCalendarDb[uiDate]) newCalendarDb[uiDate] = {};
