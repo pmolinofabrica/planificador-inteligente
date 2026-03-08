@@ -100,28 +100,46 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <h4 className="font-bold text-sm text-amber-900 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" /> Sin Asignar
               </h4>
-              <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-xs font-bold">
-                {freeResidents.length}
-              </span>
+              <div className="flex gap-1">
+                {absentUnassigned.length > 0 && (
+                  <span className="bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full text-xs font-bold">🚫 {absentUnassigned.length}</span>
+                )}
+                <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-xs font-bold">
+                  {freeResidents.length}
+                </span>
+              </div>
             </div>
             <div className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[500px]">
-              {freeResidents.length === 0 ? (
+              {freeResidents.length === 0 && absentUnassigned.length === 0 ? (
                 <div className="text-center text-amber-600/60 text-sm py-8 italic">
                   Todos los convocados tienen dispositivo asignado ✓
                 </div>
               ) : (
-                freeResidents.map((res: any) => (
-                  <div
-                    key={res.id}
-                    onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date: execDate }); setShowVacantsSidebar(true); }}
-                    className="flex flex-col gap-2 p-3 rounded-xl border bg-card border-amber-300 shadow-sm hover:shadow transition-all cursor-pointer hover:border-primary/50"
-                  >
-                    <span className="font-bold text-sm text-foreground">{res.name}</span>
-                    <button className="w-full flex items-center justify-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg">
-                      Asignar
-                    </button>
-                  </div>
-                ))
+                <>
+                  {freeResidents.map((res: any) => (
+                    <div
+                      key={res.id}
+                      onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date: execDate }); setShowVacantsSidebar(true); }}
+                      className="flex flex-col gap-2 p-3 rounded-xl border bg-card border-amber-300 shadow-sm hover:shadow transition-all cursor-pointer hover:border-primary/50"
+                    >
+                      <span className="font-bold text-sm text-foreground">{res.name}</span>
+                      <button className="w-full flex items-center justify-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg">
+                        Asignar
+                      </button>
+                    </div>
+                  ))}
+                  {absentUnassigned.length > 0 && (
+                    <div className="border-t border-stone-200 pt-3 mt-1">
+                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2 block">🚫 Ausentes ({absentUnassigned.length})</span>
+                      {absentUnassigned.map((res: any) => (
+                        <div key={res.id} className="p-2.5 rounded-xl border border-dashed border-stone-300 bg-stone-50 mb-1.5">
+                          <span className="font-bold text-sm text-stone-400 line-through">{res.name}</span>
+                          <span className="text-[9px] ml-2 bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded font-bold">AUSENTE</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="mt-auto pt-4 border-t border-amber-200/50">
