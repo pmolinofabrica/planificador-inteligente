@@ -426,7 +426,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     agentGroups, calendarDb, setCalendarDb, convocadosCountDb,
     convocadosDb, isLoading, setIsLoading, activeDates,
     dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
-    tipoOrganizacionMap, turnoFilter,
+    tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     refresh, isAgentAbsent, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };
