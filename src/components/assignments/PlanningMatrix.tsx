@@ -50,8 +50,11 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       const [d, m] = sampleDate.split('/');
       const mesObjetivo = `${m.padStart(2, '0')}-${year}`;
 
+      // Send today's date so the motor only processes today+future
+      const today = new Date().toISOString().split('T')[0];
+
       const { data: result, error } = await supabase.functions.invoke('motor-asignacion-apertura', {
-        body: { mes_objetivo: mesObjetivo, anio_cohorte: parseInt(year), dry_run: dryRun },
+        body: { mes_objetivo: mesObjetivo, anio_cohorte: parseInt(year), start_date: today },
       });
 
       if (error) throw error;
