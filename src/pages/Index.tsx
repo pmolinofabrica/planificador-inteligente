@@ -71,7 +71,7 @@ const Index = () => {
       {!(menuLocked && activeTab === 'menu') && (
       <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-warm gap-2 sm:gap-0">
         <div className="flex items-center gap-3">
-          <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
+          <div className="bg-primary p-2.5 rounded-xl text-primary-foreground shadow-warm">
             <Calendar className="w-5 h-5" />
           </div>
           <div>
