@@ -405,10 +405,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   );
 };
 
-/** Returns a colored dot class for group number, matching the design system group colors */
+/** Returns a colored dot class for group number, matching floor accent colors */
 function getGroupDotColor(num: number | null): string {
-  if (num === 1) return 'bg-cyan-500';
-  if (num === 2) return 'bg-rose-500';
-  if (num === 3) return 'bg-amber-500';
+  if (num === 1) return 'bg-[hsl(var(--floor-1-accent))]';
+  if (num === 2) return 'bg-[hsl(var(--floor-2-accent))]';
+  if (num === 3) return 'bg-[hsl(var(--floor-3-accent))]';
   return 'bg-primary';
 }
