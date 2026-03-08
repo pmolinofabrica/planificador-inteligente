@@ -280,7 +280,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                             .filter((d: any) => d.id !== device.id)
                             .map((targetDev: any) => {
                               const tCupo = calendarDb[execDate]?.[targetDev.id] || 0;
-                              const tAssigned = assignmentsDb[execDate]?>[targetDev.id]?.length || 0;
+                              const tAssigned = assignmentsDb[execDate]?.[targetDev.id]?.length || 0;
                               const isClosed = tCupo === 0;
                               const isFull = tAssigned >= tCupo && tCupo > 0;
                               return (
