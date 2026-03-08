@@ -80,9 +80,6 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <Users className="w-8 h-8 text-destructive" />
               Apertura / Inasistencias
             </h2>
-            <p className="text-sm text-muted-foreground mt-1 font-medium">
-              Operación diaria — Kanban de dispositivos activos
-            </p>
           </div>
           <div className="flex items-center gap-3">
             <select

@@ -108,9 +108,6 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
               <Calendar className="w-8 h-8 text-primary" />
               Matriz de Planificación
             </h2>
-            <p className="text-sm text-muted-foreground mt-1 font-medium">
-              Dispositivos × Fechas — Click en celda para ver dispositivo, click en tarjeta para modificar residente
-            </p>
           </div>
           <div className="flex items-center gap-2">
             {isApertura && (
