@@ -114,7 +114,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           <div className="flex items-center gap-2">
             {isApertura && (
               <button
-                onClick={() => handleRunEngine(false)}
+                onClick={() => handleRunEngine()}
                 disabled={isRunningEngine}
                 className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 font-bold px-3 py-2 rounded-xl transition-colors text-xs flex items-center gap-2 disabled:opacity-50"
               >

@@ -22,8 +22,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { mes_objetivo, anio_cohorte = 2026, start_date, dry_run = false } =
-      body;
+    const { mes_objetivo, anio_cohorte = 2026, start_date } = body;
 
     if (!mes_objetivo) {
       return new Response(
