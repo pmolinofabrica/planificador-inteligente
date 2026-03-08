@@ -291,9 +291,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             });
 
             // Start with menu_semana convocatoria IDs if available
-            const dateAgentConv: Record<string, Record<number, number>> = 
-              { ...((window as any).__menuSemanaConvMap || {}) };
-            delete (window as any).__menuSemanaConvMap;
+            const dateAgentConv: Record<string, Record<number, number>> = {};
+            // Deep-copy _menuSemanaConvMap entries
+            Object.entries(_menuSemanaConvMap).forEach(([ud, agents]) => {
+              dateAgentConv[ud] = { ...agents };
+            });
 
             if (filteredPlaniIds.length > 0) {
               const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
