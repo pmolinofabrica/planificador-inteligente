@@ -101,14 +101,6 @@ const Index = () => {
             >
               <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
             </button>
-            {!isNonAperturaFilter && (
-              <button
-                onClick={() => { if (confirm("¿Ejecutar motor de asignación?")) { alert("Motor de asignación en desarrollo."); } }}
-                className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                🔮 Generar
-              </button>
-            )}
             {isNonAperturaFilter && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
