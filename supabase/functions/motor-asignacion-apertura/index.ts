@@ -22,8 +22,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { mes_objetivo, anio_cohorte = 2026, start_date, dry_run = false } =
-      body;
+    const { mes_objetivo, anio_cohorte = 2026, start_date } = body;
 
     if (!mes_objetivo) {
       return new Response(
@@ -274,12 +273,14 @@ Deno.serve(async (req) => {
     }
     addLog(`✅ Inasistencias: ${(inasistenciasData || []).length}`);
 
-    // 1g. Pre-cargar historial existente del mes (menu)
+    // 1g. Pre-cargar historial existente de TODO EL AÑO (equidad anual)
+    const anioInicio = `${year}-01-01`;
+    const anioFin = `${year}-12-31`;
     const { data: menuPrevio } = await supabase
       .from("menu")
       .select("id_agente, id_dispositivo, fecha_asignacion")
-      .gte("fecha_asignacion", fechaInicio)
-      .lte("fecha_asignacion", fechaFin);
+      .gte("fecha_asignacion", anioInicio)
+      .lte("fecha_asignacion", anioFin);
 
     const historialPrevio: Record<number, Record<number, number>> = {};
     const cargaGlobalPrevia: Record<number, number> = {};
@@ -292,17 +293,17 @@ Deno.serve(async (req) => {
       cargaGlobalPrevia[row.id_agente] =
         (cargaGlobalPrevia[row.id_agente] || 0) + 1;
     }
-    addLog(`✅ Historial previo del mes: ${(menuPrevio || []).length} filas`);
+    addLog(`✅ Historial previo del año ${year}: ${(menuPrevio || []).length} filas`);
 
     // =====================================================================
     // STEP 2: ASSIGNMENT ENGINE (3-Phase)
     // =====================================================================
 
-    // Derive days to process
-    let diasAProcesar = Object.keys(convocatoriasPorDia).sort();
-    if (start_date) {
-      diasAProcesar = diasAProcesar.filter((d) => d >= start_date);
-    }
+    // Derive days to process — only current/future dates
+    const today = start_date || new Date().toISOString().split("T")[0];
+    let diasAProcesar = Object.keys(convocatoriasPorDia)
+      .filter((d) => d >= today)
+      .sort();
     addLog(`📅 Días a procesar: ${diasAProcesar.length} → [${diasAProcesar.join(", ")}]`);
 
     // Tracking
@@ -546,24 +547,6 @@ Deno.serve(async (req) => {
     addLog(
       `\n📊 Resultado: ${batchPayload.length} asignaciones + ${vacantPayload.length} vacantes (pool P0)`
     );
-
-    if (dry_run) {
-      addLog("🔍 DRY RUN: No se persistió nada en la base de datos.");
-      return new Response(
-        JSON.stringify({
-          success: true,
-          dry_run: true,
-          stats,
-          asignaciones: batchPayload.length,
-          vacantes: vacantPayload.length,
-          log,
-          grilla,
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
 
     // Delete existing motor-generated rows for the dates we're processing
     // (only planificado status, to avoid overwriting manually executed ones)

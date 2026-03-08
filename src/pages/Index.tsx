@@ -101,14 +101,6 @@ const Index = () => {
             >
               <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
             </button>
-            {!isNonAperturaFilter && (
-              <button
-                onClick={() => { if (confirm("¿Ejecutar motor de asignación?")) { alert("Motor de asignación en desarrollo."); } }}
-                className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                🔮 Generar
-              </button>
-            )}
             {isNonAperturaFilter && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
@@ -176,14 +168,6 @@ const Index = () => {
           >
             <Undo2 className="w-3 h-3" /> Deshacer ({undoStack.length})
           </button>
-          {!isNonAperturaFilter && (
-            <button
-              onClick={() => { if (confirm("¿Ejecutar motor de asignación?")) { alert("Motor en desarrollo."); } }}
-              className="font-bold px-2.5 py-1 rounded-lg text-[10px] flex items-center gap-1 bg-primary text-primary-foreground"
-            >
-              🔮 Generar
-            </button>
-          )}
           {isNonAperturaFilter && (
             <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-lg border border-border">
               Org: {Object.values(data.tipoOrganizacionMap)[0] || '—'}
