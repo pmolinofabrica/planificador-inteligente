@@ -28,9 +28,9 @@ export const getFloorAccent = (piso: number | string): string => {
 
 export const getFloorPisoStyle = (pisoNum: string) => {
   const styles: Record<string, { name: string; bg: string; text: string; border: string; accent: string }> = {
-    '1': { name: 'PAPEL', bg: 'bg-cyan-50', text: 'text-cyan-900', border: 'border-cyan-200', accent: 'bg-cyan-600' },
-    '2': { name: 'MADERA', bg: 'bg-rose-50', text: 'text-rose-900', border: 'border-rose-200', accent: 'bg-rose-600' },
-    '3': { name: 'TEXTIL', bg: 'bg-amber-50', text: 'text-amber-900', border: 'border-amber-200', accent: 'bg-amber-600' },
+    '1': { name: 'PAPEL', bg: 'bg-[hsl(var(--floor-1-bg))]', text: 'text-[hsl(var(--floor-1-text))]', border: 'border-[hsl(var(--floor-1-border))]', accent: 'bg-[hsl(var(--floor-1-accent))]' },
+    '2': { name: 'MADERA', bg: 'bg-[hsl(var(--floor-2-bg))]', text: 'text-[hsl(var(--floor-2-text))]', border: 'border-[hsl(var(--floor-2-border))]', accent: 'bg-[hsl(var(--floor-2-accent))]' },
+    '3': { name: 'TEXTIL', bg: 'bg-[hsl(var(--floor-3-bg))]', text: 'text-[hsl(var(--floor-3-text))]', border: 'border-[hsl(var(--floor-3-border))]', accent: 'bg-[hsl(var(--floor-3-accent))]' },
   };
   return styles[pisoNum] || styles['1'];
 };
