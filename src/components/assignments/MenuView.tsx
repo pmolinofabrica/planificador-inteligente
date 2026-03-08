@@ -94,7 +94,13 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
 
   const freeConvocados = convocados.filter((id: number) => !assignedIds.has(id));
-  const freeConvocadosNames = freeConvocados.map((id: number) => {
+  const absentFreeIds = freeConvocados.filter((id: number) => isAgentAbsent(id, currentDate));
+  const actuallyFree = freeConvocados.filter((id: number) => !isAgentAbsent(id, currentDate));
+  const freeConvocadosNames = actuallyFree.map((id: number) => {
+    const res = allResidentsDb?.find((r: any) => r.id === id);
+    return res ? res.name : `#${id}`;
+  });
+  const absentFreeNames = absentFreeIds.map((id: number) => {
     const res = allResidentsDb?.find((r: any) => r.id === id);
     return res ? res.name : `#${id}`;
   });
@@ -210,7 +216,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 {convocadosCount}</span>
               <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ {totalAssigned}</span>
               {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ {totalVacant}</span>}
-              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {freeConvocados.length}</span>}
+              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {actuallyFree.length}</span>}
+              {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 {absentAssigned.length + absentFreeNames.length}</span>}
             </div>
             {orgType !== 'dispositivos fijos' && (
               <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]">
@@ -357,17 +364,23 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
         ))}
 
         {/* ══════ ABSENT ASSIGNED ══════ */}
-        {absentAssigned.length > 0 && (
+        {(absentAssigned.length > 0 || absentFreeNames.length > 0) && (
           <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] overflow-hidden">
             <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--score-mid-border))]/50 flex items-center gap-2">
               <span className="text-sm sm:text-base">🚫</span>
-              <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--score-mid-text))]">Inasistencias ({absentAssigned.length})</span>
+              <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--score-mid-text))]">Inasistencias ({absentAssigned.length + absentFreeNames.length})</span>
             </div>
             <div className="p-2 sm:p-3 space-y-1">
               {absentAssigned.map((item, i) => (
-                <div key={i} className="flex items-center justify-between px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border border-[hsl(var(--score-mid-border))]/30 bg-card text-[11px] sm:text-xs">
+                <div key={`assigned-${i}`} className="flex items-center justify-between px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border border-[hsl(var(--score-mid-border))]/30 bg-card text-[11px] sm:text-xs">
                   <span className="font-bold line-through text-muted-foreground truncate">{item.name}</span>
                   <span className="text-[9px] sm:text-[10px] font-medium text-[hsl(var(--score-mid-text))] flex-shrink-0 ml-2">{item.device}</span>
+                </div>
+              ))}
+              {absentFreeNames.map((name, i) => (
+                <div key={`free-${i}`} className="flex items-center justify-between px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border border-dashed border-[hsl(var(--score-mid-border))]/30 bg-card text-[11px] sm:text-xs">
+                  <span className="font-bold line-through text-muted-foreground truncate">{name}</span>
+                  <span className="text-[9px] sm:text-[10px] font-medium text-stone-400 flex-shrink-0 ml-2">Sin asignar</span>
                 </div>
               ))}
             </div>
