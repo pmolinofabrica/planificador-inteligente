@@ -120,30 +120,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     }
   };
 
-  // Handle org type change for current date
-  const handleOrgTypeChange = async (newType: string) => {
-    if (!currentDate || isLocked) return;
-    const [d, m] = currentDate.split('/');
-    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    const turnoId = dateTurnoMap[currentDate] || 4;
-
-    // Optimistic update
-    setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: newType }));
-
-    try {
-      const { error } = await supabase
-        .from('menu_semana')
-        .update({ tipo_organizacion: newType })
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', turnoId);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error updating org type:', err);
-      // Revert on error
-      setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: orgType }));
-    }
-  };
+  // Org type change removed — now handled in DevicesTab
 
   // Piso accent dot color using design tokens
   const pisoAccent = (p: number) =>
