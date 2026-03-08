@@ -65,8 +65,16 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
       p.id_turno === c.id_turno &&
       ((p.grupo || null) === (c.grupo || null))
     );
-    if (match) planiToCap[match.id_plani] = c.id_cap;
+    if (match) {
+      planiToCap[match.id_plani] = c.id_cap;
+    }
   });
+
+  // Debug: check specific caps with devices
+  const capsWithDevices = new Set(Object.keys(capDispos).map(Number));
+  console.log(`[CapsBuilder:debug] Caps with devices: ${JSON.stringify(Array.from(capsWithDevices))}`);
+  console.log(`[CapsBuilder:debug] planiToCap entries pointing to caps with devices:`,
+    Object.entries(planiToCap).filter(([, cId]) => capsWithDevices.has(cId)));
 
   // ── Step 3: Build veto map (agents with asistio=false for a cap) ──
   const vetoedMap: Record<string, Set<number>> = {};
