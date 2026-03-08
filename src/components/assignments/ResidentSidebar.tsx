@@ -1,6 +1,6 @@
-import React from 'react';
-import { Calendar, Activity, ArrowRightLeft, Check, AlertCircle, UserMinus } from 'lucide-react';
-import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
+import React, { useMemo } from 'react';
+import { Calendar, Activity, ArrowRightLeft, Check, AlertCircle, UserMinus, BarChart3 } from 'lucide-react';
+import { getFloorColor, getScoreColor, computeRotationMetrics } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident } from '@/types/assignments';
 
@@ -19,6 +19,28 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const disp = dbDevices.find((d: any) => d.name === selectedResident.device);
   const deviceId = disp?.id;
   const date = selectedResident.date;
+
+  const metrics = useMemo(() =>
+    computeRotationMetrics(selectedResident.id, deviceId, assignmentsDb, dbDevices.length),
+    [selectedResident.id, deviceId, assignmentsDb, dbDevices.length]
+  );
+
+  // Compute average diversity across all assigned agents for comparison
+  const avgDiversity = useMemo(() => {
+    const allAgentIds = new Set<number>();
+    for (const dateDevs of Object.values(assignmentsDb)) {
+      for (const agents of Object.values(dateDevs as Record<string, { id: number }[]>)) {
+        for (const ag of agents) allAgentIds.add(ag.id);
+      }
+    }
+    if (allAgentIds.size === 0) return 0;
+    let total = 0;
+    for (const aid of allAgentIds) {
+      const m = computeRotationMetrics(aid, undefined, assignmentsDb, dbDevices.length);
+      total += m.diversityPct;
+    }
+    return Math.round(total / allAgentIds.size);
+  }, [assignmentsDb, dbDevices.length]);
   const convocados = new Set(convocadosDb[date] || []);
   const isApertura = turnoFilter === 'apertura';
 
@@ -170,8 +192,28 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       </div>
       <div className="p-6 flex-1 overflow-y-auto bg-card">
         <div className="bg-muted rounded-xl p-4 mb-6 border border-border">
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2"><Activity className="w-4 h-4" /> Score</h4>
-          <span className={`text-3xl font-bold ${selectedResident.score >= 900 ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedResident.score} pts</span>
+          <h4 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Métricas de Rotación</h4>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${metrics.localReps <= 1 ? 'text-emerald-600' : metrics.localReps <= 2 ? 'text-amber-600' : 'text-destructive'}`}>
+                {metrics.localReps}×
+              </div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">en este disp.</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">{metrics.uniqueDevices}</div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">disp. únicos</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${metrics.diversityPct >= avgDiversity ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {metrics.diversityPct}%
+              </div>
+              <div className="text-[10px] text-muted-foreground font-medium mt-0.5">diversidad</div>
+            </div>
+          </div>
+          <div className="mt-2 text-[10px] text-muted-foreground text-center">
+            {metrics.totalAssignments} asignaciones totales · Media diversidad: {avgDiversity}%
+          </div>
         </div>
         <h4 className="text-sm font-semibold mb-3 border-b border-border pb-2 flex items-center gap-2">
           <ArrowRightLeft className="w-4 h-4 text-primary" /> Alternativas

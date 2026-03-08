@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Calendar, Users, AlertCircle, Zap } from 'lucide-react';
-import { getFloorColor, getScoreColor, getGroupColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 }) => {
   const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+  const totalDeviceCount = dbDevices.length;
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
@@ -250,6 +251,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                             ) : (
                               assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
+                                const metrics = computeRotationMetrics(res.id, String(device.id), assignmentsDb, totalDeviceCount);
                                 return (
                                   <div
                                     key={idx}
@@ -259,17 +261,26 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       setSelectedDevice(null);
                                     }}
                                     className={`text-left px-2 py-1.5 rounded border text-sm flex justify-between items-center transition-all cursor-pointer
-                                      ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getScoreColor(res.score)}
+                                      ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getRepsColor(metrics.localReps)}
                                       ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
                                     }
                                   >
-                                    <span className={`font-bold truncate max-w-[100px] text-xs ${
-                                      absent ? 'line-through text-stone-500 opacity-60'
-                                      : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                                      : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                                      : ''
-                                    }`}>
-                                      {absent && <span className="mr-1">🚫</span>}{res.name}
+                                    <span className="flex items-center gap-1 min-w-0">
+                                      <span className={`font-bold truncate max-w-[80px] text-xs ${
+                                        absent ? 'line-through text-stone-500 opacity-60'
+                                        : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
+                                        : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
+                                        : ''
+                                      }`}>
+                                        {absent && <span className="mr-1">🚫</span>}{res.name}
+                                      </span>
+                                      {!absent && (
+                                        <span className={`text-[8px] font-mono px-1 py-0.5 rounded ${
+                                          metrics.localReps <= 1 ? 'bg-emerald-100 text-emerald-700' : metrics.localReps <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                        }`} title={`${metrics.localReps}× aquí | ${metrics.uniqueDevices} disp. únicos | ${metrics.diversityPct}% diversidad`}>
+                                          {metrics.localReps}×
+                                        </span>
+                                      )}
                                     </span>
                                     {(() => {
                                       const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
