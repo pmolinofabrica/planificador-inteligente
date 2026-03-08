@@ -131,25 +131,32 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
 
   // ── Step 6: Path 2 — Convocatoria inference ────────────────────────
   let path2Count = 0;
+  let path2Skipped = 0;
+  let path2NoCapId = 0;
+  let path2Vetoed = 0;
 
   convsData.forEach(cv => {
     const agId = String(cv.id_agente);
     const cId = planiToCap[cv.id_plani];
-    if (!cId) return;
-    if (vetoedMap[agId]?.has(cId)) return;
+    if (!cId) { path2NoCapId++; return; }
+    if (vetoedMap[agId]?.has(cId)) { path2Vetoed++; return; }
     const cDate = capDates[cId];
     const dispos = capDispos[cId] || [];
     if (capGroups[cId]) {
       if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
       gruposAgenteMap[agId].add(capGroups[cId]);
     }
-    if (cDate) {
+    if (cDate && dispos.length > 0) {
       dispos.forEach(dId => {
         assignCap(cv.id_agente, dId, cDate);
         path2Count++;
       });
+    } else {
+      path2Skipped++;
     }
   });
+
+  console.log(`[CapsBuilder:path2] total convs=${convsData.length} noCapId=${path2NoCapId} vetoed=${path2Vetoed} skipped(noDate/noDispos)=${path2Skipped} assigned=${path2Count}`);
 
   // ── Step 7: Build agent groups ─────────────────────────────────────
   const agentGroups: Record<string, string> = {};
