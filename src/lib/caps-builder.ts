@@ -59,6 +59,8 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   // ── Step 2: Map planificación → capacitación ───────────────────────
   // For each capacitación, find the matching planificación row
   const planiToCap: Record<number, number> = {};
+  const capsWithDevices = new Set(Object.keys(capDispos).map(Number));
+
   capData.forEach(c => {
     const match = planisData.find(p =>
       p.id_dia === c.id_dia &&
@@ -68,7 +70,15 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     if (match) {
       planiToCap[match.id_plani] = c.id_cap;
     }
+    // Debug: trace caps with devices that DON'T find a plani match
+    if (capsWithDevices.has(c.id_cap) && !match) {
+      console.warn(`[CapsBuilder] ⚠️ Cap ${c.id_cap} (fecha=${capDates[c.id_cap]}, grupo=${c.grupo}, turno=${c.id_turno}) has devices but NO planificación match! id_dia=${c.id_dia}`);
+    }
   });
+
+  // Debug: trace planiToCap for caps that have devices
+  const capsWithDevicesAndPlani = Object.entries(planiToCap).filter(([_, capId]) => capsWithDevices.has(capId));
+  console.log(`[CapsBuilder:step2] planiToCap total=${Object.keys(planiToCap).length} | caps with devices+plani=${capsWithDevicesAndPlani.length}`, capsWithDevicesAndPlani.map(([p, c]) => `plani${p}→cap${c}`));
 
 
   // ── Step 3: Build veto map (agents with asistio=false for a cap) ──
@@ -150,6 +160,22 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
       path2Skipped++;
     }
   });
+
+  // Debug: trace specific caps with devices
+  capsWithDevices.forEach(capId => {
+    const matchingConvs = convsData.filter(cv => planiToCap[cv.id_plani] === capId);
+    if (matchingConvs.length === 0) {
+      console.warn(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → 0 convocatorias matched via planiToCap`);
+    } else {
+      console.log(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → ${matchingConvs.length} convocatorias matched`);
+    }
+  });
+
+  // Debug: trace Enrique (id=89)
+  const enriqueRes = residentsMap[89];
+  if (enriqueRes) {
+    console.log(`[CapsBuilder:Enrique(89)] caps=`, JSON.stringify(enriqueRes.caps));
+  }
 
   console.log(`[CapsBuilder:path2] total convs=${convsData.length} noCapId=${path2NoCapId} vetoed=${path2Vetoed} skipped(noDate/noDispos)=${path2Skipped} assigned=${path2Count}`);
 
