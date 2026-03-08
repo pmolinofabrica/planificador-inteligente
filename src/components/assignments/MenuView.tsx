@@ -58,11 +58,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
   const totalVacant = totalCupos - totalAssigned;
 
-  // Vacant devices (no assignments)
-  const vacantDevices = dbDevices.filter((dev: any) => {
-    const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
-    return assignments.length === 0;
-  });
 
   // Absent convocados (assigned but absent)
   const absentAssigned: { name: string; device: string }[] = [];
