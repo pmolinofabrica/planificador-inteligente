@@ -131,7 +131,8 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     `${capData.length} caps | ${dispoData.length} cap_dispos | ` +
     `Path1(attendance): ${path1Count} | ` +
     `Path2(RPC matriz): ${path2Count} | ` +
-    `Total caps: ${totalCaps}`
+    `Total caps: ${totalCaps} | ` +
+    `AgentGroups: ${JSON.stringify(agentGroups)}`
   );
 
   return { residentsMap, agentGroups };
