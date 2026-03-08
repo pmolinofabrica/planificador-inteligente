@@ -16,6 +16,8 @@ interface PlanningMatrixProps {
   year: string;
 }
 
+const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
+
 export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   data, selectedResident, setSelectedResident,
   selectedDevice, setSelectedDevice,
@@ -23,7 +25,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter } = data;
+  const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
@@ -59,7 +62,6 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                   </th>
                   {activeDates.map((d: string) => {
                     const count = convocadosCountDb[d] || 0;
-                    // Calculate free & vacant
                     const assignedIds = new Set<number>();
                     Object.values(assignmentsDb[d] || {}).forEach((arr: any) => {
                       arr.forEach((r: any) => assignedIds.add(r.id));
@@ -87,11 +89,6 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                               <Users className="w-3 h-3 inline mr-0.5" />{count}
                             </span>
                           </div>
-                          {tipoOrganizacionMap?.[d] && (
-                            <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[9px] font-bold border border-primary/20 truncate max-w-[120px]">
-                              {tipoOrganizacionMap[d]}
-                            </span>
-                          )}
                           <div className="flex gap-1">
                             {free > 0 && <span className="score-low border px-1 py-0.5 rounded text-[9px] font-bold">{free} LIBR.</span>}
                             {vacant > 0 && <span className="score-high border px-1 py-0.5 rounded text-[9px] font-bold">{vacant} VAC.</span>}
@@ -103,6 +100,38 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                 </tr>
               </thead>
               <tbody>
+                {/* Org Type Row — only for turno tarde/mañana */}
+                {isNonApertura && activeDates.length > 0 && (
+                  <tr className="border-b-2 border-primary/20 bg-primary/5">
+                    <td className="sticky left-0 bg-primary/5 px-4 py-3 border-r border-border font-bold text-xs text-primary z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      📋 Tipo Organización
+                    </td>
+                    {activeDates.map((date: string) => {
+                      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+                      return (
+                        <td key={date} className="px-2 py-2 border-r border-border text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
+                              orgType === 'rotacion completa' 
+                                ? 'bg-violet-100 text-violet-800 border-violet-300'
+                                : orgType === 'rotacion simple'
+                                  ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                  : 'bg-muted text-muted-foreground border-border'
+                            }`}>
+                              {orgType}
+                            </span>
+                            {orgType === 'rotacion completa' && (
+                              <span className="text-[9px] font-mono text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">
+                                c/ grupos
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+
                 {dbDevices.map((device: any) => (
                   <tr key={device.id} className="border-b border-border hover:bg-accent/30 transition-colors group">
                     <td
