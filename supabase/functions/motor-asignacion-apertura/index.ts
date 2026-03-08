@@ -274,12 +274,14 @@ Deno.serve(async (req) => {
     }
     addLog(`✅ Inasistencias: ${(inasistenciasData || []).length}`);
 
-    // 1g. Pre-cargar historial existente del mes (menu)
+    // 1g. Pre-cargar historial existente de TODO EL AÑO (equidad anual)
+    const anioInicio = `${year}-01-01`;
+    const anioFin = `${year}-12-31`;
     const { data: menuPrevio } = await supabase
       .from("menu")
       .select("id_agente, id_dispositivo, fecha_asignacion")
-      .gte("fecha_asignacion", fechaInicio)
-      .lte("fecha_asignacion", fechaFin);
+      .gte("fecha_asignacion", anioInicio)
+      .lte("fecha_asignacion", anioFin);
 
     const historialPrevio: Record<number, Record<number, number>> = {};
     const cargaGlobalPrevia: Record<number, number> = {};
