@@ -6,9 +6,9 @@ export const getFloorColor = (deviceName: string): string => {
 };
 
 export const getFloorColorBadge = (deviceName: string): string => {
-  if (deviceName.includes("(P1)")) return "bg-cyan-100 text-cyan-800";
-  if (deviceName.includes("(P2)")) return "bg-rose-100 text-rose-800";
-  if (deviceName.includes("(P3)")) return "bg-amber-100 text-amber-800";
+  if (deviceName.includes("(P1)")) return "bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))]";
+  if (deviceName.includes("(P2)")) return "bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))]";
+  if (deviceName.includes("(P3)")) return "bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))]";
   return "bg-muted text-muted-foreground";
 };
 
