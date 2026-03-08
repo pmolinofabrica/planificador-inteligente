@@ -167,7 +167,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
             <div className="flex items-center gap-2 sm:gap-3">
               <div>
                 <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
-                <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
+                
               </div>
             </div>
           )}

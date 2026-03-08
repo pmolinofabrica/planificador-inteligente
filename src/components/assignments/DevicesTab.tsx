@@ -113,9 +113,6 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                 <Settings className="w-8 h-8 text-primary" />
                 Matriz de Dispositivos (Mes)
               </h2>
-              <p className="text-sm text-muted-foreground mt-2 font-medium">
-                Configura cuántos residentes por dispositivo cada día.
-              </p>
             </div>
             <button
               onClick={handleSave}

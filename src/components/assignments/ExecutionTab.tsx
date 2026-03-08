@@ -1,8 +1,9 @@
-import React from 'react';
-import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, Settings } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, Settings, Monitor } from 'lucide-react';
 import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
+import { AperturaDevicesPanel } from './AperturaDevicesPanel';
 
 interface ExecutionTabProps {
   data: any;
@@ -28,6 +29,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     allResidentsDb, isAgentAbsent, getAbsenceMotivo,
     dateTurnoMap, isLoading, setIsLoading, refresh
   } = data;
+
+  const [subTab, setSubTab] = useState<'kanban' | 'devices'>('kanban');
 
   const handleQuitar = async (resId: number, deviceId: string) => {
     if (isLoading) return;
@@ -58,15 +61,17 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     }
   };
 
-  // Compute free residents (convocados sin dispositivo asignado)
+  // Compute free residents (convocados sin dispositivo asignado, excluding absent)
   const assignedIds = new Set<number>();
   Object.values(assignmentsDb[execDate] || {}).forEach((arr: any) => {
     arr.forEach((r: any) => assignedIds.add(r.id));
   });
   const convocados = convocadosDb[execDate] || [];
-  const freeResidents = allResidentsDb.filter((r: any) =>
+  const unassignedResidents = allResidentsDb.filter((r: any) =>
     convocados.includes(r.id) && !assignedIds.has(r.id)
   );
+  const freeResidents = unassignedResidents.filter((r: any) => !isAgentAbsent(r.id, execDate));
+  const absentUnassigned = unassignedResidents.filter((r: any) => isAgentAbsent(r.id, execDate));
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6">
@@ -78,11 +83,22 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <Users className="w-8 h-8 text-destructive" />
               Apertura / Inasistencias
             </h2>
-            <p className="text-sm text-muted-foreground mt-1 font-medium">
-              Operación diaria — Kanban de dispositivos activos
-            </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Sub-tab toggle */}
+            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+              {[
+                { key: 'kanban' as const, label: 'Inasistencias' },
+                { key: 'devices' as const, label: 'Dispositivos' },
+              ].map(st => (
+                <button key={st.key} onClick={() => setSubTab(st.key)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    subTab === st.key ? 'bg-card shadow-sm text-primary border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {st.label}
+                </button>
+              ))}
+            </div>
             <select
               className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
               value={execDate}
@@ -93,6 +109,10 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
           </div>
         </div>
 
+        {subTab === 'devices' ? (
+          <AperturaDevicesPanel data={data} execDate={execDate} pushUndo={pushUndo} year={year} />
+        ) : (
+        <>
         {/* Kanban Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {/* P0: Sin Asignar */}
@@ -101,28 +121,46 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <h4 className="font-bold text-sm text-amber-900 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" /> Sin Asignar
               </h4>
-              <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-xs font-bold">
-                {freeResidents.length}
-              </span>
+              <div className="flex gap-1">
+                {absentUnassigned.length > 0 && (
+                  <span className="bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full text-xs font-bold">🚫 {absentUnassigned.length}</span>
+                )}
+                <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-xs font-bold">
+                  {freeResidents.length}
+                </span>
+              </div>
             </div>
             <div className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[500px]">
-              {freeResidents.length === 0 ? (
+              {freeResidents.length === 0 && absentUnassigned.length === 0 ? (
                 <div className="text-center text-amber-600/60 text-sm py-8 italic">
                   Todos los convocados tienen dispositivo asignado ✓
                 </div>
               ) : (
-                freeResidents.map((res: any) => (
-                  <div
-                    key={res.id}
-                    onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date: execDate }); setShowVacantsSidebar(true); }}
-                    className="flex flex-col gap-2 p-3 rounded-xl border bg-card border-amber-300 shadow-sm hover:shadow transition-all cursor-pointer hover:border-primary/50"
-                  >
-                    <span className="font-bold text-sm text-foreground">{res.name}</span>
-                    <button className="w-full flex items-center justify-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg">
-                      Asignar
-                    </button>
-                  </div>
-                ))
+                <>
+                  {freeResidents.map((res: any) => (
+                    <div
+                      key={res.id}
+                      onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date: execDate }); setShowVacantsSidebar(true); }}
+                      className="flex flex-col gap-2 p-3 rounded-xl border bg-card border-amber-300 shadow-sm hover:shadow transition-all cursor-pointer hover:border-primary/50"
+                    >
+                      <span className="font-bold text-sm text-foreground">{res.name}</span>
+                      <button className="w-full flex items-center justify-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg">
+                        Asignar
+                      </button>
+                    </div>
+                  ))}
+                  {absentUnassigned.length > 0 && (
+                    <div className="border-t border-stone-200 pt-3 mt-1">
+                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2 block">🚫 Ausentes ({absentUnassigned.length})</span>
+                      {absentUnassigned.map((res: any) => (
+                        <div key={res.id} className="p-2.5 rounded-xl border border-dashed border-stone-300 bg-stone-50 mb-1.5">
+                          <span className="font-bold text-sm text-stone-400 line-through">{res.name}</span>
+                          <span className="text-[9px] ml-2 bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded font-bold">AUSENTE</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="mt-auto pt-4 border-t border-amber-200/50">
@@ -180,6 +218,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             );
           })}
         </div>
+        </>
+        )}
       </div>
     </main>
   );
