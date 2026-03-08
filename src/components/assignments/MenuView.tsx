@@ -216,7 +216,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 {convocadosCount}</span>
               <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ {totalAssigned}</span>
               {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ {totalVacant}</span>}
-              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {freeConvocados.length}</span>}
+              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {actuallyFree.length}</span>}
+              {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 {absentAssigned.length + absentFreeNames.length}</span>}
             </div>
             {orgType !== 'dispositivos fijos' && (
               <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]">
