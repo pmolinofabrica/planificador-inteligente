@@ -191,7 +191,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       {absent && <span className="mr-1">🚫</span>}{res.name}
                                     </span>
                                     {res.numero_grupo != null && (
-                                      <span className="text-[9px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground border border-border">
+                                      <span className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)}`}>
                                         G{res.numero_grupo}
                                       </span>
                                     )}
