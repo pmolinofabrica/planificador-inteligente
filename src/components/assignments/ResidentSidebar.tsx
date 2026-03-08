@@ -19,6 +19,28 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const disp = dbDevices.find((d: any) => d.name === selectedResident.device);
   const deviceId = disp?.id;
   const date = selectedResident.date;
+
+  const metrics = useMemo(() =>
+    computeRotationMetrics(selectedResident.id, deviceId, assignmentsDb, dbDevices.length),
+    [selectedResident.id, deviceId, assignmentsDb, dbDevices.length]
+  );
+
+  // Compute average diversity across all assigned agents for comparison
+  const avgDiversity = useMemo(() => {
+    const allAgentIds = new Set<number>();
+    for (const dateDevs of Object.values(assignmentsDb)) {
+      for (const agents of Object.values(dateDevs as Record<string, { id: number }[]>)) {
+        for (const ag of agents) allAgentIds.add(ag.id);
+      }
+    }
+    if (allAgentIds.size === 0) return 0;
+    let total = 0;
+    for (const aid of allAgentIds) {
+      const m = computeRotationMetrics(aid, undefined, assignmentsDb, dbDevices.length);
+      total += m.diversityPct;
+    }
+    return Math.round(total / allAgentIds.size);
+  }, [assignmentsDb, dbDevices.length]);
   const convocados = new Set(convocadosDb[date] || []);
   const isApertura = turnoFilter === 'apertura';
 
