@@ -177,31 +177,65 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           const nameDict: Record<number, string> = {};
           resiData.forEach(r => nameDict[r.id_agente] = `${r.apellido} ${r.nombre}`);
 
-          menuData.forEach(a => {
-            if (!a.fecha_asignacion) return;
-            const [y, m, d] = a.fecha_asignacion.split("-");
-            if (y !== yFilt || m !== mmFilt) return;
-            const uiDate = `${d}/${m}`;
+          // For apertura: use `menu` table
+          // For tarde/manana: use `menu_semana` table
+          const isApertura = turnoFilter === 'apertura';
 
-            if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-            if (!convocadosList[uiDate].includes(a.id_agente)) {
-              convocadosList[uiDate].push(a.id_agente);
-              convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-            }
+          if (isApertura) {
+            menuData.forEach(a => {
+              if (!a.fecha_asignacion) return;
+              const [y, m, d] = a.fecha_asignacion.split("-");
+              if (y !== yFilt || m !== mmFilt) return;
+              const uiDate = `${d}/${m}`;
 
-            if (a.id_dispositivo && a.id_dispositivo !== 999) {
-              const dId = String(a.id_dispositivo);
-              if (!matrix[uiDate]) matrix[uiDate] = {};
-              if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
-              const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
-              matrix[uiDate][dId].push({
-                id: a.id_agente,
-                name: nameDict[a.id_agente] || "Desconocido",
-                score: a.orden || 1000,
-                numero_grupo: grupoMap[grupoKey] ?? null,
-              });
-            }
-          });
+              if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+              if (!convocadosList[uiDate].includes(a.id_agente)) {
+                convocadosList[uiDate].push(a.id_agente);
+                convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+              }
+
+              if (a.id_dispositivo && a.id_dispositivo !== 999) {
+                const dId = String(a.id_dispositivo);
+                if (!matrix[uiDate]) matrix[uiDate] = {};
+                if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
+                const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
+                matrix[uiDate][dId].push({
+                  id: a.id_agente,
+                  name: nameDict[a.id_agente] || "Desconocido",
+                  score: a.orden || 1000,
+                  numero_grupo: grupoMap[grupoKey] ?? null,
+                });
+              }
+            });
+          } else {
+            // tarde/manana: build from menu_semana
+            menuSemanaData.forEach(ms => {
+              if (!ms.fecha_asignacion) return;
+              const tipo = turnoTypeMap[ms.id_turno] || '';
+              if (!matchesTurnoFilter(tipo)) return;
+              const [y, m, d] = ms.fecha_asignacion.split("-");
+              if (y !== yFilt || m !== mmFilt) return;
+              const uiDate = `${d}/${m}`;
+
+              if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+              if (!convocadosList[uiDate].includes(ms.id_agente)) {
+                convocadosList[uiDate].push(ms.id_agente);
+                convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+              }
+
+              if (ms.id_dispositivo && ms.id_dispositivo !== 999) {
+                const dId = String(ms.id_dispositivo);
+                if (!matrix[uiDate]) matrix[uiDate] = {};
+                if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
+                matrix[uiDate][dId].push({
+                  id: ms.id_agente,
+                  name: nameDict[ms.id_agente] || "Desconocido",
+                  score: ms.orden || 1000,
+                  numero_grupo: ms.numero_grupo ?? null,
+                });
+              }
+            });
+          }
 
           // ═══════════════════════════════════════════════════════════
           // 6. CONVOCATORIA COMPLEMENTARIA
@@ -284,7 +318,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           setCalendarDb(newCalendarDb);
 
           // ═══════════════════════════════════════════════════════════
-          // 8. ACTIVE DATES (from planificación)
+          // 8. ACTIVE DATES (from planificación + menu_semana for non-apertura)
           // ═══════════════════════════════════════════════════════════
           const allActiveDates = new Set<string>();
           const turnoPerDate: Record<string, number> = {};
@@ -303,6 +337,20 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             allActiveDates.add(uiDate);
             turnoPerDate[uiDate] = p.id_turno;
           });
+
+          // Also add dates from menu_semana for non-apertura (in case no planificacion rows exist)
+          if (!isApertura) {
+            menuSemanaData.forEach(ms => {
+              if (!ms.fecha_asignacion) return;
+              const tipo = turnoTypeMap[ms.id_turno] || '';
+              if (!matchesTurnoFilter(tipo)) return;
+              const [fy, fm, fd] = ms.fecha_asignacion.split('-');
+              if (fy !== yFilt || fm !== mmFilt) return;
+              const uiDate = `${fd}/${fm}`;
+              allActiveDates.add(uiDate);
+              if (!turnoPerDate[uiDate]) turnoPerDate[uiDate] = ms.id_turno;
+            });
+          }
           setDateTurnoMap(turnoPerDate);
 
           // Filter matrix to valid dates
@@ -369,7 +417,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     agentGroups, calendarDb, setCalendarDb, convocadosCountDb,
     convocadosDb, isLoading, setIsLoading, activeDates,
     dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
-    tipoOrganizacionMap,
+    tipoOrganizacionMap, turnoFilter,
     refresh, isAgentAbsent, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };

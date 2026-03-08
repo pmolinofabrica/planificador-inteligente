@@ -15,13 +15,13 @@ interface ResidentSidebarProps {
 export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   selectedResident, setSelectedResident, data, pushUndo, year,
 }) => {
-  const { dbDevices, allResidentsDb, assignmentsDb, convocadosDb, isAgentAbsent, getAbsenceMotivo, isLoading, setIsLoading, refresh } = data;
+  const { dbDevices, allResidentsDb, assignmentsDb, convocadosDb, isAgentAbsent, getAbsenceMotivo, isLoading, setIsLoading, refresh, turnoFilter, dateTurnoMap } = data;
   const disp = dbDevices.find((d: any) => d.name === selectedResident.device);
   const deviceId = disp?.id;
   const date = selectedResident.date;
   const convocados = new Set(convocadosDb[date] || []);
+  const isApertura = turnoFilter === 'apertura';
 
-  // Build the DB-format date for cap comparison
   const [dayStr, monthStr] = date.split("/");
   const fechaDB = `${year}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
 
@@ -36,7 +36,6 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   allResidentsDb.forEach((res: any) => {
     if (res.id === selectedResident.id) return;
     const isConvocado = convocados.has(res.id);
-    // Check capacitación WITH date: training must be on or before this date
     const capDate = deviceId ? res.caps[deviceId] : undefined;
     const isCapacitado = !!capDate && capDate <= fechaDB;
     const currentLocation = occupancies[res.id];
@@ -54,29 +53,57 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const handleSwap = async (newResId: number) => {
     if (isLoading) return;
     setIsLoading(true);
-    const [d, mStr] = selectedResident.date.split("/");
-    const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
 
-    const { data: snapOriginal } = await supabase.from('menu')
-      .select('id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion')
-      .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB)
-      .maybeSingle();
+    if (isApertura) {
+      // Apertura: use menu table
+      const { data: snapOriginal } = await supabase.from('menu')
+        .select('id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion')
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB)
+        .maybeSingle();
 
-    if (!snapOriginal) { alert("No se encontró la asignación original."); setIsLoading(false); return; }
+      if (!snapOriginal) { alert("No se encontró la asignación original."); setIsLoading(false); return; }
 
-    await supabase.from('menu').update({ id_dispositivo: 999 })
-      .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
+      await supabase.from('menu').update({ id_dispositivo: 999 })
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
 
-    const { data: filaNew } = await supabase.from('menu').select('*')
-      .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).maybeSingle();
+      const { data: filaNew } = await supabase.from('menu').select('*')
+        .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).maybeSingle();
 
-    if (filaNew) {
-      await supabase.from('menu').update({ id_dispositivo: Number(disp?.id) })
-        .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB);
-      pushUndo({ snapshots: [snapOriginal, filaNew] });
+      if (filaNew) {
+        await supabase.from('menu').update({ id_dispositivo: Number(disp?.id) })
+          .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB);
+        pushUndo({ snapshots: [snapOriginal, filaNew] });
+      } else {
+        await supabase.from('menu').insert([{ id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
+        pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true }] });
+      }
     } else {
-      await supabase.from('menu').insert([{ id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
-      pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true }] });
+      // Tarde/Mañana: use menu_semana table
+      const turnoId = dateTurnoMap[date] || 4;
+      const { data: snapOriginal } = await supabase.from('menu_semana')
+        .select('id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion, id_turno')
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId)
+        .maybeSingle();
+
+      if (!snapOriginal) { alert("No se encontró la asignación original."); setIsLoading(false); return; }
+
+      await supabase.from('menu_semana').update({ id_dispositivo: 999 })
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+
+      const { data: filaNew } = await supabase.from('menu_semana').select('*')
+        .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId).maybeSingle();
+
+      if (filaNew) {
+        await supabase.from('menu_semana').update({ id_dispositivo: Number(disp?.id) })
+          .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+        pushUndo({ snapshots: [snapOriginal, filaNew] });
+      } else {
+        await supabase.from('menu_semana').insert([{
+          id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB,
+          estado_ejecucion: 'planificado', id_convocatoria: 0, id_turno: turnoId
+        }]);
+        pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' }] });
+      }
     }
     setSelectedResident(null);
     refresh();
@@ -85,11 +112,17 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const handleRemove = async () => {
     if (!confirm(`¿Quitar a ${selectedResident.name}?`)) return;
     setIsLoading(true);
-    const [d, mStr] = selectedResident.date.split("/");
-    const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    await supabase.from('menu').update({ id_dispositivo: 999 })
-      .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
-    pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
+
+    if (isApertura) {
+      await supabase.from('menu').update({ id_dispositivo: 999 })
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
+      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
+    } else {
+      const turnoId = dateTurnoMap[date] || 4;
+      await supabase.from('menu_semana').update({ id_dispositivo: 999 })
+        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: turnoId } });
+    }
     setSelectedResident(null);
     refresh();
   };

@@ -65,8 +65,34 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
       p.id_turno === c.id_turno &&
       ((p.grupo || null) === (c.grupo || null))
     );
-    if (match) planiToCap[match.id_plani] = c.id_cap;
+    if (match) {
+      planiToCap[match.id_plani] = c.id_cap;
+    }
   });
+
+  // Debug: check specific caps with devices
+  const capsWithDevices = new Set(Object.keys(capDispos).map(Number));
+  console.log(`[CapsBuilder:debug] Caps with devices: ${JSON.stringify(Array.from(capsWithDevices))}`);
+  console.log(`[CapsBuilder:debug] planiToCap entries pointing to caps with devices:`,
+    Object.entries(planiToCap).filter(([, cId]) => capsWithDevices.has(cId)));
+  
+  // Targeted debug: check for specific known plani IDs
+  console.log(`[CapsBuilder:debug] planiToCap[2001]=${planiToCap[2001]} planiToCap[2022]=${planiToCap[2022]}`);
+  console.log(`[CapsBuilder:debug] Sample planiToCap keys:`, Object.keys(planiToCap).slice(0, 5), 'types:', Object.keys(planiToCap).slice(0, 2).map(k => typeof k));
+  
+  // Check if any convocatoria matches
+  const matchingConvs = convsData.filter(cv => planiToCap[cv.id_plani] !== undefined);
+  console.log(`[CapsBuilder:debug] Convocatorias matching planiToCap: ${matchingConvs.length}/${convsData.length}`);
+  if (matchingConvs.length === 0 && convsData.length > 0) {
+    const sampleConvPlanis = convsData.slice(0, 5).map(cv => cv.id_plani);
+    const samplePlaniKeys = Object.keys(planiToCap).slice(0, 5).map(Number);
+    console.log(`[CapsBuilder:debug] Sample conv id_plani:`, sampleConvPlanis, 'Sample planiToCap keys:', samplePlaniKeys);
+    // Try string vs number comparison
+    const convPlaniSet = new Set(convsData.map(cv => cv.id_plani));
+    const planiKeySet = new Set(Object.keys(planiToCap).map(Number));
+    const overlap = [...planiKeySet].filter(k => convPlaniSet.has(k));
+    console.log(`[CapsBuilder:debug] Overlap (number match): ${overlap.length}`, overlap.slice(0, 5));
+  }
 
   // ── Step 3: Build veto map (agents with asistio=false for a cap) ──
   const vetoedMap: Record<string, Set<number>> = {};
@@ -123,25 +149,32 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
 
   // ── Step 6: Path 2 — Convocatoria inference ────────────────────────
   let path2Count = 0;
+  let path2Skipped = 0;
+  let path2NoCapId = 0;
+  let path2Vetoed = 0;
 
   convsData.forEach(cv => {
     const agId = String(cv.id_agente);
     const cId = planiToCap[cv.id_plani];
-    if (!cId) return;
-    if (vetoedMap[agId]?.has(cId)) return;
+    if (!cId) { path2NoCapId++; return; }
+    if (vetoedMap[agId]?.has(cId)) { path2Vetoed++; return; }
     const cDate = capDates[cId];
     const dispos = capDispos[cId] || [];
     if (capGroups[cId]) {
       if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
       gruposAgenteMap[agId].add(capGroups[cId]);
     }
-    if (cDate) {
+    if (cDate && dispos.length > 0) {
       dispos.forEach(dId => {
         assignCap(cv.id_agente, dId, cDate);
         path2Count++;
       });
+    } else {
+      path2Skipped++;
     }
   });
+
+  console.log(`[CapsBuilder:path2] total convs=${convsData.length} noCapId=${path2NoCapId} vetoed=${path2Vetoed} skipped(noDate/noDispos)=${path2Skipped} assigned=${path2Count}`);
 
   // ── Step 7: Build agent groups ─────────────────────────────────────
   const agentGroups: Record<string, string> = {};
