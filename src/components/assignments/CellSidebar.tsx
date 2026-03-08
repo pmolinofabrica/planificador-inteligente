@@ -58,11 +58,13 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     const capInfo = capDate ? ` (Cap: ${capDate})` : '';
     let reason = '';
     if (isAbsent) reason = '🚫 Inasistente';
-    else if (isBusy) reason = `🔒 ${currentLocation}`;
+    else if (isBusy) reason = isRotation ? `🔄 ${currentLocation}` : `🔒 ${currentLocation}`;
     else reason = isConvocado ? 'Libre' : 'Descanso';
     reason += capInfo;
 
-    const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: isBusy || isAbsent, isAbsent };
+    // In rotation modes, busy residents CAN be assigned to multiple devices
+    const effectivelyBusy = isAbsent || (isBusy && !isRotation);
+    const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: effectivelyBusy, isAbsent };
 
     if (isConvocado && isCapacitado) tier1.push(alt);
     else if (isConvocado && !isCapacitado) tier2.push(alt);

@@ -27,6 +27,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
   const [selectedMonth, setSelectedMonth] = useState("Marzo 2026");
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
+  const [menuLocked, setMenuLocked] = useState(false);
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
@@ -66,7 +67,8 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
-      {/* HEADER */}
+      {/* HEADER - hidden when menu is locked */}
+      {!(menuLocked && activeTab === 'menu') && (
       <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-sm gap-2 sm:gap-0">
         <div className="flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
@@ -165,6 +167,7 @@ const Index = () => {
           )}
         </div>
       </header>
+      )}
 
       <div className="flex flex-1 relative overflow-hidden">
         {/* Right Sidebars */}
@@ -248,7 +251,7 @@ const Index = () => {
         )}
 
         {activeTab === 'menu' && (
-          <MenuView data={data} year={year} />
+          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} />
         )}
 
         {activeTab === 'exec' && (
