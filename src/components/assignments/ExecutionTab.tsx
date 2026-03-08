@@ -30,6 +30,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     dateTurnoMap, isLoading, setIsLoading, refresh
   } = data;
 
+  const [subTab, setSubTab] = useState<'kanban' | 'devices'>('kanban');
+
   const handleQuitar = async (resId: number, deviceId: string) => {
     if (isLoading) return;
     if (!confirm("¿Quitar residente de este dispositivo?")) return;
