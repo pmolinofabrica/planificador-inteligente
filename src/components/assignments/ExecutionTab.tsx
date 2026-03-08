@@ -85,6 +85,20 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             </h2>
           </div>
           <div className="flex items-center gap-3">
+            {/* Sub-tab toggle */}
+            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+              {[
+                { key: 'kanban' as const, label: 'Inasistencias' },
+                { key: 'devices' as const, label: 'Dispositivos' },
+              ].map(st => (
+                <button key={st.key} onClick={() => setSubTab(st.key)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    subTab === st.key ? 'bg-card shadow-sm text-primary border border-border/50' : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {st.label}
+                </button>
+              ))}
+            </div>
             <select
               className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
               value={execDate}
@@ -95,6 +109,10 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
           </div>
         </div>
 
+        {subTab === 'devices' ? (
+          <AperturaDevicesPanel data={data} execDate={execDate} pushUndo={pushUndo} year={year} />
+        ) : (
+        <>
         {/* Kanban Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {/* P0: Sin Asignar */}
