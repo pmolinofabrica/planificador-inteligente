@@ -181,6 +181,41 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                 </tr>
               </thead>
               <tbody>
+                {/* ── Org Type Row — only for tarde/mañana ── */}
+                {isNonApertura && (
+                  <tr className="border-b-2 border-primary/20 bg-primary/5">
+                    <td className="sticky left-0 bg-primary/5 px-4 py-3 border-r border-border font-bold text-xs text-primary z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      📋 Tipo Organización
+                    </td>
+                    {activeDates.map((date: string) => {
+                      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+                      return (
+                        <td key={date} className="px-1 py-2 border-r border-border text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            {ORG_TYPES.map(type => (
+                              <button
+                                key={type}
+                                onClick={() => handleOrgTypeChange(date, type)}
+                                className={`w-full px-1 py-0.5 text-[9px] font-bold rounded transition-all whitespace-nowrap ${
+                                  orgType === type
+                                    ? type === 'rotacion completa'
+                                      ? 'bg-violet-100 text-violet-800 border border-violet-300'
+                                      : type === 'rotacion simple'
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                        : 'bg-card text-foreground border border-border shadow-sm'
+                                    : 'text-muted-foreground/60 hover:text-foreground border border-transparent hover:border-border'
+                                }`}
+                              >
+                                {ORG_LABELS[type]}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="p-2 border-border" />
+                  </tr>
+                )}
                 {dbDevices.map((device: any) => (
                   <tr key={device.id} className="hover:bg-accent/30 transition-colors group">
                     <td className={`sticky left-0 px-4 py-3 border-b border-r border-border font-semibold text-xs z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] ${getFloorColor(device.name)}`}>
