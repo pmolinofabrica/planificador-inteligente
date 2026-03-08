@@ -20,9 +20,9 @@ export const getScoreColor = (score: number): string => {
 
 export const getFloorAccent = (piso: number | string): string => {
   const p = String(piso);
-  if (p === '1') return "bg-cyan-600";
-  if (p === '2') return "bg-rose-600";
-  if (p === '3') return "bg-amber-600";
+  if (p === '1') return "bg-[hsl(var(--floor-1-accent))]";
+  if (p === '2') return "bg-[hsl(var(--floor-2-accent))]";
+  if (p === '3') return "bg-[hsl(var(--floor-3-accent))]";
   return "bg-muted-foreground";
 };
 
