@@ -96,17 +96,18 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        const [capsRep, partsRes, dispoCapsRes, allConvsRes, allPlanisRes, allDiasRes] = await Promise.all([
+        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, allConvsRes] = await Promise.all([
           supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
+          supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
+          supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
+          supabase.from('dias').select('id_dia, fecha').limit(5000),
           supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani')
             .eq('estado', 'vigente')
             .gte('fecha_convocatoria', yearStart)
             .lte('fecha_convocatoria', yearEnd)
             .limit(10000),
-          supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
-          supabase.from('dias').select('id_dia, fecha').limit(5000),
         ]);
 
         const capData = capsRep.data || [];
