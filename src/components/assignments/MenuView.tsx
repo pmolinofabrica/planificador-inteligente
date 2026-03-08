@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, LayoutGrid, Lock } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
 import { getFloorColor, getGroupColor } from '@/lib/floor-utils';
 import type { AssignmentEntry } from '@/types/assignments';
 
@@ -24,8 +24,41 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   const currentDate = activeDates[selectedDateIdx] || activeDates[0] || '';
   const orgType = tipoOrganizacionMap[currentDate] || 'dispositivos fijos';
 
-  const prevDate = () => setSelectedDateIdx(i => Math.max(0, i - 1));
-  const nextDate = () => setSelectedDateIdx(i => Math.min(activeDates.length - 1, i + 1));
+  // When locked, only allow dates from today backwards
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${d}/${m}`;
+  }, []);
+
+  const isDateFuture = (dateStr: string) => {
+    // dateStr format: "DD/MM"
+    if (!dateStr) return false;
+    const [d, m] = dateStr.split('/').map(Number);
+    const now = new Date();
+    const todayMonth = now.getMonth() + 1;
+    const todayDay = now.getDate();
+    if (m > todayMonth) return true;
+    if (m === todayMonth && d > todayDay) return true;
+    return false;
+  };
+
+  const canSelectDate = (dateStr: string) => {
+    if (!isLocked) return true;
+    return !isDateFuture(dateStr);
+  };
+
+  const prevDate = () => {
+    let next = selectedDateIdx - 1;
+    while (next >= 0 && isLocked && isDateFuture(activeDates[next])) next--;
+    if (next >= 0) setSelectedDateIdx(next);
+  };
+  const nextDate = () => {
+    let next = selectedDateIdx + 1;
+    while (next < activeDates.length && isLocked && isDateFuture(activeDates[next])) next++;
+    if (next < activeDates.length) setSelectedDateIdx(next);
+  };
 
   const dateAssignments = assignmentsDb[currentDate] || {};
   const convocados = convocadosDb[currentDate] || [];
@@ -103,6 +136,20 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     : p === 2 ? 'border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))]'
     : 'border-[hsl(var(--floor-3-border))] bg-[hsl(var(--floor-3-bg))]';
 
+  const isRotacionCompleta = orgType === 'rotacion completa';
+
+  // Get distinct groups for rotacion completa layout
+  const distinctGroups = useMemo(() => {
+    if (!isRotacionCompleta) return [];
+    const groups = new Set<number>();
+    Object.values(dateAssignments).forEach((arr: any) => {
+      arr.forEach((r: any) => {
+        if (r.numero_grupo != null) groups.add(r.numero_grupo);
+      });
+    });
+    return Array.from(groups).sort();
+  }, [dateAssignments, isRotacionCompleta]);
+
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
       <div className={`mx-auto px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5 ${isLocked ? 'max-w-4xl' : 'max-w-5xl'}`}>
@@ -110,31 +157,36 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-3 sm:mb-4">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="bg-primary/10 p-2 sm:p-2.5 rounded-xl border border-primary/20">
-              <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
-              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
-            </div>
+            {isLocked ? (
+              <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight text-center flex-1">
+                El Molino Fábrica Cultural
+              </h2>
+            ) : (
+              <>
+                <div>
+                  <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
+                </div>
+              </>
+            )}
           </div>
           <button
             onClick={handleLockToggle}
-            className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all ${
+            className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all flex-shrink-0 ${
               isLocked
                 ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20'
                 : 'bg-muted border-border text-muted-foreground hover:bg-accent'
             }`}
             title={isLocked ? 'Desbloquear' : 'Bloquear vista'}
           >
-            {isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5" />}
+            {isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
         </div>
 
         {/* Unlock code input */}
         {showUnlockInput && (
           <div className="mb-3 flex items-center gap-2 bg-card border border-border rounded-xl p-2.5 sm:p-3 shadow-warm">
-            <LayoutGrid className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <input
               type="password"
               maxLength={4}
@@ -158,7 +210,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           </button>
           <div className="flex-1 text-center min-w-0">
             <span className="text-xl sm:text-2xl font-black text-foreground tracking-tight">{currentDate}</span>
-            {/* Stats row — stacked on mobile, inline on tablet+ */}
+            {/* Stats row */}
             <div className="flex items-center justify-center gap-2 sm:gap-3 mt-1 flex-wrap">
               <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 {convocadosCount}</span>
               <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ {totalAssigned}</span>
@@ -171,24 +223,31 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               </span>
             )}
           </div>
-          <button onClick={nextDate} disabled={selectedDateIdx >= activeDates.length - 1}
+          <button onClick={nextDate} disabled={selectedDateIdx >= activeDates.length - 1 || (isLocked && !canSelectDate(activeDates[selectedDateIdx + 1]))}
             className="p-1.5 sm:p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border flex-shrink-0">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ── Quick Date Chips ── scrollable on mobile */}
+        {/* ── Quick Date Chips ── */}
         <div className="flex gap-1 sm:gap-1.5 mb-4 sm:mb-6 overflow-x-auto pb-1 custom-scrollbar -mx-1 px-1">
-          {activeDates.map((d: string, idx: number) => (
-            <button key={d} onClick={() => setSelectedDateIdx(idx)}
-              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold border whitespace-nowrap transition-all flex-shrink-0 ${
-                idx === selectedDateIdx
-                  ? 'bg-primary text-primary-foreground border-primary shadow-warm scale-105'
-                  : 'bg-card text-muted-foreground border-border hover:bg-accent'
-              }`}>
-              {d}
-            </button>
-          ))}
+          {activeDates.map((d: string, idx: number) => {
+            const future = isDateFuture(d);
+            const disabled = isLocked && future;
+            return (
+              <button key={d} onClick={() => !disabled && setSelectedDateIdx(idx)}
+                disabled={disabled}
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold border whitespace-nowrap transition-all flex-shrink-0 ${
+                  disabled
+                    ? 'bg-muted text-muted-foreground/40 border-border/50 cursor-not-allowed'
+                    : idx === selectedDateIdx
+                      ? 'bg-primary text-primary-foreground border-primary shadow-warm scale-105'
+                      : 'bg-card text-muted-foreground border-border hover:bg-accent'
+                }`}>
+                {d}
+              </button>
+            );
+          })}
         </div>
 
         {/* ══════ ASSIGNED DEVICES BY PISO ══════ */}
@@ -200,10 +259,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               <span className="font-black text-xs sm:text-sm tracking-wide">{pisoNames[Number(piso)] || `Piso ${piso}`}</span>
             </div>
 
-            {/* Device cards grid:
-                - Phone: 1 col
-                - Tablet (locked menu): 2 cols  
-                - Tablet landscape / Desktop: 2 cols */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 p-2 sm:p-3">
               {(devices as any[]).map((dev: any) => {
                 const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
@@ -225,34 +280,55 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                         {assignments.length}/{cupo}
                       </span>
                     </div>
-                    {/* Resident list */}
-                    <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
-                      {assignments.map((res, i) => {
-                        const absent = isAgentAbsent(res.id, currentDate);
-                        const group = agentGroups[String(res.id)];
-                        return (
-                          <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
-                            absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
-                          }`}>
-                            <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
-                              {absent && '🚫 '}{res.name}
-                            </span>
-                            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
-                              {group && (
-                                <span className="text-[8px] sm:text-[9px] font-bold px-1 py-0.5 rounded bg-muted border border-border">
-                                  {group}
-                                </span>
-                              )}
-                              {res.numero_grupo != null && (
-                                <span className={`text-[8px] sm:text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)}`}>
-                                  G{res.numero_grupo}
-                                </span>
-                              )}
+                    {/* Resident list - horizontal for rotacion completa, stacked otherwise */}
+                    {isRotacionCompleta && distinctGroups.length > 1 ? (
+                      <div className="p-1.5 sm:p-2 flex gap-1">
+                        {distinctGroups.map(gNum => {
+                          const groupAssignments = assignments.filter(r => r.numero_grupo === gNum);
+                          if (groupAssignments.length === 0) return (
+                            <div key={gNum} className="flex-1 min-w-0" />
+                          );
+                          return (
+                            <div key={gNum} className="flex-1 min-w-0 space-y-0.5">
+                              {groupAssignments.map((res, i) => {
+                                const absent = isAgentAbsent(res.id, currentDate);
+                                return (
+                                  <div key={i} className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md border text-[10px] sm:text-xs ${
+                                    absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
+                                    <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
+                                      {absent && '🚫 '}{res.name}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
+                        {assignments.map((res, i) => {
+                          const absent = isAgentAbsent(res.id, currentDate);
+                          const group = res.numero_grupo;
+                          return (
+                            <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
+                              absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                            }`}>
+                              <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
+                                {absent && '🚫 '}{res.name}
+                              </span>
+                              <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
+                                {group != null && (
+                                  <span className={`w-2 h-2 rounded-full ${getGroupDotColor(group)}`} />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -308,3 +384,11 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     </main>
   );
 };
+
+/** Returns a colored dot class for group number, matching the design system group colors */
+function getGroupDotColor(num: number | null): string {
+  if (num === 1) return 'bg-cyan-500';
+  if (num === 2) return 'bg-rose-500';
+  if (num === 3) return 'bg-amber-500';
+  return 'bg-primary';
+}
