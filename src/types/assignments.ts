@@ -1,4 +1,4 @@
-export type ActiveTab = 'plan' | 'exec' | 'devices';
+export type ActiveTab = 'plan' | 'menu' | 'exec' | 'devices';
 
 export interface DeviceInfo {
   id: string;
