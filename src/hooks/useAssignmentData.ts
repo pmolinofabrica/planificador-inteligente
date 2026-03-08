@@ -103,7 +103,10 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
             const realDate = diasDict[c.id_dia];
             if (realDate) capDates[c.id_cap] = realDate;
             if (c.grupo) capGroups[c.id_cap] = c.grupo;
-            const matchPlani = planisRes.data!.find(p => p.id_dia === c.id_dia && p.id_turno === c.id_turno);
+            const matchPlani = planisRes.data!.find(p => 
+              p.id_dia === c.id_dia && p.id_turno === c.id_turno && 
+              ((p.grupo || null) === (c.grupo || null))
+            );
             if (matchPlani) planiToCap[matchPlani.id_plani] = c.id_cap;
           });
 
