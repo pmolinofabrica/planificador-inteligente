@@ -4,6 +4,7 @@ import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
 import { ExecutionTab } from '@/components/assignments/ExecutionTab';
+import { MenuView } from '@/components/assignments/MenuView';
 import { DevicesTab } from '@/components/assignments/DevicesTab';
 import { ResidentSidebar } from '@/components/assignments/ResidentSidebar';
 import { DeviceSidebar } from '@/components/assignments/DeviceSidebar';
@@ -89,6 +90,7 @@ const Index = () => {
         <div className="flex overflow-x-auto bg-muted p-1 rounded-lg border border-border shadow-inner -mx-1 sm:mx-0">
           {[
             { key: 'plan' as ActiveTab, label: 'Planificación', color: 'text-primary' },
+            { key: 'menu' as ActiveTab, label: 'Menú', color: 'text-primary' },
             { key: 'exec' as ActiveTab, label: 'Apertura', color: 'text-destructive' },
             { key: 'devices' as ActiveTab, label: 'Dispositivos', color: 'text-primary' },
           ].map(tab => (
@@ -243,6 +245,10 @@ const Index = () => {
             setShowVacantsSidebar={setShowVacantsSidebar}
             year={year}
           />
+        )}
+
+        {activeTab === 'menu' && (
+          <MenuView data={data} year={year} />
         )}
 
         {activeTab === 'exec' && (

@@ -19,10 +19,12 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   selectedDevice, selectedDate, setSelectedDevice, setSelectedDateFilter,
   setSelectedResident, data, pushUndo, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, tipoOrganizacionMap } = data;
   const deviceId = selectedDevice.id;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
   const isApertura = turnoFilter === 'apertura';
+  const orgType = tipoOrganizacionMap[selectedDate] || 'dispositivos fijos';
+  const isRotation = orgType.includes('rotacion');
 
   const [d, mStr] = selectedDate.split("/");
   const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
@@ -99,26 +101,40 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
       // Tarde/Mañana: use `menu_semana` table
       const turnoId = dateTurnoMap[selectedDate] || 4;
       const convId = agentConvocatoriaMap[selectedDate]?.[agentId] || 0;
-      const { data: existing } = await supabase.from('menu_semana').select('*')
-        .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
 
-      if (existing && existing.length > 0) {
-        const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
-        if (vacantRow) {
-          await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999).eq('id_turno', turnoId);
-        } else {
-          await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
-        }
-        pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: existing[0].id_dispositivo, _table: 'menu_semana', id_turno: turnoId } });
-      } else {
+      // In rotation modes, always INSERT (allow multi-device)
+      if (isRotation) {
         await supabase.from('menu_semana').insert([{
           id_agente: agentId, id_dispositivo: parseInt(deviceId),
           fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
-          id_convocatoria: convId, id_turno: turnoId
+          id_convocatoria: convId, id_turno: turnoId,
+          tipo_organizacion: orgType,
         }]);
         pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' } });
+      } else {
+        // dispositivos fijos: update if exists, insert if not
+        const { data: existing } = await supabase.from('menu_semana').select('*')
+          .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+
+        if (existing && existing.length > 0) {
+          const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
+          if (vacantRow) {
+            await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
+              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999).eq('id_turno', turnoId);
+          } else {
+            await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
+              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+          }
+          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: existing[0].id_dispositivo, _table: 'menu_semana', id_turno: turnoId } });
+        } else {
+          await supabase.from('menu_semana').insert([{
+            id_agente: agentId, id_dispositivo: parseInt(deviceId),
+            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+            id_convocatoria: convId, id_turno: turnoId,
+            tipo_organizacion: orgType,
+          }]);
+          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' } });
+        }
       }
     }
     refresh();
@@ -173,6 +189,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         <div className="text-xs font-medium opacity-70">
           Asignados: {currentAssignments.length} | Rango: {disp?.min}-{disp?.max}
           {!isApertura && <span className="ml-2 text-primary font-bold">({turnoFilter === 'tarde' ? 'Turno Tarde' : 'Turno Mañana'})</span>}
+          {isRotation && <span className="ml-2 text-violet-600 font-bold text-[10px]">🔄 {orgType} — Multi-dispositivo</span>}
         </div>
       </div>
 
