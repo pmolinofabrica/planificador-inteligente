@@ -58,11 +58,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
   const totalVacant = totalCupos - totalAssigned;
 
-  // Vacant devices (no assignments)
-  const vacantDevices = dbDevices.filter((dev: any) => {
-    const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
-    return assignments.length === 0;
-  });
 
   // Absent convocados (assigned but absent)
   const absentAssigned: { name: string; device: string }[] = [];
@@ -256,23 +251,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
             </div>
           </div>
         ))}
-
-        {/* ===== VACANT DEVICES ===== */}
-        {vacantDevices.length > 0 && (
-          <div className="mb-6 rounded-xl border-2 border-destructive/30 bg-destructive/5 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-destructive/20 flex items-center gap-2">
-              <span className="text-base">⚠️</span>
-              <span className="font-black text-sm tracking-wide text-destructive">Dispositivos Vacantes ({vacantDevices.length})</span>
-            </div>
-            <div className="p-3 flex flex-wrap gap-2">
-              {vacantDevices.map((dev: any) => (
-                <div key={dev.id} className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-card text-xs font-bold text-destructive">
-                  {dev.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ===== ABSENT ASSIGNED ===== */}
         {absentAssigned.length > 0 && (

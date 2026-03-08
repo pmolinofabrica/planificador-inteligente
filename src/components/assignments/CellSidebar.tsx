@@ -72,8 +72,28 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     else tier4.push(alt);
   });
 
+  const disp = dbDevices.find((dd: any) => dd.id === deviceId);
+
+  // Check cupo
+  const cupoLimit = data.calendarDb[selectedDate]?.[deviceId] || disp?.max || 0;
+  const currentCount = currentAssignments.length;
+
   const handleAssign = async (agentId: number) => {
     if (isLoading) return;
+
+    // Cupo overflow check
+    if (currentCount >= cupoLimit) {
+      const confirmed = confirm(
+        `⚠️ El dispositivo "${selectedDevice.name}" ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
+      );
+      if (!confirmed) return;
+      // Update calendarDb locally to reflect the extra cupo
+      const newCalendar = { ...data.calendarDb };
+      if (!newCalendar[selectedDate]) newCalendar[selectedDate] = {};
+      newCalendar[selectedDate][deviceId] = cupoLimit + 1;
+      data.setCalendarDb(newCalendar);
+    }
+
     setIsLoading(true);
 
     if (isApertura) {
@@ -147,7 +167,6 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     setSelectedDateFilter(null);
   };
 
-  const disp = dbDevices.find((dd: any) => dd.id === deviceId);
 
   const renderTier = (title: string, items: AltItem[], colorClass: string, Icon: any) => (
     items.length > 0 && (
