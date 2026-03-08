@@ -73,7 +73,8 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   };
 
   // ── Step 3: Path 1 — Direct attendance ─────────────────────────────
-  const gruposAgenteMap: Record<string, Set<string>> = {};
+  // Track group counts per agent (only from direct attendance — accurate source)
+  const grupoCountMap: Record<string, Record<string, number>> = {};
   let path1Count = 0;
 
   partsData.forEach(p => {
@@ -83,8 +84,9 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     const dispos = capDispos[cId] || [];
     if (capGroups[cId]) {
       const agId = String(p.id_agente);
-      if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
-      gruposAgenteMap[agId].add(capGroups[cId]);
+      if (!grupoCountMap[agId]) grupoCountMap[agId] = {};
+      const grp = capGroups[cId];
+      grupoCountMap[agId][grp] = (grupoCountMap[agId][grp] || 0) + 1;
     }
     if (cDate) {
       dispos.forEach(dId => {
@@ -95,17 +97,14 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   });
 
   // ── Step 4: Path 2 — RPC convocados matriz ────────────────────────
+  // NOTE: RPC is used ONLY for caps/skills, NOT for group assignment
+  // (The RPC cross-joins agents with caps and can match both groups)
   let path2Count = 0;
 
   if (convocadosMatriz && convocadosMatriz.length > 0) {
     convocadosMatriz.forEach(row => {
       const cDate = capDates[row.id_cap];
       const dispos = capDispos[row.id_cap] || [];
-      if (capGroups[row.id_cap]) {
-        const agId = String(row.id_agente);
-        if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
-        gruposAgenteMap[agId].add(capGroups[row.id_cap]);
-      }
       if (cDate && dispos.length > 0) {
         dispos.forEach(dId => {
           assignCap(row.id_agente, dId, cDate);
@@ -115,11 +114,16 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     });
   }
 
-  // ── Step 5: Build agent groups ─────────────────────────────────────
+  // ── Step 5: Build agent groups (majority-based from attendance) ────
   const agentGroups: Record<string, string> = {};
-  Object.keys(gruposAgenteMap).forEach(k => {
-    const grps = Array.from(gruposAgenteMap[k]);
-    agentGroups[k] = grps.includes('A') ? 'A' : grps[0];
+  Object.entries(grupoCountMap).forEach(([agId, counts]) => {
+    // Pick the group with the most attendance records
+    let bestGroup = '';
+    let bestCount = 0;
+    Object.entries(counts).forEach(([grp, cnt]) => {
+      if (cnt > bestCount) { bestCount = cnt; bestGroup = grp; }
+    });
+    if (bestGroup) agentGroups[agId] = bestGroup;
   });
 
   // ── Summary ────────────────────────────────────────────────────────
