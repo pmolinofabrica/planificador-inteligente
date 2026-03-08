@@ -8,9 +8,10 @@ import type {
 
 interface UseAssignmentDataProps {
   selectedMonth: string;
+  turnoFilter?: string;
 }
 
-export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
+export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
