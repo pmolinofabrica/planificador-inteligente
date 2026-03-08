@@ -1,6 +1,6 @@
-import React from 'react';
-import { Calendar, Activity, ArrowRightLeft, Check, AlertCircle, UserMinus } from 'lucide-react';
-import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
+import React, { useMemo } from 'react';
+import { Calendar, Activity, ArrowRightLeft, Check, AlertCircle, UserMinus, BarChart3 } from 'lucide-react';
+import { getFloorColor, getScoreColor, computeRotationMetrics } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident } from '@/types/assignments';
 

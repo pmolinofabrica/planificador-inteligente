@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, AlertCircle, Moon, Lock } from 'lucide-react';
-import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, computeRotationMetrics, getRepsColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedDevice, SelectedResident } from '@/types/assignments';
 
