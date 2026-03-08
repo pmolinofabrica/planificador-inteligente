@@ -1,1 +1,4 @@
 project_id = "zgzqeusbpobrwanvktyz"
+
+[functions.motor-asignacion-apertura]
+verify_jwt = false
