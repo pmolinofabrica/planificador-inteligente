@@ -364,7 +364,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
         ))}
 
         {/* ══════ ABSENT ASSIGNED ══════ */}
-        {absentAssigned.length > 0 && (
+        {(absentAssigned.length > 0 || absentFreeNames.length > 0) && (
           <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] overflow-hidden">
             <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--score-mid-border))]/50 flex items-center gap-2">
               <span className="text-sm sm:text-base">🚫</span>
