@@ -284,8 +284,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               const aperturaPlaniIds: number[] = [];
 
               planiConv.data.forEach(p => {
-                const tipo = (tDict[p.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = tDict[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const fecha = dMap[p.id_dia];
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
