@@ -360,7 +360,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                             <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
                               absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                             }`}>
-                              <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
+                              <span className={`font-bold truncate ${
+                                absent ? 'line-through text-muted-foreground'
+                                : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
+                                : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                : ''
+                              }`}>
                                 {absent && '🚫 '}{res.name}
                               </span>
                               <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">

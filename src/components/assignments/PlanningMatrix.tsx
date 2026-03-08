@@ -209,8 +209,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                   >
                                     <span className={`font-bold truncate max-w-[100px] text-xs ${
                                       absent ? 'line-through text-stone-500 opacity-60'
-                                      : agentGroups[res.id] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
-                                      : agentGroups[res.id] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                      : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
+                                      : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
                                       : ''
                                     }`}>
                                       {absent && <span className="mr-1">🚫</span>}{res.name}
