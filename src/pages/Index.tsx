@@ -27,6 +27,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
   const [selectedMonth, setSelectedMonth] = useState("Marzo 2026");
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
+  const [menuLocked, setMenuLocked] = useState(false);
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
