@@ -300,11 +300,11 @@ Deno.serve(async (req) => {
     // STEP 2: ASSIGNMENT ENGINE (3-Phase)
     // =====================================================================
 
-    // Derive days to process
-    let diasAProcesar = Object.keys(convocatoriasPorDia).sort();
-    if (start_date) {
-      diasAProcesar = diasAProcesar.filter((d) => d >= start_date);
-    }
+    // Derive days to process — only current/future dates
+    const today = start_date || new Date().toISOString().split("T")[0];
+    let diasAProcesar = Object.keys(convocatoriasPorDia)
+      .filter((d) => d >= today)
+      .sort();
     addLog(`📅 Días a procesar: ${diasAProcesar.length} → [${diasAProcesar.join(", ")}]`);
 
     // Tracking
