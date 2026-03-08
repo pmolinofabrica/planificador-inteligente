@@ -93,10 +93,34 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
       data.setCalendarDb(newCalendar);
     }
 
+    // Resolve convocatoria ID — required by both menu and menu_semana
+    let convId = agentConvocatoriaMap[selectedDate]?.[agentId];
+    if (!convId) {
+      // Try to find any valid convocatoria for this agent+date from DB
+      try {
+        const { data: convRows } = await supabase
+          .from('convocatoria')
+          .select('id_convocatoria')
+          .eq('id_agente', agentId)
+          .eq('fecha_convocatoria', fechaDB)
+          .eq('estado', 'vigente')
+          .limit(1);
+        if (convRows && convRows.length > 0) {
+          convId = convRows[0].id_convocatoria;
+        }
+      } catch (e) {
+        console.warn('Could not lookup convocatoria:', e);
+      }
+    }
+
+    if (!convId) {
+      alert(`⚠️ No se encontró una convocatoria vigente para este residente en la fecha ${selectedDate}.\n\nDebe existir una convocatoria para poder asignar.`);
+      return;
+    }
+
     setIsLoading(true);
     try {
       if (isApertura) {
-        const convId = agentConvocatoriaMap[selectedDate]?.[agentId] || 0;
         const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
           .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB);
         if (fetchErr) throw fetchErr;
@@ -123,7 +147,6 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         }
       } else {
         const turnoId = dateTurnoMap[selectedDate] || 4;
-        const convId = agentConvocatoriaMap[selectedDate]?.[agentId] || 0;
 
         if (isRotation) {
           // Rotación simple/completa: always INSERT new row
@@ -148,7 +171,6 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                 .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999).eq('id_turno', turnoId);
               if (error) throw error;
             } else {
-              // Update the specific existing row
               const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
                 .eq('id_menu_semana', existing[0].id_menu_semana);
               if (error) throw error;
@@ -166,7 +188,6 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
           }
         }
       }
-      // Close sidebar after successful assignment
       closeSidebar();
       refresh();
     } catch (err: any) {
