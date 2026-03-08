@@ -59,6 +59,8 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   // ── Step 2: Map planificación → capacitación ───────────────────────
   // For each capacitación, find the matching planificación row
   const planiToCap: Record<number, number> = {};
+  const capsWithDevices = new Set(Object.keys(capDispos).map(Number));
+
   capData.forEach(c => {
     const match = planisData.find(p =>
       p.id_dia === c.id_dia &&
@@ -68,7 +70,15 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     if (match) {
       planiToCap[match.id_plani] = c.id_cap;
     }
+    // Debug: trace caps with devices that DON'T find a plani match
+    if (capsWithDevices.has(c.id_cap) && !match) {
+      console.warn(`[CapsBuilder] ⚠️ Cap ${c.id_cap} (fecha=${capDates[c.id_cap]}, grupo=${c.grupo}, turno=${c.id_turno}) has devices but NO planificación match! id_dia=${c.id_dia}`);
+    }
   });
+
+  // Debug: trace planiToCap for caps that have devices
+  const capsWithDevicesAndPlani = Object.entries(planiToCap).filter(([_, capId]) => capsWithDevices.has(capId));
+  console.log(`[CapsBuilder:step2] planiToCap total=${Object.keys(planiToCap).length} | caps with devices+plani=${capsWithDevicesAndPlani.length}`, capsWithDevicesAndPlani.map(([p, c]) => `plani${p}→cap${c}`));
 
 
   // ── Step 3: Build veto map (agents with asistio=false for a cap) ──
