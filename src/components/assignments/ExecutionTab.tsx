@@ -218,6 +218,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             );
           })}
         </div>
+        </>
+        )}
       </div>
     </main>
   );
