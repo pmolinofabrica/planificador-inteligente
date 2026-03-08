@@ -149,7 +149,9 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       arr.forEach((r: any) => assignedIds.add(r.id));
                     });
                     const convocados = convocadosDb[d] || [];
-                    const free = convocados.filter((id: number) => !assignedIds.has(id)).length;
+                    const unassigned = convocados.filter((id: number) => !assignedIds.has(id));
+                    const absentFree = unassigned.filter((id: number) => isAgentAbsent(id, d)).length;
+                    const free = unassigned.length - absentFree;
                     let totalCupos = 0;
                     dbDevices.forEach((dev: any) => {
                       totalCupos += calendarDb[d]?.[dev.id] || 0;
@@ -173,6 +175,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                           </div>
                           <div className="flex gap-1">
                             {free > 0 && <span className="score-low border px-1 py-0.5 rounded text-[9px] font-bold">{free} LIBR.</span>}
+                            {absentFree > 0 && <span className="bg-stone-100 text-stone-600 border border-stone-300 px-1 py-0.5 rounded text-[9px] font-bold">🚫 {absentFree}</span>}
                             {vacant > 0 && <span className="score-high border px-1 py-0.5 rounded text-[9px] font-bold">{vacant} VAC.</span>}
                           </div>
                         </div>
