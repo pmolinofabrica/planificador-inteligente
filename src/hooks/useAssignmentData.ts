@@ -440,7 +440,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     }
 
     loadInitialData();
-  }, [selectedMonth, refreshCounter, getMonthParts]);
+  }, [selectedMonth, refreshCounter, getMonthParts, turnoFilter]);
 
   const isAgentAbsent = useCallback((agentId: number, uiDate: string): boolean => {
     return (inasistenciasDb[uiDate] || []).some(x => x.id_agente === agentId);
