@@ -51,6 +51,12 @@
     --floor-3-border: 38 35% 78%;
     --floor-3-accent: 38 60% 50%;
 
+    /* Group A/B colors for capacitación groups */
+    --group-a-text: 205 60% 35%;
+    --group-a-accent: 205 50% 48%;
+    --group-b-text: 8 50% 38%;
+    --group-b-accent: 8 50% 52%;
+
     /* Score colors — muted organic tones */
     --score-high-bg: 145 30% 92%;
     --score-high-text: 145 35% 30%;
