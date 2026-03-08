@@ -112,13 +112,35 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
               Dispositivos × Fechas — Click en celda para ver dispositivo, click en tarjeta para modificar residente
             </p>
           </div>
-          <button
-            onClick={() => setShowVacantsSidebar(!showVacantsSidebar)}
-            className="bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 font-bold px-4 py-2 rounded-xl transition-colors text-sm flex items-center gap-2"
-          >
-            <AlertCircle className="w-4 h-4" />
-            Ver Vacantes / Sin Asignar
-          </button>
+          <div className="flex items-center gap-2">
+            {isApertura && (
+              <>
+                <button
+                  onClick={() => handleRunEngine(true)}
+                  disabled={isRunningEngine}
+                  className="bg-accent/50 hover:bg-accent text-accent-foreground border border-border font-bold px-3 py-2 rounded-xl transition-colors text-xs flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Simular
+                </button>
+                <button
+                  onClick={() => handleRunEngine(false)}
+                  disabled={isRunningEngine}
+                  className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 font-bold px-3 py-2 rounded-xl transition-colors text-xs flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  {isRunningEngine ? 'Ejecutando...' : 'Ejecutar Motor'}
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setShowVacantsSidebar(!showVacantsSidebar)}
+              className="bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 font-bold px-4 py-2 rounded-xl transition-colors text-sm flex items-center gap-2"
+            >
+              <AlertCircle className="w-4 h-4" />
+              Ver Vacantes / Sin Asignar
+            </button>
+          </div>
         </div>
 
         {/* Matrix Table */}
