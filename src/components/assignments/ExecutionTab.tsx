@@ -58,15 +58,17 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     }
   };
 
-  // Compute free residents (convocados sin dispositivo asignado)
+  // Compute free residents (convocados sin dispositivo asignado, excluding absent)
   const assignedIds = new Set<number>();
   Object.values(assignmentsDb[execDate] || {}).forEach((arr: any) => {
     arr.forEach((r: any) => assignedIds.add(r.id));
   });
   const convocados = convocadosDb[execDate] || [];
-  const freeResidents = allResidentsDb.filter((r: any) =>
+  const unassignedResidents = allResidentsDb.filter((r: any) =>
     convocados.includes(r.id) && !assignedIds.has(r.id)
   );
+  const freeResidents = unassignedResidents.filter((r: any) => !isAgentAbsent(r.id, execDate));
+  const absentUnassigned = unassignedResidents.filter((r: any) => isAgentAbsent(r.id, execDate));
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6">
