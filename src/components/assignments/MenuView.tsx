@@ -336,9 +336,14 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                                     absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
-                                    <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
-                                      {absent && '🚫 '}{res.name}
-                                    </span>
+                              <span className={`font-bold truncate ${
+                                      absent ? 'line-through text-muted-foreground'
+                                      : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
+                                      : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                      : ''
+                                    }`}>
+                                       {absent && '🚫 '}{res.name}
+                                     </span>
                                   </div>
                                 );
                               })}
