@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Calendar, Users, AlertCircle } from 'lucide-react';
+import { Calendar, Users, AlertCircle, Zap } from 'lucide-react';
 import { getFloorColor, getScoreColor, getGroupColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
+import { toast } from 'sonner';
 
 interface PlanningMatrixProps {
   data: any;
