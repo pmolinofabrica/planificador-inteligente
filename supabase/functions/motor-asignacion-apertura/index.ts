@@ -549,24 +549,6 @@ Deno.serve(async (req) => {
       `\n📊 Resultado: ${batchPayload.length} asignaciones + ${vacantPayload.length} vacantes (pool P0)`
     );
 
-    if (dry_run) {
-      addLog("🔍 DRY RUN: No se persistió nada en la base de datos.");
-      return new Response(
-        JSON.stringify({
-          success: true,
-          dry_run: true,
-          stats,
-          asignaciones: batchPayload.length,
-          vacantes: vacantPayload.length,
-          log,
-          grilla,
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
     // Delete existing motor-generated rows for the dates we're processing
     // (only planificado status, to avoid overwriting manually executed ones)
     for (const fecha of diasAProcesar) {

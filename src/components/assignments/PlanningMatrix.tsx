@@ -60,11 +60,9 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       if (error) throw error;
 
       if (result?.success) {
-        const msg = dryRun
-          ? `✅ Simulación completada: ${result.asignaciones} asignaciones + ${result.vacantes} vacantes`
-          : `✅ Motor ejecutado: ${result.insertados}/${result.asignaciones + result.vacantes} registros persistidos`;
+        const msg = `✅ Motor ejecutado: ${result.insertados}/${result.asignaciones + result.vacantes} registros persistidos`;
         toast.success(msg);
-        if (!dryRun) refresh();
+        refresh();
         console.log('[Motor Apertura] Log:', result.log);
       } else {
         throw new Error(result?.error || 'Error desconocido');
