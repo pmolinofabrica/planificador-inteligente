@@ -35,11 +35,11 @@
 
     --radius: 1rem;
 
-    /* Floor colors — warm organic palette */
-    --floor-1-bg: 165 30% 93%;
-    --floor-1-text: 165 35% 28%;
-    --floor-1-border: 165 25% 78%;
-    --floor-1-accent: 165 35% 38%;
+    /* Floor colors — P1 celeste/blue, P2 terracotta, P3 amber */
+    --floor-1-bg: 205 45% 93%;
+    --floor-1-text: 205 45% 28%;
+    --floor-1-border: 205 35% 78%;
+    --floor-1-accent: 205 50% 48%;
 
     --floor-2-bg: 8 45% 94%;
     --floor-2-text: 8 40% 35%;

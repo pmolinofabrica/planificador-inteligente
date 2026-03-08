@@ -57,9 +57,9 @@ export const getPisoFromDeviceName = (name: string): string => {
 };
 
 export const getPisoBadgeColor = (piso: string): string => {
-  if (piso === 'P1') return 'bg-cyan-50 text-cyan-800 border-cyan-200';
-  if (piso === 'P2') return 'bg-rose-50 text-rose-800 border-rose-200';
-  if (piso === 'P3') return 'bg-amber-50 text-amber-800 border-amber-200';
+  if (piso === 'P1') return 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]';
+  if (piso === 'P2') return 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]';
+  if (piso === 'P3') return 'bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]';
   return 'bg-muted text-muted-foreground border-border';
 };
 
