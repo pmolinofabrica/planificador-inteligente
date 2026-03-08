@@ -85,6 +85,8 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                           ))}
                       </div>
                     </button>
+                      );
+                    })()}
                   );
                 })}
               </div>
