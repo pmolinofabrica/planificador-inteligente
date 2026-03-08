@@ -378,8 +378,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               allDiasRes.data.forEach(d => { if (d.fecha) dDict[d.id_dia] = d.fecha.substring(0, 10); });
 
               planiRes.data.forEach(p => {
-                const tipo = (turnoDict[p.id_turno] || '').toLowerCase();
-                if (!tipo.includes('apertura')) return;
+                const tipo = turnoDict[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
                 const fecha = dDict[p.id_dia];
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
