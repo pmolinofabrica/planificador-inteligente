@@ -3,9 +3,7 @@
  *
  * Two paths grant an agent a device capability:
  *   1. Direct attendance  → capacitaciones_participantes.asistio = true
- *   2. Convocatoria inference → agent is convocated to planificación that
- *      matches a capacitación (same id_dia + id_turno + grupo), UNLESS they
- *      have asistio = false for that specific cap (veto).
+ *   2. RPC convocados matriz → server-side matching via rpc_obtener_convocados_matriz
  *
  * Output: for each resident, caps = { deviceId → earliest ISO date }
  */
@@ -16,18 +14,16 @@ interface CapRow { id_cap: number; id_dia: number; id_turno: number | null; grup
 interface PartRow { id_cap: number; id_agente: number; asistio: boolean | null }
 interface DispoRow { id_cap: number; id_dispositivo: number }
 interface DiaRow { id_dia: number; fecha: string }
-interface ConvRow { id_convocatoria: number; id_agente: number; id_plani: number }
-interface PlaniRow { id_plani: number; id_dia: number; id_turno: number; grupo: string | null }
 interface ResiRow { id_agente: number; nombre: string; apellido: string }
+interface ConvocadosMatrizRow { id_cap: number; id_agente: number }
 
 export interface CapsBuilderInput {
   capData: CapRow[];
   partsData: PartRow[];
   dispoData: DispoRow[];
   diasData: DiaRow[];
-  convsData: ConvRow[];
-  planisData: PlaniRow[];
   resiData: ResiRow[];
+  convocadosMatriz?: ConvocadosMatrizRow[];
 }
 
 export interface CapsBuilderOutput {
@@ -36,7 +32,7 @@ export interface CapsBuilderOutput {
 }
 
 export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
-  const { capData, partsData, dispoData, diasData, convsData, planisData, resiData } = input;
+  const { capData, partsData, dispoData, diasData, resiData, convocadosMatriz } = input;
 
   // ── Step 1: Build lookup dictionaries ──────────────────────────────
   const diasDict: Record<number, string> = {};
@@ -56,42 +52,7 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     capDispos[cd.id_cap].push(cd.id_dispositivo);
   });
 
-  // ── Step 2: Map planificación → capacitación ───────────────────────
-  // For each capacitación, find the matching planificación row
-  const planiToCap: Record<number, number> = {};
-  const capsWithDevices = new Set(Object.keys(capDispos).map(Number));
-
-  capData.forEach(c => {
-    const match = planisData.find(p =>
-      p.id_dia === c.id_dia &&
-      p.id_turno === c.id_turno &&
-      ((p.grupo || null) === (c.grupo || null))
-    );
-    if (match) {
-      planiToCap[match.id_plani] = c.id_cap;
-    }
-    // Debug: trace caps with devices that DON'T find a plani match
-    if (capsWithDevices.has(c.id_cap) && !match) {
-      console.warn(`[CapsBuilder] ⚠️ Cap ${c.id_cap} (fecha=${capDates[c.id_cap]}, grupo=${c.grupo}, turno=${c.id_turno}) has devices but NO planificación match! id_dia=${c.id_dia}`);
-    }
-  });
-
-  // Debug: trace planiToCap for caps that have devices
-  const capsWithDevicesAndPlani = Object.entries(planiToCap).filter(([_, capId]) => capsWithDevices.has(capId));
-  console.log(`[CapsBuilder:step2] planiToCap total=${Object.keys(planiToCap).length} | caps with devices+plani=${capsWithDevicesAndPlani.length}`, capsWithDevicesAndPlani.map(([p, c]) => `plani${p}→cap${c}`));
-
-
-  // ── Step 3: Build veto map (agents with asistio=false for a cap) ──
-  const vetoedMap: Record<string, Set<number>> = {};
-  partsData.forEach(p => {
-    if (p.asistio === false) {
-      const k = String(p.id_agente);
-      if (!vetoedMap[k]) vetoedMap[k] = new Set();
-      vetoedMap[k].add(p.id_cap);
-    }
-  });
-
-  // ── Step 4: Initialize residentsMap ────────────────────────────────
+  // ── Step 2: Initialize residentsMap ────────────────────────────────
   const residentsMap: Record<number, ResidentInfo> = {};
   resiData.forEach(r => {
     residentsMap[r.id_agente] = {
@@ -106,13 +67,12 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     if (!residentsMap[agentId]) return;
     const dKey = String(deviceId);
     const existing = residentsMap[agentId].caps[dKey];
-    // Keep the earliest date
     if (!existing || date < existing) {
       residentsMap[agentId].caps[dKey] = date;
     }
   };
 
-  // ── Step 5: Path 1 — Direct attendance ─────────────────────────────
+  // ── Step 3: Path 1 — Direct attendance ─────────────────────────────
   const gruposAgenteMap: Record<string, Set<string>> = {};
   let path1Count = 0;
 
@@ -134,69 +94,44 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     }
   });
 
-  // ── Step 6: Path 2 — Convocatoria inference ────────────────────────
+  // ── Step 4: Path 2 — RPC convocados matriz ────────────────────────
   let path2Count = 0;
-  let path2Skipped = 0;
-  let path2NoCapId = 0;
-  let path2Vetoed = 0;
 
-  convsData.forEach(cv => {
-    const agId = String(cv.id_agente);
-    const cId = planiToCap[cv.id_plani];
-    if (!cId) { path2NoCapId++; return; }
-    if (vetoedMap[agId]?.has(cId)) { path2Vetoed++; return; }
-    const cDate = capDates[cId];
-    const dispos = capDispos[cId] || [];
-    if (capGroups[cId]) {
-      if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
-      gruposAgenteMap[agId].add(capGroups[cId]);
-    }
-    if (cDate && dispos.length > 0) {
-      dispos.forEach(dId => {
-        assignCap(cv.id_agente, dId, cDate);
-        path2Count++;
-      });
-    } else {
-      path2Skipped++;
-    }
-  });
-
-  // Debug: trace specific caps with devices
-  capsWithDevices.forEach(capId => {
-    const matchingConvs = convsData.filter(cv => planiToCap[cv.id_plani] === capId);
-    if (matchingConvs.length === 0) {
-      console.warn(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → 0 convocatorias matched via planiToCap`);
-    } else {
-      console.log(`[CapsBuilder] Cap ${capId} (date=${capDates[capId]}, dispos=${(capDispos[capId]||[]).join(',')}) → ${matchingConvs.length} convocatorias matched`);
-    }
-  });
-
-  // Debug: trace Enrique (id=89)
-  const enriqueRes = residentsMap[89];
-  if (enriqueRes) {
-    console.log(`[CapsBuilder:Enrique(89)] caps=`, JSON.stringify(enriqueRes.caps));
+  if (convocadosMatriz && convocadosMatriz.length > 0) {
+    convocadosMatriz.forEach(row => {
+      const cDate = capDates[row.id_cap];
+      const dispos = capDispos[row.id_cap] || [];
+      if (capGroups[row.id_cap]) {
+        const agId = String(row.id_agente);
+        if (!gruposAgenteMap[agId]) gruposAgenteMap[agId] = new Set();
+        gruposAgenteMap[agId].add(capGroups[row.id_cap]);
+      }
+      if (cDate && dispos.length > 0) {
+        dispos.forEach(dId => {
+          assignCap(row.id_agente, dId, cDate);
+          path2Count++;
+        });
+      }
+    });
   }
 
-  console.log(`[CapsBuilder:path2] total convs=${convsData.length} noCapId=${path2NoCapId} vetoed=${path2Vetoed} skipped(noDate/noDispos)=${path2Skipped} assigned=${path2Count}`);
-
-  // ── Step 7: Build agent groups ─────────────────────────────────────
+  // ── Step 5: Build agent groups ─────────────────────────────────────
   const agentGroups: Record<string, string> = {};
   Object.keys(gruposAgenteMap).forEach(k => {
     const grps = Array.from(gruposAgenteMap[k]);
     agentGroups[k] = grps.includes('A') ? 'A' : grps[0];
   });
 
-  // ── Debug summary ──────────────────────────────────────────────────
+  // ── Summary ────────────────────────────────────────────────────────
   const totalCaps = Object.values(residentsMap).reduce(
     (sum, r) => sum + Object.keys(r.caps).length, 0
   );
   console.log(
     `[CapsBuilder] ${resiData.length} residents | ` +
     `${capData.length} caps | ${dispoData.length} cap_dispos | ` +
-    `Path1(attendance): ${path1Count} assignments | ` +
-    `Path2(convocatoria): ${path2Count} assignments | ` +
-    `Total resident-device caps: ${totalCaps} | ` +
-    `planiToCap mappings: ${Object.keys(planiToCap).length}`
+    `Path1(attendance): ${path1Count} | ` +
+    `Path2(RPC matriz): ${path2Count} | ` +
+    `Total caps: ${totalCaps}`
   );
 
   return { residentsMap, agentGroups };
