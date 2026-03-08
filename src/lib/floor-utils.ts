@@ -18,6 +18,58 @@ export const getScoreColor = (score: number): string => {
   return "score-low border";
 };
 
+/**
+ * Compute rotation metrics for a resident from the assignments matrix.
+ * - localReps: how many times this agent appears in a specific device across all dates
+ * - uniqueDevices: how many distinct devices this agent is assigned to
+ * - totalAssignments: total assignments across all dates
+ * - diversityPct: uniqueDevices / totalAvailableDevices (0-100)
+ */
+export interface RotationMetrics {
+  localReps: number;       // times in THIS device
+  uniqueDevices: number;   // distinct devices covered
+  totalAssignments: number;
+  diversityPct: number;    // 0-100
+}
+
+export const computeRotationMetrics = (
+  agentId: number,
+  deviceId: string | undefined,
+  assignmentsMatrix: Record<string, Record<string, { id: number }[]>>,
+  totalDeviceCount: number,
+): RotationMetrics => {
+  let localReps = 0;
+  const deviceSet = new Set<string>();
+  let totalAssignments = 0;
+
+  for (const dateKey of Object.keys(assignmentsMatrix)) {
+    const dateDevices = assignmentsMatrix[dateKey];
+    for (const [devId, agents] of Object.entries(dateDevices)) {
+      for (const ag of agents) {
+        if (ag.id === agentId) {
+          totalAssignments++;
+          deviceSet.add(devId);
+          if (deviceId && devId === deviceId) localReps++;
+        }
+      }
+    }
+  }
+
+  const uniqueDevices = deviceSet.size;
+  const diversityPct = totalDeviceCount > 0
+    ? Math.round((uniqueDevices / totalDeviceCount) * 100)
+    : 0;
+
+  return { localReps, uniqueDevices, totalAssignments, diversityPct };
+};
+
+/** Color based on local repetitions (fewer = better rotation) */
+export const getRepsColor = (localReps: number): string => {
+  if (localReps <= 1) return "score-high border";  // good rotation
+  if (localReps <= 2) return "score-mid border";
+  return "score-low border"; // too repetitive
+};
+
 export const getFloorAccent = (piso: number | string): string => {
   const p = String(piso);
   if (p === '1') return "bg-[hsl(var(--floor-1-accent))]";
