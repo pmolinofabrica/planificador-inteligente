@@ -279,10 +279,10 @@ const Index = () => {
 
       {/* Loading Overlay */}
       {data.isLoading && (
-        <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-[100] flex items-center justify-center">
-          <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+        <div className="fixed inset-0 bg-background/60 backdrop-blur-md z-[100] flex items-center justify-center">
+          <div className="bg-card border border-border rounded-2xl p-8 shadow-warm-lg flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-bold text-muted-foreground">Cargando datos...</span>
+            <span className="text-sm font-semibold text-muted-foreground tracking-wide">Cargando datos...</span>
           </div>
         </div>
       )}

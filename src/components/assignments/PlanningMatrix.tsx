@@ -77,7 +77,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
         </div>
 
         {/* Matrix Table */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-warm border border-border overflow-hidden">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
