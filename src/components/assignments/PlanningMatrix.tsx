@@ -87,6 +87,11 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                               <Users className="w-3 h-3 inline mr-0.5" />{count}
                             </span>
                           </div>
+                          {tipoOrganizacionMap?.[d] && (
+                            <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[9px] font-bold border border-primary/20 truncate max-w-[120px]">
+                              {tipoOrganizacionMap[d]}
+                            </span>
+                          )}
                           <div className="flex gap-1">
                             {free > 0 && <span className="score-low border px-1 py-0.5 rounded text-[9px] font-bold">{free} LIBR.</span>}
                             {vacant > 0 && <span className="score-high border px-1 py-0.5 rounded text-[9px] font-bold">{vacant} VAC.</span>}
