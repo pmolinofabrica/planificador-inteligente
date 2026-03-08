@@ -261,8 +261,9 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   setSelectedDevice(null);
                   setSelectedDateFilter(null);
                 }}
-                className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 ${getScoreColor(res.score)}`}>
-                {res.name}
+                className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps)}`}>
+                <span>{res.name}</span>
+                <span className="text-[9px] font-mono opacity-70">{computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps}×</span>
               </div>
             ))}
           </div>
