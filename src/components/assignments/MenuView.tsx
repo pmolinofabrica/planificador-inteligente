@@ -291,7 +291,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                   }`}>
                     {/* Device header */}
                     <div className={`px-2.5 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 ${getFloorColor(dev.name)}`}>
-                      <span className="font-bold text-xs sm:text-sm truncate">{dev.name}</span>
+                      <span className="font-bold text-xs sm:text-sm truncate">{isLocked ? dev.name.replace(/\s*\(P\d\)\s*/g, '') : dev.name}</span>
                       <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${
                         isUnder ? 'bg-destructive/10 text-destructive border-destructive/30'
                         : 'score-high'
