@@ -152,7 +152,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth),
           supabase.from('menu_semana')
-            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion')
+            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion, id_convocatoria')
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth)
         ]);
@@ -245,6 +245,21 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
             });
           }
+          // Hoist menuSemanaConvMap for use in step 6
+          const _menuSemanaConvMap = !isApertura ? (() => {
+            const m: Record<string, Record<number, number>> = {};
+            menuSemanaData.forEach(ms => {
+              if (!ms.fecha_asignacion || !ms.id_convocatoria) return;
+              const tipo = turnoTypeMap[ms.id_turno] || '';
+              if (!matchesTurnoFilter(tipo)) return;
+              const [y, mm, d] = ms.fecha_asignacion.split("-");
+              if (y !== yFilt || mm !== mmFilt) return;
+              const uiDate = `${d}/${mm}`;
+              if (!m[uiDate]) m[uiDate] = {};
+              m[uiDate][ms.id_agente] = ms.id_convocatoria;
+            });
+            return m;
+          })() : {};
 
           // ═══════════════════════════════════════════════════════════
           // 6. CONVOCATORIA COMPLEMENTARIA
@@ -268,22 +283,31 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               filteredPlaniIds.push(p.id_plani);
             });
 
+            // Start with menu_semana convocatoria IDs if available
+            const dateAgentConv: Record<string, Record<number, number>> = {};
+            // Deep-copy _menuSemanaConvMap entries
+            Object.entries(_menuSemanaConvMap).forEach(([ud, agents]) => {
+              dateAgentConv[ud] = { ...agents };
+            });
+
             if (filteredPlaniIds.length > 0) {
               const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
-              const dateAgentConv: Record<string, Record<number, number>> = {};
               matchingConvs.forEach(c => {
                 const uiDate = planiToUiDate[c.id_plani];
                 if (!uiDate) return;
                 if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
-                dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                // Don't overwrite if already set from menu_semana
+                if (!dateAgentConv[uiDate][c.id_agente]) {
+                  dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                }
                 if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
                 if (!convocadosList[uiDate].includes(c.id_agente)) {
                   convocadosList[uiDate].push(c.id_agente);
                   convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
                 }
               });
-              setAgentConvocatoriaMap(dateAgentConv);
             }
+            setAgentConvocatoriaMap(dateAgentConv);
           } catch (e) {
             console.error("Error cargando convocatoria:", e);
           }
