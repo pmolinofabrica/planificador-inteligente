@@ -113,11 +113,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const capData = capsRep.data || [];
         const partsData = partsRes.data || [];
         const dispoCapData = dispoCapsRes.data || [];
+        const convocadosMatriz = convocadosMatrizRes.data || [];
         const convsData = allConvsRes.data || [];
         const planisData = allPlanisRes.data || [];
         const diasData = allDiasRes.data || [];
 
-        console.log(`[DataLoad] caps=${capData.length} parts=${partsData.length} capDispos=${dispoCapData.length} convs=${convsData.length} planis=${planisData.length} dias=${diasData.length} residents=${resiData?.length || 0}`);
+        console.log(`[DataLoad] caps=${capData.length} parts=${partsData.length} capDispos=${dispoCapData.length} convocadosMatriz=${convocadosMatriz.length} planis=${planisData.length} dias=${diasData.length} residents=${resiData?.length || 0}`);
 
         // Build caps using clean builder
         if (resiData && resiData.length > 0) {
@@ -126,9 +127,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             partsData,
             dispoData: dispoCapData,
             diasData,
-            convsData,
-            planisData,
             resiData,
+            convocadosMatriz,
           });
           setAgentGroups(groups);
           setAllResidentsDb(Object.values(residentsMap));
