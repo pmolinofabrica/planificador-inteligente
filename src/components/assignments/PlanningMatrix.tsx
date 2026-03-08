@@ -265,13 +265,22 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
                                     }
                                   >
-                                    <span className={`font-bold truncate max-w-[100px] text-xs ${
-                                      absent ? 'line-through text-stone-500 opacity-60'
-                                      : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                                      : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                                      : ''
-                                    }`}>
-                                      {absent && <span className="mr-1">🚫</span>}{res.name}
+                                    <span className="flex items-center gap-1 min-w-0">
+                                      <span className={`font-bold truncate max-w-[80px] text-xs ${
+                                        absent ? 'line-through text-stone-500 opacity-60'
+                                        : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
+                                        : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
+                                        : ''
+                                      }`}>
+                                        {absent && <span className="mr-1">🚫</span>}{res.name}
+                                      </span>
+                                      {!absent && (
+                                        <span className={`text-[8px] font-mono px-1 py-0.5 rounded ${
+                                          metrics.localReps <= 1 ? 'bg-emerald-100 text-emerald-700' : metrics.localReps <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                        }`} title={`${metrics.localReps}× aquí | ${metrics.uniqueDevices} disp. únicos | ${metrics.diversityPct}% diversidad`}>
+                                          {metrics.localReps}×
+                                        </span>
+                                      )}
                                     </span>
                                     {(() => {
                                       const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
