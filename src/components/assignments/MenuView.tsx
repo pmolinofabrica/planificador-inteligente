@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
-import { getFloorColor, getGroupColor } from '@/lib/floor-utils';
+import { getFloorColor } from '@/lib/floor-utils';
+import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
 
 interface MenuViewProps {
@@ -11,11 +12,19 @@ interface MenuViewProps {
 }
 
 const UNLOCK_CODE = '2350';
+const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
+const ORG_LABELS: Record<string, string> = {
+  'dispositivos fijos': 'Fija',
+  'rotacion simple': 'Rot. Simple',
+  'rotacion completa': 'Rot. Completa',
+};
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked = false }) => {
-  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, calendarDb, allResidentsDb } = data;
+  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh } = data;
+
+  const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
   const [showUnlockInput, setShowUnlockInput] = useState(false);
@@ -25,15 +34,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   const orgType = tipoOrganizacionMap[currentDate] || 'dispositivos fijos';
 
   // When locked, only allow dates from today backwards
-  const todayStr = useMemo(() => {
-    const now = new Date();
-    const d = String(now.getDate()).padStart(2, '0');
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${d}/${m}`;
-  }, []);
-
-  const isDateFuture = (dateStr: string) => {
-    // dateStr format: "DD/MM"
+  const isDateFuture = useCallback((dateStr: string) => {
     if (!dateStr) return false;
     const [d, m] = dateStr.split('/').map(Number);
     const now = new Date();
@@ -42,7 +43,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     if (m > todayMonth) return true;
     if (m === todayMonth && d > todayDay) return true;
     return false;
-  };
+  }, []);
 
   const canSelectDate = (dateStr: string) => {
     if (!isLocked) return true;
@@ -125,6 +126,31 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     }
   };
 
+  // Handle org type change for current date
+  const handleOrgTypeChange = async (newType: string) => {
+    if (!currentDate || isLocked) return;
+    const [d, m] = currentDate.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = dateTurnoMap[currentDate] || 4;
+
+    // Optimistic update
+    setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: newType }));
+
+    try {
+      const { error } = await supabase
+        .from('menu_semana')
+        .update({ tipo_organizacion: newType })
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_turno', turnoId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error updating org type:', err);
+      // Revert on error
+      setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: orgType }));
+    }
+  };
+
   // Piso accent dot color using design tokens
   const pisoAccent = (p: number) =>
     p === 1 ? 'bg-[hsl(var(--floor-1-accent))]'
@@ -156,20 +182,18 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            {isLocked ? (
-              <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight text-center flex-1">
-                El Molino Fábrica Cultural
-              </h2>
-            ) : (
-              <>
-                <div>
-                  <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
-                </div>
-              </>
-            )}
-          </div>
+          {isLocked ? (
+            <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight flex-1 text-center">
+              El Molino Fábrica Cultural
+            </h2>
+          ) : (
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div>
+                <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
+                <p className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:block">Vista completa de asignaciones</p>
+              </div>
+            </div>
+          )}
           <button
             onClick={handleLockToggle}
             className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all flex-shrink-0 ${
@@ -250,6 +274,45 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           })}
         </div>
 
+        {/* ── Org Type Selector — only for tarde/mañana, not locked ── */}
+        {isNonApertura && !isLocked && (
+          <div className="mb-4 flex items-center gap-2 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
+            <span className="text-xs font-bold text-muted-foreground mr-1">📋 Organización:</span>
+            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+              {ORG_TYPES.map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleOrgTypeChange(type)}
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-all whitespace-nowrap ${
+                    orgType === type
+                      ? type === 'rotacion completa'
+                        ? 'bg-violet-100 text-violet-800 border border-violet-300 shadow-warm'
+                        : type === 'rotacion simple'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-300 shadow-warm'
+                          : 'bg-card text-foreground border border-border shadow-warm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {ORG_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Rotacion Completa: Group Legend ── */}
+        {isRotacionCompleta && distinctGroups.length > 1 && (
+          <div className="mb-3 flex items-center gap-2 px-1">
+            <span className="text-[10px] font-bold text-muted-foreground">Grupos:</span>
+            {distinctGroups.map(g => (
+              <span key={g} className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                <span className={`w-2.5 h-2.5 rounded-full ${getGroupDotColor(g)}`} />
+                G{g}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* ══════ ASSIGNED DEVICES BY PISO ══════ */}
         {Object.entries(pisoGroups).sort(([a], [b]) => Number(a) - Number(b)).map(([piso, devices]) => (
           <div key={piso} className={`mb-4 sm:mb-6 rounded-xl border-2 overflow-hidden ${pisoBorder(Number(piso))}`}>
@@ -280,7 +343,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                         {assignments.length}/{cupo}
                       </span>
                     </div>
-                    {/* Resident list - horizontal for rotacion completa, stacked otherwise */}
+                    {/* Resident list - horizontal columns for rotacion completa, stacked otherwise */}
                     {isRotacionCompleta && distinctGroups.length > 1 ? (
                       <div className="p-1.5 sm:p-2 flex gap-1">
                         {distinctGroups.map(gNum => {
