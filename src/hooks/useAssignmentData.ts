@@ -216,14 +216,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           turnosLookupRes.data.forEach(t => { turnoTypeMap[t.id_turno] = t.tipo_turno; });
         }
 
-        // Turno filter matching function
-        const matchesTurnoFilter = (tipo: string): boolean => {
-          const t = tipo.toLowerCase();
-          if (turnoFilter === 'apertura') return t.includes('apertura');
-          if (turnoFilter === 'tarde') return t.includes('turno tarde');
-          if (turnoFilter === 'manana') return t.includes('turno mañana') || t.includes('turno manana');
-          return t.includes('apertura');
-        };
+
 
         // Build numero_grupo map from menu_semana (keyed by "agentId-fecha-dispositivoId")
         const grupoMap: Record<string, number | null> = {};
