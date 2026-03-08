@@ -247,6 +247,10 @@ const Index = () => {
           />
         )}
 
+        {activeTab === 'menu' && (
+          <MenuView data={data} year={year} />
+        )}
+
         {activeTab === 'exec' && (
           <ExecutionTab
             data={data}
