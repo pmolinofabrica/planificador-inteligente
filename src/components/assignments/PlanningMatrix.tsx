@@ -26,8 +26,32 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+
+  const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
+
+  const handleGroupChange = async (resId: number, date: string, deviceId: string, newGroup: number | null) => {
+    setEditingGroup(null);
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = dateTurnoMap[date] || 4;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.from('menu_semana')
+        .update({ numero_grupo: newGroup })
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', parseInt(deviceId))
+        .eq('id_turno', turnoId);
+      if (error) throw error;
+      refresh();
+    } catch (err: any) {
+      console.error('Error cambiando grupo:', err);
+      alert(`Error: ${err.message || err}`);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
