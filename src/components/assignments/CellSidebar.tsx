@@ -167,7 +167,6 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     setSelectedDateFilter(null);
   };
 
-  const disp = dbDevices.find((dd: any) => dd.id === deviceId);
 
   const renderTier = (title: string, items: AltItem[], colorClass: string, Icon: any) => (
     items.length > 0 && (
