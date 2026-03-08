@@ -47,14 +47,14 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
       {/* HEADER */}
-      <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+      <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 shadow-sm gap-2 sm:gap-0">
         <div className="flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
             <Calendar className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-foreground tracking-tight leading-tight">Asignaciones</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-foreground tracking-tight leading-tight">Asignaciones</h1>
               <select
                 className="bg-muted border border-border rounded-md px-2 py-0.5 text-xs font-bold text-foreground outline-none hover:bg-accent cursor-pointer"
                 value={selectedMonth}
@@ -66,17 +66,17 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Tab Toggle */}
-        <div className="flex bg-muted p-1 rounded-lg border border-border shadow-inner">
+        {/* Tab Toggle - scrollable on mobile */}
+        <div className="flex overflow-x-auto bg-muted p-1 rounded-lg border border-border shadow-inner -mx-1 sm:mx-0">
           {[
-            { key: 'plan' as ActiveTab, label: 'Matriz de Planificación', color: 'text-primary' },
-            { key: 'exec' as ActiveTab, label: 'Apertura / Inasistencias', color: 'text-destructive' },
+            { key: 'plan' as ActiveTab, label: 'Planificación', color: 'text-primary' },
+            { key: 'exec' as ActiveTab, label: 'Apertura', color: 'text-destructive' },
             { key: 'devices' as ActiveTab, label: 'Dispositivos', color: 'text-primary' },
           ].map(tab => (
             <button
               key={tab.key}
               onClick={() => { setActiveTab(tab.key); clearSelections(); }}
-              className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${
+              className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-bold rounded-md transition-all whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab.key
                   ? `bg-card shadow-sm ${tab.color} border border-border/50`
                   : 'text-muted-foreground hover:text-foreground'
@@ -88,7 +88,7 @@ const Index = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => {
               if (undoStack.length === 0) {
@@ -97,7 +97,7 @@ const Index = () => {
               }
               handleUndo(data.setIsLoading);
             }}
-            className={`font-bold px-4 py-1.5 rounded-xl transition-colors shadow-sm text-sm border-2 flex items-center gap-1.5
+            className={`font-bold px-3 sm:px-4 py-1.5 rounded-xl transition-colors shadow-sm text-xs sm:text-sm border-2 flex items-center gap-1.5
               ${undoStack.length > 0
                 ? 'bg-card border-primary/30 text-primary hover:bg-accent'
                 : 'bg-muted border-border text-muted-foreground cursor-not-allowed'
@@ -111,7 +111,7 @@ const Index = () => {
                 alert("Motor de asignación en desarrollo. Usa la Edge Function cuando esté lista.");
               }
             }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-xl transition-colors shadow-md text-sm flex items-center gap-2"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 sm:px-4 py-1.5 rounded-xl transition-colors shadow-md text-xs sm:text-sm flex items-center gap-2"
           >
             🔮 Generar
           </button>
