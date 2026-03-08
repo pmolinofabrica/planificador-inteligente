@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar, Users, AlertCircle } from 'lucide-react';
 import { getFloorColor, getScoreColor, getGroupColor } from '@/lib/floor-utils';
+import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 
 interface PlanningMatrixProps {
@@ -25,8 +26,32 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+
+  const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
+
+  const handleGroupChange = async (resId: number, date: string, deviceId: string, newGroup: number | null) => {
+    setEditingGroup(null);
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = dateTurnoMap[date] || 4;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.from('menu_semana')
+        .update({ numero_grupo: newGroup })
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', parseInt(deviceId))
+        .eq('id_turno', turnoId);
+      if (error) throw error;
+      refresh();
+    } catch (err: any) {
+      console.error('Error cambiando grupo:', err);
+      alert(`Error: ${err.message || err}`);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
@@ -190,11 +215,56 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                     }`}>
                                       {absent && <span className="mr-1">🚫</span>}{res.name}
                                     </span>
-                                    {res.numero_grupo != null && (
-                                      <span className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)}`}>
-                                        G{res.numero_grupo}
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+                                      const isRotCompleta = orgType === 'rotacion completa';
+                                      const isEditing = editingGroup && editingGroup.resId === res.id && editingGroup.date === date && editingGroup.deviceId === device.id;
+
+                                      if (isEditing) {
+                                        return (
+                                          <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                                            {[null, 1, 2, 3].map(g => (
+                                              <button key={g ?? 'x'} onClick={() => handleGroupChange(res.id, date, device.id, g)}
+                                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all hover:scale-110 ${
+                                                  g === res.numero_grupo ? 'ring-2 ring-primary font-bold' : ''
+                                                } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
+                                                {g != null ? `G${g}` : '✕'}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        );
+                                      }
+
+                                      if (res.numero_grupo != null) {
+                                        return (
+                                          <span
+                                            onClick={isRotCompleta ? (e) => {
+                                              e.stopPropagation();
+                                              setEditingGroup({ resId: res.id, date, deviceId: device.id, current: res.numero_grupo });
+                                            } : undefined}
+                                            className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)} ${
+                                              isRotCompleta ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
+                                            }`}>
+                                            G{res.numero_grupo}
+                                          </span>
+                                        );
+                                      }
+
+                                      // No group assigned but rotación completa — show add button
+                                      if (isRotCompleta) {
+                                        return (
+                                          <button
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              setEditingGroup({ resId: res.id, date, deviceId: device.id, current: null });
+                                            }}
+                                            className="text-[9px] px-1 py-0.5 rounded font-mono border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-all">
+                                            +G
+                                          </button>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
                                   </div>
                                 );
                               })
