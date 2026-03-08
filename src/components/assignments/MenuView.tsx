@@ -274,31 +274,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           })}
         </div>
 
-        {/* ── Org Type Selector — only for tarde/mañana, not locked ── */}
-        {isNonApertura && !isLocked && (
-          <div className="mb-4 flex items-center gap-2 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
-            <span className="text-xs font-bold text-muted-foreground mr-1">📋 Organización:</span>
-            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
-              {ORG_TYPES.map(type => (
-                <button
-                  key={type}
-                  onClick={() => handleOrgTypeChange(type)}
-                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-all whitespace-nowrap ${
-                    orgType === type
-                      ? type === 'rotacion completa'
-                        ? 'bg-violet-100 text-violet-800 border border-violet-300 shadow-warm'
-                        : type === 'rotacion simple'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-300 shadow-warm'
-                          : 'bg-card text-foreground border border-border shadow-warm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {ORG_LABELS[type]}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Org type selector removed — now lives in DevicesTab */}
 
         {/* ── Rotacion Completa: Group Legend ── */}
         {isRotacionCompleta && distinctGroups.length > 1 && (
