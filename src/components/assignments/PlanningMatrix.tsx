@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar, Users, AlertCircle } from 'lucide-react';
-import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, getGroupColor } from '@/lib/floor-utils';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 
 interface PlanningMatrixProps {
