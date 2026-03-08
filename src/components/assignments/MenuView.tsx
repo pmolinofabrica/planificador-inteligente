@@ -12,12 +12,6 @@ interface MenuViewProps {
 }
 
 const UNLOCK_CODE = '2350';
-const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
-const ORG_LABELS: Record<string, string> = {
-  'dispositivos fijos': 'Fija',
-  'rotacion simple': 'Rot. Simple',
-  'rotacion completa': 'Rot. Completa',
-};
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
@@ -126,30 +120,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
     }
   };
 
-  // Handle org type change for current date
-  const handleOrgTypeChange = async (newType: string) => {
-    if (!currentDate || isLocked) return;
-    const [d, m] = currentDate.split('/');
-    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    const turnoId = dateTurnoMap[currentDate] || 4;
-
-    // Optimistic update
-    setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: newType }));
-
-    try {
-      const { error } = await supabase
-        .from('menu_semana')
-        .update({ tipo_organizacion: newType })
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', turnoId);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error updating org type:', err);
-      // Revert on error
-      setTipoOrganizacionMap((prev: Record<string, string>) => ({ ...prev, [currentDate]: orgType }));
-    }
-  };
+  // Org type change removed — now handled in DevicesTab
 
   // Piso accent dot color using design tokens
   const pisoAccent = (p: number) =>
@@ -274,31 +245,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           })}
         </div>
 
-        {/* ── Org Type Selector — only for tarde/mañana, not locked ── */}
-        {isNonApertura && !isLocked && (
-          <div className="mb-4 flex items-center gap-2 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
-            <span className="text-xs font-bold text-muted-foreground mr-1">📋 Organización:</span>
-            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
-              {ORG_TYPES.map(type => (
-                <button
-                  key={type}
-                  onClick={() => handleOrgTypeChange(type)}
-                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-all whitespace-nowrap ${
-                    orgType === type
-                      ? type === 'rotacion completa'
-                        ? 'bg-violet-100 text-violet-800 border border-violet-300 shadow-warm'
-                        : type === 'rotacion simple'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-300 shadow-warm'
-                          : 'bg-card text-foreground border border-border shadow-warm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {ORG_LABELS[type]}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Org type selector removed — now lives in DevicesTab */}
 
         {/* ── Rotacion Completa: Group Legend ── */}
         {isRotacionCompleta && distinctGroups.length > 1 && (
@@ -360,9 +307,14 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                                     absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
-                                    <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
-                                      {absent && '🚫 '}{res.name}
-                                    </span>
+                              <span className={`font-bold truncate ${
+                                      absent ? 'line-through text-muted-foreground'
+                                      : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
+                                      : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                      : ''
+                                    }`}>
+                                       {absent && '🚫 '}{res.name}
+                                     </span>
                                   </div>
                                 );
                               })}
@@ -379,7 +331,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
                             <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
                               absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                             }`}>
-                              <span className={`font-bold truncate ${absent ? 'line-through text-muted-foreground' : ''}`}>
+                              <span className={`font-bold truncate ${
+                                absent ? 'line-through text-muted-foreground'
+                                : agentGroups[String(res.id)] === 'A' ? 'text-indigo-900 border-b-2 border-indigo-400'
+                                : agentGroups[String(res.id)] === 'B' ? 'text-rose-900 border-b-2 border-rose-400'
+                                : ''
+                              }`}>
                                 {absent && '🚫 '}{res.name}
                               </span>
                               <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
