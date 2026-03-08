@@ -189,6 +189,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         <div className="text-xs font-medium opacity-70">
           Asignados: {currentAssignments.length} | Rango: {disp?.min}-{disp?.max}
           {!isApertura && <span className="ml-2 text-primary font-bold">({turnoFilter === 'tarde' ? 'Turno Tarde' : 'Turno Mañana'})</span>}
+          {isRotation && <span className="ml-2 text-violet-600 font-bold text-[10px]">🔄 {orgType} — Multi-dispositivo</span>}
         </div>
       </div>
 
