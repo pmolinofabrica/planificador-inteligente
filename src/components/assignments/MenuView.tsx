@@ -213,11 +213,11 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
             <span className="text-xl sm:text-2xl font-black text-foreground tracking-tight">{currentDate}</span>
             {/* Stats row */}
             <div className="flex items-center justify-center gap-2 sm:gap-3 mt-1 flex-wrap">
-              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 {convocadosCount}</span>
-              <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ {totalAssigned}</span>
-              {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ {totalVacant}</span>}
-              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 {actuallyFree.length}</span>}
-              {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 {absentAssigned.length + absentFreeNames.length}</span>}
+              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">👥 Conv. {convocadosCount}</span>
+              <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-high-text))]">✅ Asig. {totalAssigned}</span>
+              {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ Vac. {totalVacant}</span>}
+              {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 Libres {actuallyFree.length}</span>}
+              {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 Ausent. {absentAssigned.length + absentFreeNames.length}</span>}
             </div>
             {orgType !== 'dispositivos fijos' && (
               <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]">

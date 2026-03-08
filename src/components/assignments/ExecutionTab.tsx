@@ -88,7 +88,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             {/* Sub-tab toggle */}
             <div className="flex bg-muted p-0.5 rounded-lg border border-border">
               {[
-                { key: 'kanban' as const, label: 'Inasistencias' },
+                { key: 'kanban' as const, label: 'Asignados' },
                 { key: 'devices' as const, label: 'Dispositivos' },
               ].map(st => (
                 <button key={st.key} onClick={() => setSubTab(st.key)}
