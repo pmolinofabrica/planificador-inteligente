@@ -72,6 +72,8 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     else tier4.push(alt);
   });
 
+  const disp = dbDevices.find((dd: any) => dd.id === deviceId);
+
   // Check cupo
   const cupoLimit = data.calendarDb[selectedDate]?.[deviceId] || disp?.max || 0;
   const currentCount = currentAssignments.length;
