@@ -8,12 +8,43 @@ interface DevicesTabProps {
   year: string;
 }
 
+const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
+const ORG_LABELS: Record<string, string> = {
+  'dispositivos fijos': 'Fija',
+  'rotacion simple': 'Rot. Simple',
+  'rotacion completa': 'Rot. Completa',
+};
+
 export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
   const {
     dbDevices, activeDates, assignmentsDb, calendarDb, setCalendarDb,
     convocadosCountDb, dateTurnoMap, inasistenciasDb,
-    isLoading, setIsLoading, refresh
+    isLoading, setIsLoading, refresh,
+    turnoFilter, tipoOrganizacionMap, setTipoOrganizacionMap,
   } = data;
+
+  const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+
+  const handleOrgTypeChange = async (date: string, newType: string) => {
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = dateTurnoMap[date] || 4;
+    const prev = tipoOrganizacionMap[date] || 'dispositivos fijos';
+
+    setTipoOrganizacionMap((old: Record<string, string>) => ({ ...old, [date]: newType }));
+
+    try {
+      const { error } = await supabase
+        .from('menu_semana')
+        .update({ tipo_organizacion: newType })
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_turno', turnoId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error updating org type:', err);
+      setTipoOrganizacionMap((old: Record<string, string>) => ({ ...old, [date]: prev }));
+    }
+  };
 
   const handleSave = async () => {
     if (isLoading) return;
