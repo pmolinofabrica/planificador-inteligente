@@ -77,9 +77,11 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   let totalAssigned = 0;
   let totalCupos = 0;
   dbDevices.forEach((dev: any) => {
+    const cupo = calendarDb[currentDate]?.[dev.id];
+    if (cupo == null || cupo <= 0) return; // skip devices without active cupo
     const assigned = (dateAssignments[dev.id] || []).length;
     totalAssigned += assigned;
-    totalCupos += calendarDb[currentDate]?.[dev.id] || dev.max;
+    totalCupos += cupo;
   });
   const totalVacant = totalCupos - totalAssigned;
 
