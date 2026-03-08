@@ -152,7 +152,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth),
           supabase.from('menu_semana')
-            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion')
+            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion, id_convocatoria')
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth)
         ]);
