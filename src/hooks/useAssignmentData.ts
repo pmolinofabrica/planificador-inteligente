@@ -88,7 +88,7 @@ export function useAssignmentData({ selectedMonth }: UseAssignmentDataProps) {
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(2000),
           supabase.from('dias').select('id_dia, fecha').in('id_dia', diaIds),
           supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani').eq('estado', 'vigente'),
-          supabase.from('planificacion').select('id_plani, id_dia, id_turno')
+          supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo')
         ]);
 
         if (resiData && capData.length && partsRes.data && dispoCapsRes.data && diasRes.data && convsRes.data && planisRes.data) {
