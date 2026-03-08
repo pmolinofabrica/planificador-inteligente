@@ -45,9 +45,9 @@ export const getGroupColor = (num: number | null): string => {
 
 export const getGroupUnderline = (num: number | null): string => {
   if (!num) return "";
-  if (num === 1) return "border-b-2 border-cyan-500";
-  if (num === 2) return "border-b-2 border-rose-500";
-  if (num === 3) return "border-b-2 border-amber-500";
+  if (num === 1) return "border-b-2 border-[hsl(var(--floor-1-accent))]";
+  if (num === 2) return "border-b-2 border-[hsl(var(--floor-2-accent))]";
+  if (num === 3) return "border-b-2 border-[hsl(var(--floor-3-accent))]";
   return "border-b-2 border-primary";
 };
 
