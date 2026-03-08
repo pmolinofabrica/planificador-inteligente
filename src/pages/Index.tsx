@@ -141,25 +141,26 @@ const Index = () => {
           >
             <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
           </button>
-          <button
-            onClick={() => {
-              if (isNonAperturaFilter) {
-                alert("El motor de asignación solo funciona para Apertura al público.");
-                return;
-              }
-              if (confirm("¿Ejecutar motor de asignación? Esto recalculará las asignaciones.")) {
-                alert("Motor de asignación en desarrollo.");
-              }
-            }}
-            disabled={isNonAperturaFilter}
-            className={`font-bold px-3 sm:px-4 py-1.5 rounded-xl transition-colors shadow-md text-xs sm:text-sm flex items-center gap-2 ${
-              isNonAperturaFilter
-                ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-            }`}
-          >
-            🔮 Generar
-          </button>
+          {!isNonAperturaFilter && (
+            <button
+              onClick={() => {
+                if (confirm("¿Ejecutar motor de asignación? Esto recalculará las asignaciones.")) {
+                  alert("Motor de asignación en desarrollo.");
+                }
+              }}
+              className="font-bold px-3 sm:px-4 py-1.5 rounded-xl transition-colors shadow-md text-xs sm:text-sm flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              🔮 Generar
+            </button>
+          )}
+          {isNonAperturaFilter && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
+              <span className="text-xs font-bold text-foreground">
+                {Object.values(data.tipoOrganizacionMap)[0] || 'Sin datos'}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
