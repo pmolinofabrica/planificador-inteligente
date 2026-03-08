@@ -1,8 +1,9 @@
-import React from 'react';
-import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, Settings } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, Settings, Monitor } from 'lucide-react';
 import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
+import { AperturaDevicesPanel } from './AperturaDevicesPanel';
 
 interface ExecutionTabProps {
   data: any;
