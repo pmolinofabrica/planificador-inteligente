@@ -215,7 +215,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                   name: nameDict[a.id_agente] || "Desconocido",
                   score: a.orden || 1000,
                   numero_grupo: grupoMap[grupoKey] ?? null,
-                  acompana_grupo: !!(a as any).acompaña_grupo,
+                  acompana_grupo: !!a['acompaña_grupo' as keyof typeof a],
                 });
               }
             });
