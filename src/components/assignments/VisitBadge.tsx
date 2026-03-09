@@ -8,7 +8,7 @@ interface VisitBadgeProps {
   visitas: VisitaInfo[];
   compact?: boolean;
   locked?: boolean;
-  onGroupChange?: (id_asignacion: number, grupo: number | null) => void;
+  onGroupChange?: (id_asignacion: number, grupos: number[] | null) => void;
   interactive?: boolean;
 }
 
@@ -30,12 +30,16 @@ const estadoLabel: Record<string, string> = {
   en_espera: '⏳ En espera',
 };
 
+function formatGroups(grupos: number[] | null): string {
+  if (!grupos || grupos.length === 0) return '';
+  return grupos.map(g => `G${g}`).join('+');
+}
+
 /** Compact inline pill for table headers — shows ages breakdown */
 export const VisitChip: React.FC<{ visitas: VisitaInfo[] }> = ({ visitas }) => {
   if (visitas.length === 0) return null;
   const totalPersonas = visitas.reduce((s, v) => s + v.cantidad_personas, 0);
   const allConfirmed = visitas.every(v => v.estado === 'confirmada' || v.estado === 'confirmado');
-  // Collect unique age ranges
   const ages = visitas.map(v => v.rango_etario).filter(Boolean);
   const uniqueAges = [...new Set(ages)];
 
@@ -61,8 +65,10 @@ export const VisitDetailChip: React.FC<{ visitas: VisitaInfo[] }> = ({ visitas }
           <span className="text-foreground">🏫 {v.nombre_institucion || 'Sin nombre'}</span>
           <span className="text-muted-foreground">👥{v.cantidad_personas}</span>
           {v.rango_etario && <span className="text-primary/80">📅 {v.rango_etario}</span>}
-          {v.numero_grupo != null && (
-            <span className={`px-1 py-0.5 rounded text-[8px] font-mono border ${getGroupColor(v.numero_grupo)}`}>G{v.numero_grupo}</span>
+          {v.numero_grupo && v.numero_grupo.length > 0 && (
+            <span className={`px-1 py-0.5 rounded text-[8px] font-mono border ${getGroupColor(v.numero_grupo[0])}`}>
+              {formatGroups(v.numero_grupo)}
+            </span>
           )}
         </div>
       ))}
@@ -70,22 +76,45 @@ export const VisitDetailChip: React.FC<{ visitas: VisitaInfo[] }> = ({ visitas }
   );
 };
 
-/** Full block for MenuView / detail views — with optional group assignment */
+/** Full block for MenuView / detail views — with optional multi-group assignment */
 export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false, locked = false, onGroupChange, interactive = false }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
 
   if (visitas.length === 0) return null;
 
-  const handleGroupSelect = async (id_asignacion: number, grupo: number | null) => {
+  const handleGroupToggle = async (id_asignacion: number, currentGroups: number[] | null, toggleGroup: number) => {
+    const current = currentGroups || [];
+    let newGroups: number[];
+    if (current.includes(toggleGroup)) {
+      newGroups = current.filter(g => g !== toggleGroup);
+    } else {
+      newGroups = [...current, toggleGroup].sort();
+    }
+    const finalValue = newGroups.length > 0 ? newGroups : null;
+    
+    try {
+      const { error } = await supabase
+        .from('asignaciones_visita')
+        .update({ numero_grupo: finalValue })
+        .eq('id_asignacion', id_asignacion);
+      if (error) throw error;
+      onGroupChange?.(id_asignacion, finalValue);
+      toast.success(`Grupos: ${finalValue ? formatGroups(finalValue) : 'sin grupo'}`);
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
+    }
+  };
+
+  const handleClearGroups = async (id_asignacion: number) => {
     setEditingId(null);
     try {
       const { error } = await supabase
         .from('asignaciones_visita')
-        .update({ numero_grupo: grupo })
+        .update({ numero_grupo: null })
         .eq('id_asignacion', id_asignacion);
       if (error) throw error;
-      onGroupChange?.(id_asignacion, grupo);
-      toast.success(`Grupo ${grupo ? `G${grupo}` : 'removido'} asignado`);
+      onGroupChange?.(id_asignacion, null);
+      toast.success('Grupos removidos');
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
     }
@@ -99,8 +128,10 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
             <span className="font-bold truncate">{v.nombre_institucion || 'Sin nombre'}</span>
             <span className="text-[9px] flex-shrink-0">👥{v.cantidad_personas}</span>
             {v.rango_etario && <span className="text-[9px] flex-shrink-0 opacity-70">📅{v.rango_etario}</span>}
-            {v.numero_grupo != null && (
-              <span className={`text-[8px] px-1 py-0.5 rounded font-mono border ${getGroupColor(v.numero_grupo)}`}>G{v.numero_grupo}</span>
+            {v.numero_grupo && v.numero_grupo.length > 0 && (
+              <span className={`text-[8px] px-1 py-0.5 rounded font-mono border ${getGroupColor(v.numero_grupo[0])}`}>
+                {formatGroups(v.numero_grupo)}
+              </span>
             )}
           </div>
         ))}
@@ -119,6 +150,7 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
       <div className="p-2 sm:p-3 space-y-1.5">
         {visitas.map(v => {
           const isEditing = editingId === v.id_asignacion;
+          const currentGroups = v.numero_grupo || [];
           return (
             <div key={v.id_asignacion} className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border ${estadoStyle[v.estado] || estadoStyle.pendiente}`}>
               <div className="flex items-center justify-between gap-2">
@@ -126,25 +158,33 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
                   {v.nombre_institucion || 'Sin nombre'}
                 </span>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {/* Group badge / editor */}
+                  {/* Multi-group badge / editor */}
                   {isEditing ? (
                     <div className="flex gap-0.5">
-                      {[null, 1, 2, 3].map(g => (
-                        <button key={g ?? 'x'} onClick={() => handleGroupSelect(v.id_asignacion, g)}
+                      {[1, 2, 3].map(g => (
+                        <button key={g} onClick={() => handleGroupToggle(v.id_asignacion, v.numero_grupo, g)}
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all hover:scale-110 ${
-                            g === v.numero_grupo ? 'ring-2 ring-primary font-bold' : ''
-                          } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
-                          {g != null ? `G${g}` : '✕'}
+                            currentGroups.includes(g) ? 'ring-2 ring-primary font-bold' : 'opacity-60'
+                          } ${getGroupColor(g)}`}>
+                          G{g}
                         </button>
                       ))}
+                      <button onClick={() => handleClearGroups(v.id_asignacion)}
+                        className="text-[9px] px-1 py-0.5 rounded font-mono border bg-muted text-muted-foreground border-border hover:scale-110 transition-all">
+                        ✕
+                      </button>
+                      <button onClick={() => setEditingId(null)}
+                        className="text-[9px] px-1 py-0.5 rounded font-mono border bg-card text-foreground border-border hover:scale-110 transition-all">
+                        ✓
+                      </button>
                     </div>
-                  ) : v.numero_grupo != null ? (
+                  ) : currentGroups.length > 0 ? (
                     <button
                       onClick={interactive && !locked ? () => setEditingId(v.id_asignacion) : undefined}
-                      className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(v.numero_grupo)} ${
+                      className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(currentGroups[0])} ${
                         interactive && !locked ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
                       }`}>
-                      G{v.numero_grupo}
+                      {formatGroups(v.numero_grupo)}
                     </button>
                   ) : interactive && !locked ? (
                     <button

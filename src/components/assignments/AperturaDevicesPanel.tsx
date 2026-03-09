@@ -3,6 +3,7 @@ import { Monitor, ArrowRightLeft, Plus, Check, AlertCircle, Moon, Lock } from 'l
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { VisitBlock } from './VisitBadge';
 
 interface AperturaDevicesPanelProps {
   data: any;
@@ -18,6 +19,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     dbDevices, assignmentsDb, calendarDb, setCalendarDb,
     convocadosDb, allResidentsDb, isAgentAbsent,
     agentConvocatoriaMap, isLoading, setIsLoading, refresh,
+    visitasByDate,
   } = data;
 
   const [selectedOpenDevice, setSelectedOpenDevice] = useState<string | null>(null);
@@ -50,6 +52,29 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
   });
 
   const convocadoIds = new Set(convocadosDb[execDate] || []);
+  const visitas = visitasByDate?.[execDate] || [];
+
+  // Toggle acompaña_grupo for a resident in apertura (menu table)
+  const handleToggleAcompana = async (resId: number, deviceId: string, current: boolean) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    try {
+      const updateObj: any = {};
+      updateObj['acompaña_grupo'] = !current;
+      const { error } = await supabase.from('menu')
+        .update(updateObj)
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', parseInt(deviceId));
+      if (error) throw error;
+      toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
+      refresh();
+    } catch (err: any) {
+      console.error('Error toggling acompaña_grupo:', err);
+      toast.error(`Error: ${err.message || err}`);
+      setIsLoading(false);
+    }
+  };
 
   // Transfer resident from one device to another
   const handleTransfer = async (resId: number, fromDeviceId: string, toDeviceId: string) => {
@@ -73,10 +98,9 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
     setIsLoading(true);
     try {
-      // If target has no cupo or is full, increase cupo
       if (toCupo === 0 || toAssigned >= toCupo) {
         const newCupo = (toCupo || 0) + 1;
-        const turnoId = 4; // apertura
+        const turnoId = 4;
         await supabase.from('calendario_dispositivos')
           .upsert({
             fecha: fechaDB, id_turno: turnoId,
@@ -91,7 +115,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         });
       }
 
-      // Update menu: change device
       const { error } = await supabase.from('menu')
         .update({ id_dispositivo: parseInt(toDeviceId) })
         .eq('id_agente', resId)
@@ -130,7 +153,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
     setIsLoading(true);
     try {
-      // Add cupo
       const newCupo = toCupo + 1;
       const turnoId = 4;
       await supabase.from('calendario_dispositivos')
@@ -147,7 +169,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       });
 
       if (currentOccupancy) {
-        // Transfer: update existing menu row
         const { error } = await supabase.from('menu')
           .update({ id_dispositivo: parseInt(targetDeviceId) })
           .eq('id_agente', resId)
@@ -156,7 +177,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         if (error) throw error;
         pushUndo({ snapshot: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(currentOccupancy.deviceId) } });
       } else {
-        // New assignment
         let convId = agentConvocatoriaMap[execDate]?.[resId];
         if (!convId) {
           const { data: convRows } = await supabase
@@ -170,7 +190,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
           return;
         }
 
-        // Check if vacant row exists
         const { data: existing } = await supabase.from('menu').select('*')
           .eq('id_agente', resId).eq('fecha_asignacion', fechaDB);
 
@@ -214,7 +233,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       const isAbsent = isAgentAbsent(res.id, execDate);
       const occ = occupancies[res.id];
 
-      if (isAbsent) return; // Skip absent entirely
+      if (isAbsent) return;
 
       const item: ListItem = {
         id: res.id, name: res.name,
@@ -234,10 +253,17 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* ══════ VISITAS GRUPALES (context from mañana/tarde) ══════ */}
+      {visitas.length > 0 && (
+        <div>
+          <VisitBlock visitas={visitas} locked={false} interactive={false} onGroupChange={() => refresh()} />
+        </div>
+      )}
+
       {/* Open Devices */}
       <div>
         <h3 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Monitor className="w-4 h-4 text-emerald-600" /> Dispositivos Abiertos ({openDevices.length})
+          <Monitor className="w-4 h-4 text-[hsl(var(--score-high-text))]" /> Dispositivos Abiertos ({openDevices.length})
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {openDevices.map(({ device, assignments }) => (
@@ -252,13 +278,28 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
               <div className="p-2 bg-card space-y-1.5">
                 {assignments.map((res: any, i: number) => {
                   const isAbsent = isAgentAbsent(res.id, execDate);
+                  const isAcompanante = !!res.acompana_grupo;
                   return (
                     <div key={`${res.id}-${i}`} className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
-                      isAbsent ? 'border-dashed border-stone-300 bg-stone-50' : 'border-border bg-muted/30'
+                      isAbsent ? 'border-dashed border-muted-foreground/30 bg-muted/30' : 'border-border bg-muted/30'
                     }`}>
-                      <span className={`font-bold ${isAbsent ? 'line-through text-stone-400' : 'text-foreground'}`}>
-                        {isAbsent && '🚫 '}{res.name}
+                      <span className={`font-bold ${isAbsent ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                        {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{res.name}
                       </span>
+                      {/* Acompañar grupo toggle */}
+                      {!isAbsent && visitas.length > 0 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggleAcompana(res.id, device.id, isAcompanante); }}
+                          className={`text-[9px] px-1.5 py-0.5 rounded border font-bold transition-all hover:scale-105 ${
+                            isAcompanante
+                              ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                              : 'bg-muted text-muted-foreground border-border hover:border-primary'
+                          }`}
+                          title={isAcompanante ? 'Quitar acompañante de grupo' : 'Marcar como acompañante de grupo'}
+                        >
+                          🏫
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -290,8 +331,8 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                                     isClosed
                                       ? 'border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'
                                       : isFull
-                                        ? 'border-amber-300 bg-amber-50 text-amber-700 hover:border-primary'
-                                        : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-primary'
+                                        ? 'border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] hover:border-primary'
+                                        : 'border-[hsl(var(--score-high-border))] bg-[hsl(var(--score-high-bg))] text-[hsl(var(--score-high-text))] hover:border-primary'
                                   }`}
                                   title={isClosed ? 'Sin cupo — se abrirá' : isFull ? 'Lleno — se agregará cupo' : `${tAssigned}/${tCupo}`}
                                 >
@@ -340,17 +381,15 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                         {items.map(item => (
                           <button key={item.id}
                             onClick={() => handleAssignToClosedDevice(item.id, device.id)}
-                            className={`w-full text-left p-2 rounded-lg border text-xs transition-all flex justify-between items-center ${
-                              'border-border bg-card hover:border-primary/40 cursor-pointer hover:shadow-sm'
-                            }`}>
+                            className="w-full text-left p-2 rounded-lg border text-xs transition-all flex justify-between items-center border-border bg-card hover:border-primary/40 cursor-pointer hover:shadow-sm">
                             <div>
                               <span className="font-bold">{item.name}</span>
                               {item.isBusy && (
-                                <span className="ml-1.5 text-[9px] text-amber-600 font-mono">← {item.busyDevice}</span>
+                                <span className="ml-1.5 text-[9px] text-[hsl(var(--score-mid-text))] font-mono">← {item.busyDevice}</span>
                               )}
                             </div>
                             {item.isBusy ? (
-                              <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-bold">Traslado</span>
+                              <span className="text-[9px] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] px-1.5 py-0.5 rounded border border-[hsl(var(--score-mid-border))] font-bold">Traslado</span>
                             ) : (
                               <Plus className="w-3 h-3 text-primary" />
                             )}
@@ -363,9 +402,9 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
                 return (
                   <div className="p-3 bg-card max-h-[400px] overflow-y-auto">
-                    {renderTier("Convocado + Capacitado", tier1, "text-emerald-700", Check)}
-                    {renderTier("Convocado + No Capacitado", tier2, "text-amber-600", AlertCircle)}
-                    {renderTier("Descanso + Capacitado", tier3, "text-blue-600", Moon)}
+                    {renderTier("Convocado + Capacitado", tier1, "text-[hsl(var(--score-high-text))]", Check)}
+                    {renderTier("Convocado + No Capacitado", tier2, "text-[hsl(var(--score-mid-text))]", AlertCircle)}
+                    {renderTier("Descanso + Capacitado", tier3, "text-primary", Moon)}
                     {renderTier("Descanso + No Capacitado", tier4, "text-muted-foreground", AlertCircle)}
                     {tier1.length + tier2.length + tier3.length + tier4.length === 0 && (
                       <div className="text-xs text-muted-foreground italic py-4 text-center">No hay residentes disponibles</div>
