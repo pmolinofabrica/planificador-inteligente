@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
+import { VisitBlock } from './VisitBadge';
 
 interface MenuViewProps {
   data: any;
