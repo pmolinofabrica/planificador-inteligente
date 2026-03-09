@@ -30,6 +30,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 }) => {
   const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+  const isApertura = turnoFilter === 'apertura';
   const totalDeviceCount = dbDevices.length;
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
