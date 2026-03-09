@@ -504,6 +504,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     convocadosDb, isLoading, setIsLoading, activeDates,
     dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
+    visitasByDate,
     refresh, isAgentAbsent, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };
