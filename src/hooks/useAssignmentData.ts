@@ -27,6 +27,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [inasistenciasDb, setInasistenciasDb] = useState<InasistenciasMap>({});
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
+  const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
