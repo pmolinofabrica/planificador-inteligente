@@ -437,7 +437,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             const { data: visitasData } = await supabase
               .from('asignaciones_visita')
               .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado')
-              .in('estado', ['pendiente', 'confirmada', 'asignada']);
+              .in('estado', ['pendiente', 'confirmada', 'confirmado', 'asignada', 'asignado']);
 
             if (visitasData && visitasData.length > 0) {
               const diasDict3: Record<number, string> = {};
