@@ -221,7 +221,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ Vac. {totalVacant}</span>}
               {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 Libres {actuallyFree.length}</span>}
               {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 Ausent. {absentAssigned.length + absentFreeNames.length}</span>}
-              {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+              {(visitasByDate?.[currentDate] || []).length > 0 && (
                 <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--floor-2-text))]">🏫 Visitas {visitasByDate[currentDate].length}</span>
               )}
             </div>
@@ -259,9 +259,9 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
         </div>
 
         {/* ══════ VISITAS GRUPALES ══════ */}
-        {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+        {(visitasByDate?.[currentDate] || []).length > 0 && (
           <div className="mb-4 sm:mb-6">
-            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} />
+            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} interactive={isNonApertura} onGroupChange={() => refresh()} />
           </div>
         )}
 

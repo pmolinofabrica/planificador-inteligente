@@ -1,0 +1,1 @@
+ALTER TABLE public.asignaciones_visita ADD COLUMN numero_grupo integer;

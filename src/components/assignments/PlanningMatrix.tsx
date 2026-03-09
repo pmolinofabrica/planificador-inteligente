@@ -30,12 +30,12 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 }) => {
   const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+  const isApertura = turnoFilter === 'apertura';
   const totalDeviceCount = dbDevices.length;
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
 
-  const isApertura = turnoFilter === 'apertura';
 
   const handleRunEngine = async () => {
     if (isRunningEngine) return;
@@ -95,6 +95,41 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     } catch (err: any) {
       console.error('Error cambiando grupo:', err);
       alert(`Error: ${err.message || err}`);
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleAcompana = async (resId: number, date: string, deviceId: string, current: boolean) => {
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const isAperturaMode = turnoFilter === 'apertura';
+    const table = isAperturaMode ? 'menu' : 'menu_semana';
+    setIsLoading(true);
+    try {
+      const updateObj: any = {};
+      updateObj['acompaña_grupo'] = !current;
+      let query: any;
+      if (isAperturaMode) {
+        query = supabase.from('menu')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId));
+      } else {
+        const turnoId = dateTurnoMap[date] || 4;
+        query = supabase.from('menu_semana')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId))
+          .eq('id_turno', turnoId);
+      }
+      const { error } = await query;
+      if (error) throw error;
+      refresh();
+    } catch (err: any) {
+      console.error('Error toggling acompaña_grupo:', err);
+      toast.error(`Error: ${err.message || err}`);
       setIsLoading(false);
     }
   };
@@ -284,56 +319,76 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                         </span>
                                       )}
                                     </span>
-                                    {(() => {
-                                      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
-                                      const isRotCompleta = orgType === 'rotacion completa';
-                                      const isEditing = editingGroup && editingGroup.resId === res.id && editingGroup.date === date && editingGroup.deviceId === device.id;
+                                    <div className="flex items-center gap-0.5">
+                                      {/* Acompaña grupo toggle */}
+                                      {!absent && (visitasByDate?.[date] || []).length > 0 && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleAcompana(res.id, date, device.id, !!res.acompana_grupo);
+                                          }}
+                                          className={`text-[8px] px-1 py-0.5 rounded border transition-all hover:scale-110 ${
+                                            res.acompana_grupo
+                                              ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))] font-bold'
+                                              : 'border-dashed border-muted-foreground/30 text-muted-foreground/50 hover:border-primary hover:text-primary'
+                                          }`}
+                                          title={res.acompana_grupo ? 'Acompaña grupo ✓' : 'Asignar como acompañante de grupo'}
+                                        >
+                                          🏫
+                                        </button>
+                                      )}
+                                      {/* Group badge */}
+                                      {(() => {
+                                        const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+                                        const isRotCompleta = orgType === 'rotacion completa';
+                                        const isEditing = editingGroup && editingGroup.resId === res.id && editingGroup.date === date && editingGroup.deviceId === device.id;
 
-                                      if (isEditing) {
-                                        return (
-                                          <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
-                                            {[null, 1, 2, 3].map(g => (
-                                              <button key={g ?? 'x'} onClick={() => handleGroupChange(res.id, date, device.id, g)}
-                                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all hover:scale-110 ${
-                                                  g === res.numero_grupo ? 'ring-2 ring-primary font-bold' : ''
-                                                } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
-                                                {g != null ? `G${g}` : '✕'}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        );
-                                      }
+                                        if (isEditing) {
+                                          return (
+                                            <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                                              {[null, 1, 2, 3].map(g => (
+                                                <button key={g ?? 'x'} onClick={() => handleGroupChange(res.id, date, device.id, g)}
+                                                  className={`text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all hover:scale-110 ${
+                                                    g === res.numero_grupo ? 'ring-2 ring-primary font-bold' : ''
+                                                  } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
+                                                  {g != null ? `G${g}` : '✕'}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          );
+                                        }
 
-                                      if (res.numero_grupo != null) {
-                                        return (
-                                          <span
-                                            onClick={isRotCompleta ? (e) => {
-                                              e.stopPropagation();
-                                              setEditingGroup({ resId: res.id, date, deviceId: device.id, current: res.numero_grupo });
-                                            } : undefined}
-                                            className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)} ${
-                                              isRotCompleta ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
-                                            }`}>
-                                            G{res.numero_grupo}
-                                          </span>
-                                        );
-                                      }
+                                        if (res.numero_grupo != null) {
+                                          return (
+                                            <span
+                                              onClick={isNonApertura ? (e) => {
+                                                e.stopPropagation();
+                                                setEditingGroup({ resId: res.id, date, deviceId: device.id, current: res.numero_grupo });
+                                              } : undefined}
+                                              className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)} ${
+                                                isNonApertura ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
+                                              }`}>
+                                              G{res.numero_grupo}
+                                            </span>
+                                          );
+                                        }
 
-                                      // No group assigned but rotación completa — show add button
-                                      if (isRotCompleta) {
-                                        return (
-                                          <button
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              setEditingGroup({ resId: res.id, date, deviceId: device.id, current: null });
-                                            }}
-                                            className="text-[9px] px-1 py-0.5 rounded font-mono border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-all">
-                                            +G
-                                          </button>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
+                                        // No group assigned — show add button for all org types in non-apertura
+                                        if (isNonApertura) {
+                                          return (
+                                            <button
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                setEditingGroup({ resId: res.id, date, deviceId: device.id, current: null });
+                                              }}
+                                              className="text-[9px] px-1 py-0.5 rounded font-mono border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-all">
+                                              +G
+                                            </button>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                    </div>
                                   </div>
                                 );
                               })

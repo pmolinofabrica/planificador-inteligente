@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar, Check, AlertCircle, MapPin } from 'lucide-react';
-import { getFloorColor } from '@/lib/floor-utils';
+import { VisitBlock } from './VisitBadge';
 
 interface DateSidebarProps {
   selectedDate: string;
@@ -12,7 +12,7 @@ interface DateSidebarProps {
 export const DateSidebar: React.FC<DateSidebarProps> = ({
   selectedDate, setSelectedDateFilter, data, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, turnoFilter } = data;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
 
   // Build occupancy map: agentId -> deviceName
@@ -46,6 +46,8 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
   const vacant = convocados.filter(c => !c.location && !c.absent);
   const absent = convocados.filter(c => c.absent);
 
+  const visitas = visitasByDate?.[selectedDate] || [];
+
   return (
     <div className="w-96 bg-card border-l border-border shadow-2xl flex flex-col absolute right-0 h-full z-50 overflow-hidden">
       <div className="p-6 border-b bg-primary/10">
@@ -63,6 +65,13 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
         </p>
       </div>
       <div className="p-5 flex-1 overflow-y-auto bg-card space-y-5">
+        {/* Visitas Grupales */}
+        {visitas.length > 0 && (
+          <div>
+            <VisitBlock visitas={visitas} interactive onGroupChange={() => data.refresh()} />
+          </div>
+        )}
+
         {/* Assigned */}
         <div>
           <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1">

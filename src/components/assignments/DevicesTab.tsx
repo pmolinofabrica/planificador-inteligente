@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings } from 'lucide-react';
-import { VisitChip } from './VisitBadge';
+import { VisitChip, VisitDetailChip } from './VisitBadge';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -151,7 +151,9 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                       <div className="text-[10px] font-bold uppercase text-destructive mt-0.5">🚫 Inasistencias: {(inasistenciasDb[date] || []).length}</div>
                     )}
                     {(visitasByDate?.[date] || []).length > 0 && (
-                      <div className="mt-0.5"><VisitChip visitas={visitasByDate[date]} /></div>
+                      <div className="mt-0.5">
+                        <VisitDetailChip visitas={visitasByDate[date]} />
+                      </div>
                     )}
                 </div>
                 <div className="flex flex-col gap-1 items-end">
