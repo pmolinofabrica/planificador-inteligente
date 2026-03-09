@@ -430,55 +430,57 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 10. VISITAS GRUPALES (solo tarde/mañana)
+        // 10. VISITAS GRUPALES (all turnos — informational for apertura)
         // ═══════════════════════════════════════════════════════════
-        if (turnoFilter !== 'apertura') {
-          try {
-            const { data: visitasData } = await supabase
-              .from('asignaciones_visita')
-              .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado')
-              .not('estado', 'eq', 'cancelada');
+        try {
+          const { data: visitasData } = await supabase
+            .from('asignaciones_visita')
+            .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado, numero_grupo')
+            .not('estado', 'eq', 'cancelada');
 
-            console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas, with id_plani: ${visitasData?.filter(v => v.id_plani).length || 0}`);
-            if (visitasData && visitasData.length > 0) {
-              const diasDict3: Record<number, string> = {};
-              diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
+          console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas`);
+          if (visitasData && visitasData.length > 0) {
+            const diasDict3: Record<number, string> = {};
+            diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
 
-              const planiDateMap: Record<number, string> = {};
-              planisData.forEach(p => {
-                const tipo = turnoTypeMap[p.id_turno] || '';
-                if (!matchesTurnoFilter(tipo)) return;
+            // For apertura: map from ALL non-apertura planificacion to dates
+            // For tarde/manana: map only matching turno
+            const planiDateMap: Record<number, string> = {};
+            planisData.forEach(p => {
+              const tipo = turnoTypeMap[p.id_turno] || '';
+              const isVisitTurno = tipo.toLowerCase().includes('turno tarde') || tipo.toLowerCase().includes('turno mañana') || tipo.toLowerCase().includes('turno manana');
+              // For apertura, show visits from mañana/tarde; for others, match turno
+              if (turnoFilter === 'apertura' ? isVisitTurno : matchesTurnoFilter(tipo)) {
                 const fecha = diasDict3[p.id_dia];
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
                 if (fy !== yFilt || fm !== mmFilt) return;
                 planiDateMap[p.id_plani] = `${fd}/${fm}`;
-              });
+              }
+            });
 
-              const vMap: VisitasByDateMap = {};
-              visitasData.forEach(v => {
-                if (!v.id_plani) return;
-                const uiDate = planiDateMap[v.id_plani];
-                if (!uiDate) return;
-                if (!vMap[uiDate]) vMap[uiDate] = [];
-                vMap[uiDate].push({
-                  id_asignacion: v.id_asignacion,
-                  nombre_institucion: v.nombre_institucion,
-                  cantidad_personas: v.cantidad_personas_original,
-                  rango_etario: v.rango_etario,
-                  estado: v.estado,
-                });
+            const vMap: VisitasByDateMap = {};
+            visitasData.forEach(v => {
+              if (!v.id_plani) return;
+              const uiDate = planiDateMap[v.id_plani];
+              if (!uiDate) return;
+              if (!vMap[uiDate]) vMap[uiDate] = [];
+              vMap[uiDate].push({
+                id_asignacion: v.id_asignacion,
+                nombre_institucion: v.nombre_institucion,
+                cantidad_personas: v.cantidad_personas_original,
+                rango_etario: v.rango_etario,
+                estado: v.estado,
+                numero_grupo: v.numero_grupo ?? null,
               });
-              console.log(`[Visitas] Mapped to dates:`, Object.keys(vMap).map(d => `${d}(${vMap[d].length})`).join(', ') || 'none');
-              setVisitasByDate(vMap);
-            } else {
-              setVisitasByDate({});
-            }
-          } catch (e) {
-            console.error('Error visitas:', e);
+            });
+            console.log(`[Visitas] Mapped to dates:`, Object.keys(vMap).map(d => `${d}(${vMap[d].length})`).join(', ') || 'none');
+            setVisitasByDate(vMap);
+          } else {
             setVisitasByDate({});
           }
-        } else {
+        } catch (e) {
+          console.error('Error visitas:', e);
           setVisitasByDate({});
         }
 
