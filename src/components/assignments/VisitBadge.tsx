@@ -183,13 +183,15 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
                       </button>
                     </div>
                   ) : currentGroups.length > 0 ? (
-                    <button
+                    <span
                       onClick={interactive && !locked ? () => setEditingId(v.id_asignacion) : undefined}
-                      className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(currentGroups[0])} ${
-                        interactive && !locked ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
-                      }`}>
-                      {formatGroups(v.numero_grupo)}
-                    </button>
+                      className={`inline-flex gap-0.5 ${interactive && !locked ? 'cursor-pointer' : ''}`}>
+                      {currentGroups.map(g => (
+                        <span key={g} className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(g)} ${
+                          interactive && !locked ? 'hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
+                        }`}>G{g}</span>
+                      ))}
+                    </span>
                   ) : interactive && !locked ? (
                     <button
                       onClick={() => setEditingId(v.id_asignacion)}
