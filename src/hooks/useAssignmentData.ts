@@ -438,20 +438,17 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           const { data: visitasData } = await supabase
             .from('asignaciones_visita')
             .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado, numero_grupo')
-            .not('estado', 'eq', 'cancelada');
+            .in('estado', ['asignado', 'asignada', 'confirmado', 'confirmada']);
 
-          console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas`);
+          console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas (asignado/confirmado only)`);
           if (visitasData && visitasData.length > 0) {
             const diasDict3: Record<number, string> = {};
             diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
 
-            // For apertura: map from ALL non-apertura planificacion to dates
-            // For tarde/manana: map only matching turno
             const planiDateMap: Record<number, string> = {};
             planisData.forEach(p => {
               const tipo = turnoTypeMap[p.id_turno] || '';
               const isVisitTurno = tipo.toLowerCase().includes('turno tarde') || tipo.toLowerCase().includes('turno mañana') || tipo.toLowerCase().includes('turno manana');
-              // For apertura, show visits from mañana/tarde; for others, match turno
               if (turnoFilter === 'apertura' ? isVisitTurno : matchesTurnoFilter(tipo)) {
                 const fecha = diasDict3[p.id_dia];
                 if (!fecha) return;
@@ -473,7 +470,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 cantidad_personas: v.cantidad_personas_original,
                 rango_etario: v.rango_etario,
                 estado: v.estado,
-                numero_grupo: v.numero_grupo ?? null,
+                numero_grupo: (v.numero_grupo as number[] | null) ?? null,
               });
             });
             console.log(`[Visitas] Mapped to dates:`, Object.keys(vMap).map(d => `${d}(${vMap[d].length})`).join(', ') || 'none');

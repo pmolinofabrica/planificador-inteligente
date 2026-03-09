@@ -66,7 +66,7 @@ export interface VisitaInfo {
   cantidad_personas: number;
   rango_etario: string | null;
   estado: string;
-  numero_grupo: number | null;
+  numero_grupo: number[] | null;
 }
 
 export type AssignmentsMatrix = Record<string, Record<string, AssignmentEntry[]>>;
