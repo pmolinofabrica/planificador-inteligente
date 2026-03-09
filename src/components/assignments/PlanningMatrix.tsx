@@ -28,7 +28,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
   const totalDeviceCount = dbDevices.length;
 
