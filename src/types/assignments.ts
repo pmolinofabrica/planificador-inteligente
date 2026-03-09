@@ -19,6 +19,7 @@ export interface AssignmentEntry {
   name: string;
   score: number;
   numero_grupo?: number | null;
+  acompana_grupo?: boolean;
 }
 
 export interface SelectedResident {
@@ -65,6 +66,7 @@ export interface VisitaInfo {
   cantidad_personas: number;
   rango_etario: string | null;
   estado: string;
+  numero_grupo: number | null;
 }
 
 export type AssignmentsMatrix = Record<string, Record<string, AssignmentEntry[]>>;
