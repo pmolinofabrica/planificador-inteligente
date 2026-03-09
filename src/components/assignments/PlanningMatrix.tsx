@@ -36,7 +36,6 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
 
-  const isApertura = turnoFilter === 'apertura';
 
   const handleRunEngine = async () => {
     if (isRunningEngine) return;
