@@ -58,12 +58,13 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     const capInfo = capDate ? ` (Cap: ${capDate})` : '';
     let reason = '';
     if (isAbsent) reason = '🚫 Inasistente';
+    else if (isBusy && isConvocado && isApertura) reason = `🔄 ${currentLocation}`;
     else if (isBusy) reason = isRotation ? `🔄 ${currentLocation}` : `🔒 ${currentLocation}`;
     else reason = isConvocado ? 'Libre' : 'Descanso';
     reason += capInfo;
 
-    // In rotation modes, busy residents CAN be assigned to multiple devices
-    const effectivelyBusy = isAbsent || (isBusy && !isRotation);
+    // In rotation modes OR Apertura convocados, busy residents CAN be transferred
+    const effectivelyBusy = isAbsent || (isBusy && !isRotation && !(isConvocado && isApertura));
     const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: effectivelyBusy, isAbsent };
 
     if (isConvocado && isCapacitado) tier1.push(alt);
@@ -139,17 +140,20 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         if (fetchErr) throw fetchErr;
 
         if (existing && existing.length > 0) {
+          // Update existing menu row(s): move to new device
           const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
+          const firstRow = existing[0];
           if (vacantRow) {
             const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
               .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
             if (error) throw error;
           } else {
+            // Transfer from current device to new device
             const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB);
+              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', firstRow.id_dispositivo);
             if (error) throw error;
           }
-          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: existing[0].id_dispositivo } });
+          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo } });
         } else {
           const { error } = await supabase.from('menu').insert([{
             id_agente: agentId, id_dispositivo: parseInt(deviceId),
