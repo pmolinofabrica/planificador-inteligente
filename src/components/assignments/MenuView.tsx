@@ -255,7 +255,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           })}
         </div>
 
-        {/* Org type selector removed — now lives in DevicesTab */}
+        {/* ══════ VISITAS GRUPALES ══════ */}
+        {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+          <div className="mb-4 sm:mb-6">
+            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} />
+          </div>
+        )}
 
         {/* ── Rotacion Completa: Group Legend ── */}
         {isRotacionCompleta && distinctGroups.length > 1 && (
