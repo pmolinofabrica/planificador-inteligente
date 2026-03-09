@@ -107,7 +107,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     setIsLoading(true);
     try {
       const updateObj: any = {};
-      updateObj['acompaña_grupo'] = !current;
+      updateObj['acompa\u00f1a_grupo'] = !current;
       let query: any;
       if (isAperturaMode) {
         query = supabase.from('menu')
