@@ -19,8 +19,10 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     dbDevices, assignmentsDb, calendarDb, setCalendarDb,
     convocadosDb, allResidentsDb, isAgentAbsent,
     agentConvocatoriaMap, isLoading, setIsLoading, refresh,
-    visitasByDate,
+    visitasByDate, turnoFilter, dateTurnoMap,
   } = data;
+
+  const isAperturaMode = turnoFilter === 'apertura';
 
   const [selectedOpenDevice, setSelectedOpenDevice] = useState<string | null>(null);
   const [selectedClosedDevice, setSelectedClosedDevice] = useState<string | null>(null);
