@@ -432,7 +432,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 10. VISITAS GRUPALES (solo tarde/mañana)
         // ═══════════════════════════════════════════════════════════
-        if (!isApertura) {
+        if (turnoFilter !== 'apertura') {
           try {
             const { data: visitasData } = await supabase
               .from('asignaciones_visita')
