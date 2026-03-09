@@ -22,6 +22,7 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
     convocadosCountDb, dateTurnoMap, inasistenciasDb,
     isLoading, setIsLoading, refresh,
     turnoFilter, tipoOrganizacionMap, setTipoOrganizacionMap,
+    visitasByDate,
   } = data;
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
