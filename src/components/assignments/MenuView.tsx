@@ -278,6 +278,40 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           </div>
         )}
 
+        {/* ══════ ACOMPAÑANTES DE GRUPO ══════ */}
+        {(() => {
+          const acompanantes: { id: number; name: string; deviceName: string }[] = [];
+          Object.entries(dateAssignments).forEach(([devId, arr]: [string, any]) => {
+            const devObj = dbDevices.find((dd: any) => dd.id === devId);
+            arr.forEach((r: any) => {
+              if (r.acompana_grupo && !isAgentAbsent(r.id, currentDate)) {
+                acompanantes.push({ id: r.id, name: r.name, deviceName: devObj?.name || devId });
+              }
+            });
+          });
+          if (acompanantes.length === 0) return null;
+          return (
+            <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))] overflow-hidden">
+              <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--floor-2-border))]/50 flex items-center gap-2">
+                <span className="text-sm sm:text-base">🏫</span>
+                <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--floor-2-text))]">
+                  Acompañantes de Grupo ({acompanantes.length})
+                </span>
+              </div>
+              <div className="p-2 sm:p-3 space-y-1">
+                {acompanantes.map((a, i) => (
+                  <div key={`acomp-${a.id}-${i}`} className="flex items-center justify-between px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[hsl(var(--floor-2-border))]/30 bg-card text-[11px] sm:text-xs">
+                    <span className="font-bold text-foreground truncate">🏫 {a.name}</span>
+                    <span className="text-[9px] sm:text-[10px] font-medium text-[hsl(var(--floor-2-text))] flex-shrink-0 ml-2">
+                      📍 {a.deviceName}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ══════ ASSIGNED DEVICES BY PISO ══════ */}
         {Object.entries(pisoGroups).sort(([a], [b]) => Number(a) - Number(b)).map(([piso, devices]) => (
           <div key={piso} className={`mb-4 sm:mb-6 rounded-xl border-2 overflow-hidden ${pisoBorder(Number(piso))}`}>
