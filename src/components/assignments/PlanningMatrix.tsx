@@ -99,6 +99,34 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     }
   };
 
+  const handleToggleAcompana = async (resId: number, date: string, deviceId: string, current: boolean) => {
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const isAperturaMode = turnoFilter === 'apertura';
+    const table = isAperturaMode ? 'menu' : 'menu_semana';
+    setIsLoading(true);
+    try {
+      const updateObj: any = {};
+      updateObj['acompaña_grupo'] = !current;
+      let query = supabase.from(table)
+        .update(updateObj)
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', parseInt(deviceId));
+      if (!isAperturaMode) {
+        const turnoId = dateTurnoMap[date] || 4;
+        query = query.eq('id_turno', turnoId);
+      }
+      const { error } = await query;
+      if (error) throw error;
+      refresh();
+    } catch (err: any) {
+      console.error('Error toggling acompaña_grupo:', err);
+      toast.error(`Error: ${err.message || err}`);
+      setIsLoading(false);
+    }
+  };
+
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
       <div className="p-6">
