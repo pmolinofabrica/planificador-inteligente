@@ -30,22 +30,58 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
 
   const handleAssign = async (deviceId: string) => {
     if (isLoading) return;
-    setIsLoading(true);
-    const { data: existing } = await supabase.from('menu').select('*')
-      .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
 
-    const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
-    if (vacanteRow) {
-      await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-        .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
-    } else if (existing && existing.length > 0) {
-      await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-        .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
-    } else {
-      await supabase.from('menu').insert([{ id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
+    const currentCount = assignmentsOfDate[deviceId]?.length || 0;
+    const cupoLimit = cuposDelDia[deviceId] || dbDevices.find((d: any) => d.id === deviceId)?.max || 0;
+
+    if (currentCount >= cupoLimit) {
+      const confirmed = confirm(
+        `⚠️ El dispositivo ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
+      );
+      if (!confirmed) return;
+      const newCalendar = { ...data.calendarDb };
+      if (!newCalendar[selectedVacant.date]) newCalendar[selectedVacant.date] = {};
+      newCalendar[selectedVacant.date][deviceId] = cupoLimit + 1;
+      data.setCalendarDb(newCalendar);
     }
-    setSelectedVacant(null);
-    refresh();
+
+    const { agentConvocatoriaMap } = data;
+    const convId = agentConvocatoriaMap[selectedVacant.date]?.[selectedVacant.id];
+
+    if (!convId) {
+      alert(`⚠️ No se encontró una convocatoria vigente para este residente en la fecha ${selectedVacant.date}.\n\nDebe existir una convocatoria para poder asignar.`);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
+        .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
+      if (fetchErr) throw fetchErr;
+
+      const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
+      if (vacanteRow) {
+        const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
+          .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
+        if (error) throw error;
+      } else if (existing && existing.length > 0) {
+        const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
+          .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('menu').insert([{
+          id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
+          fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId
+        }]);
+        if (error) throw error;
+      }
+      setSelectedVacant(null);
+      refresh();
+    } catch (err: any) {
+      console.error('Error asignando:', err);
+      alert(`Error al asignar: ${err.message || err}`);
+      setIsLoading(false);
+    }
   };
 
   return (

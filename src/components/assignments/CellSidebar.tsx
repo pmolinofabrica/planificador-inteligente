@@ -95,24 +95,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
 
     // Resolve convocatoria ID — required by both menu and menu_semana
     let convId = agentConvocatoriaMap[selectedDate]?.[agentId];
-    if (!convId) {
-      // Try to find any valid convocatoria for this agent+date from DB
-      try {
-        const { data: convRows } = await supabase
-          .from('convocatoria')
-          .select('id_convocatoria')
-          .eq('id_agente', agentId)
-          .eq('fecha_convocatoria', fechaDB)
-          .eq('estado', 'vigente')
-          .limit(1);
-        if (convRows && convRows.length > 0) {
-          convId = convRows[0].id_convocatoria;
-        }
-      } catch (e) {
-        console.warn('Could not lookup convocatoria:', e);
-      }
-    }
-
+    
     if (!convId) {
       alert(`⚠️ No se encontró una convocatoria vigente para este residente en la fecha ${selectedDate}.\n\nDebe existir una convocatoria para poder asignar.`);
       return;

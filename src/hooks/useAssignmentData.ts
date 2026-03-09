@@ -107,9 +107,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('dias').select('id_dia, fecha').limit(5000),
           supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani')
             .eq('estado', 'vigente')
-            .gte('fecha_convocatoria', yearStart)
-            .lte('fecha_convocatoria', yearEnd)
-            .limit(10000),
+            .limit(10000), // Note: we filter by planificacion links later
         ]);
 
         const capData = capsRep.data || [];
@@ -186,6 +184,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           const convocadosCount: Record<string, number> = {};
           const convocadosList: ConvocadosMap = {};
           const nameDict: Record<number, string> = {};
+          const dateAgentConv: Record<string, Record<number, number>> = {};
+          
           resiData.forEach(r => nameDict[r.id_agente] = `${r.apellido} ${r.nombre}`);
 
           // For apertura: use `menu` table
@@ -203,6 +203,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (!convocadosList[uiDate].includes(a.id_agente)) {
                 convocadosList[uiDate].push(a.id_agente);
                 convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+              }
+
+              // Populate conv map from menu row
+              if (a.id_convocatoria) {
+                if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
+                dateAgentConv[uiDate][a.id_agente] = a.id_convocatoria;
               }
 
               if (a.id_dispositivo && a.id_dispositivo !== 999) {
@@ -235,6 +241,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
               }
 
+              // Populate conv map from menu_semana row
+              if (ms.id_convocatoria) {
+                if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
+                dateAgentConv[uiDate][ms.id_agente] = ms.id_convocatoria;
+              }
+
               if (ms.id_dispositivo && ms.id_dispositivo !== 999) {
                 const dId = String(ms.id_dispositivo);
                 if (!matrix[uiDate]) matrix[uiDate] = {};
@@ -249,72 +261,51 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
             });
           }
-          // Hoist menuSemanaConvMap for use in step 6
-          const _menuSemanaConvMap = !isApertura ? (() => {
-            const m: Record<string, Record<number, number>> = {};
-            menuSemanaData.forEach(ms => {
-              if (!ms.fecha_asignacion || !ms.id_convocatoria) return;
-              const tipo = turnoTypeMap[ms.id_turno] || '';
-              if (!matchesTurnoFilter(tipo)) return;
-              const [y, mm, d] = ms.fecha_asignacion.split("-");
-              if (y !== yFilt || mm !== mmFilt) return;
-              const uiDate = `${d}/${mm}`;
-              if (!m[uiDate]) m[uiDate] = {};
-              m[uiDate][ms.id_agente] = ms.id_convocatoria;
-            });
-            return m;
-          })() : {};
+            // ═══════════════════════════════════════════════════════════
+            // 6. CONVOCATORIA COMPLEMENTARIA
+            // ═══════════════════════════════════════════════════════════
+            try {
+              const diasDict: Record<number, string> = {};
+              diasData.forEach(dd => { if (dd.fecha) diasDict[dd.id_dia] = dd.fecha.substring(0, 10); });
 
-          // ═══════════════════════════════════════════════════════════
-          // 6. CONVOCATORIA COMPLEMENTARIA
-          // ═══════════════════════════════════════════════════════════
-          try {
-            const diasDict: Record<number, string> = {};
-            diasData.forEach(dd => { if (dd.fecha) diasDict[dd.id_dia] = dd.fecha.substring(0, 10); });
+              const planiToUiDate: Record<number, string> = {};
+              const filteredPlaniIds: number[] = [];
 
-            const planiToUiDate: Record<number, string> = {};
-            const filteredPlaniIds: number[] = [];
-
-            planisData.forEach(p => {
-              const tipo = turnoTypeMap[p.id_turno] || '';
-              if (!matchesTurnoFilter(tipo)) return;
-              const fecha = diasDict[p.id_dia];
-              if (!fecha) return;
-              const [fy, fm, fd] = fecha.split('-');
-              if (fy !== yFilt || fm !== mmFilt) return;
-              const uiDate = `${fd}/${fm}`;
-              planiToUiDate[p.id_plani] = uiDate;
-              filteredPlaniIds.push(p.id_plani);
-            });
-
-            // Start with menu_semana convocatoria IDs if available
-            const dateAgentConv: Record<string, Record<number, number>> = {};
-            // Deep-copy _menuSemanaConvMap entries
-            Object.entries(_menuSemanaConvMap).forEach(([ud, agents]) => {
-              dateAgentConv[ud] = { ...agents };
-            });
-
-            if (filteredPlaniIds.length > 0) {
-              const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
-              matchingConvs.forEach(c => {
-                const uiDate = planiToUiDate[c.id_plani];
-                if (!uiDate) return;
-                if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
-                // Don't overwrite if already set from menu_semana
-                if (!dateAgentConv[uiDate][c.id_agente]) {
-                  dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
-                }
-                if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-                if (!convocadosList[uiDate].includes(c.id_agente)) {
-                  convocadosList[uiDate].push(c.id_agente);
-                  convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-                }
+              planisData.forEach(p => {
+                const tipo = turnoTypeMap[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
+                const fecha = diasDict[p.id_dia];
+                if (!fecha) return;
+                const [fy, fm, fd] = fecha.split('-');
+                if (fy !== yFilt || fm !== mmFilt) return;
+                const uiDate = `${fd}/${fm}`;
+                planiToUiDate[p.id_plani] = uiDate;
+                filteredPlaniIds.push(p.id_plani);
               });
+
+              if (filteredPlaniIds.length > 0) {
+                const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
+                matchingConvs.forEach(c => {
+                  const uiDate = planiToUiDate[c.id_plani];
+                  if (!uiDate) return;
+
+                  if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
+                  // Don't overwrite if already set from menu rows
+                  if (!dateAgentConv[uiDate][c.id_agente]) {
+                    dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                  }
+
+                  if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+                  if (!convocadosList[uiDate].includes(c.id_agente)) {
+                    convocadosList[uiDate].push(c.id_agente);
+                    convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+                  }
+                });
+              }
+              setAgentConvocatoriaMap(dateAgentConv);
+            } catch (e) {
+              console.error("Error cargando convocatoria:", e);
             }
-            setAgentConvocatoriaMap(dateAgentConv);
-          } catch (e) {
-            console.error("Error cargando convocatoria:", e);
-          }
 
           setConvocadosCountDb(convocadosCount);
           setConvocadosDb(convocadosList);
@@ -337,7 +328,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 const [fy, fm, fd] = row.fecha.substring(0, 10).split('-');
                 const uiDate = `${fd}/${fm}`;
                 if (!newCalendarDb[uiDate]) newCalendarDb[uiDate] = {};
-                newCalendarDb[uiDate][String(row.id_dispositivo)] = row.cupo_objetivo || 0;
+                // Cumulative sum if multiple aperturas exist for the same device
+                const currentVal = newCalendarDb[uiDate][String(row.id_dispositivo)] || 0;
+                newCalendarDb[uiDate][String(row.id_dispositivo)] = currentVal + (row.cupo_objetivo || 0);
               });
             }
           } catch (e) {
