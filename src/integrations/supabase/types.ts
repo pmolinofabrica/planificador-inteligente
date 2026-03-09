@@ -343,6 +343,7 @@ export type Database = {
           nombre_empresa: string | null
           nombre_institucion: string | null
           nombre_referente: string | null
+          numero_grupo: number | null
           observaciones: string | null
           rango_etario: string | null
           telefono_institucion: string | null
@@ -365,6 +366,7 @@ export type Database = {
           nombre_empresa?: string | null
           nombre_institucion?: string | null
           nombre_referente?: string | null
+          numero_grupo?: number | null
           observaciones?: string | null
           rango_etario?: string | null
           telefono_institucion?: string | null
@@ -387,6 +389,7 @@ export type Database = {
           nombre_empresa?: string | null
           nombre_institucion?: string | null
           nombre_referente?: string | null
+          numero_grupo?: number | null
           observaciones?: string | null
           rango_etario?: string | null
           telefono_institucion?: string | null
