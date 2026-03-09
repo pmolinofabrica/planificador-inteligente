@@ -150,11 +150,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         const [menuRes, menuSemanaRes] = await Promise.all([
           supabase.from('menu')
-            .select('id_agente, id_dispositivo, fecha_asignacion, estado_ejecucion, orden')
+            .select('id_agente, id_dispositivo, fecha_asignacion, estado_ejecucion, orden, acompaña_grupo')
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth),
           supabase.from('menu_semana')
-            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion, id_convocatoria')
+            .select('id_agente, id_dispositivo, fecha_asignacion, id_turno, numero_grupo, orden, estado_ejecucion, tipo_organizacion, id_convocatoria, acompaña_grupo')
             .gte('fecha_asignacion', startOfMonth)
             .lte('fecha_asignacion', endOfMonth)
         ]);
