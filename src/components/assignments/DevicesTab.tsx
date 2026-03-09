@@ -147,9 +147,12 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">Convocados: <span className="text-foreground">{count}</span></div>
                   <div className="text-[10px] font-bold uppercase text-primary mt-0.5 tracking-wider">Lugares: {totalPlaces}</div>
-                  {(inasistenciasDb[date] || []).length > 0 && (
-                    <div className="text-[10px] font-bold uppercase text-destructive mt-0.5">🚫 Inasistencias: {(inasistenciasDb[date] || []).length}</div>
-                  )}
+                    {(inasistenciasDb[date] || []).length > 0 && (
+                      <div className="text-[10px] font-bold uppercase text-destructive mt-0.5">🚫 Inasistencias: {(inasistenciasDb[date] || []).length}</div>
+                    )}
+                    {(visitasByDate?.[date] || []).length > 0 && (
+                      <div className="mt-0.5"><VisitChip visitas={visitasByDate[date]} /></div>
+                    )}
                 </div>
                 <div className="flex flex-col gap-1 items-end">
                   {libres > 0 && <span className="score-low border px-1.5 py-0.5 rounded text-[9px] font-bold">{libres} LIBR.</span>}
