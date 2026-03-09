@@ -244,6 +244,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                   name: nameDict[ms.id_agente] || "Desconocido",
                   score: ms.orden || 1000,
                   numero_grupo: ms.numero_grupo ?? null,
+                  acompana_grupo: !!(ms as any).acompaña_grupo,
                 });
               }
             });
