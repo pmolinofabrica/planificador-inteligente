@@ -54,7 +54,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
       try {
         const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
         if (diaData) {
-          const turnoId = data.dateTurnoMap[selectedVacant.date] || (data.turnoFilter === 'apertura' ? 4 : 4);
+        const turnoId = data.dateTurnoMap[selectedVacant.date] || (data.turnoFilter === 'apertura' ? 45 : 4);
           const { data: convRows } = await supabase
             .from('convocatoria')
             .select(`

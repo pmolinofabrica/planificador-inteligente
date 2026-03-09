@@ -96,6 +96,8 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
 
     // Resolve convocatoria ID — required by both menu and menu_semana
     let convId = agentConvocatoriaMap[selectedDate]?.[agentId];
+    console.log(`[CellSidebar] convId lookup: date=${selectedDate} agentId=${agentId} convId=${convId}`);
+    console.log(`[CellSidebar] map keys for date:`, Object.keys(agentConvocatoriaMap[selectedDate] || {}));
     
     if (!convId) {
       console.log(`[CellSidebar] Convocatoria not in map for agent ${agentId} on ${selectedDate}. Trying fallback...`);
@@ -103,7 +105,9 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
       try {
         const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
         if (diaData) {
-          const turnoId = data.dateTurnoMap[selectedDate] || (data.turnoFilter === 'apertura' ? 4 : 4);
+          // dateTurnoMap for Apertura should have id_turno=45; default to 45 if missing
+          const turnoId = data.dateTurnoMap[selectedDate] || (data.turnoFilter === 'apertura' ? 45 : 4);
+          console.log(`[CellSidebar] Fallback: fecha=${fechaDB} idDia=${diaData.id_dia} turnoId=${turnoId}`);
           const { data: convRows } = await supabase
             .from('convocatoria')
             .select(`
