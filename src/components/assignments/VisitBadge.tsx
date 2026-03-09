@@ -9,14 +9,20 @@ interface VisitBadgeProps {
 
 const estadoStyle: Record<string, string> = {
   confirmada: 'bg-[hsl(var(--score-high-bg))] text-[hsl(var(--score-high-text))] border-[hsl(var(--score-high-border))]',
+  confirmado: 'bg-[hsl(var(--score-high-bg))] text-[hsl(var(--score-high-text))] border-[hsl(var(--score-high-border))]',
   asignada: 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]',
+  asignado: 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]',
   pendiente: 'bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] border-[hsl(var(--score-mid-border))]',
+  en_espera: 'bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] border-[hsl(var(--score-mid-border))]',
 };
 
 const estadoLabel: Record<string, string> = {
   confirmada: '✅ Confirmada',
+  confirmado: '✅ Confirmado',
   asignada: '📋 Asignada',
+  asignado: '📋 Asignado',
   pendiente: '⏳ Pendiente',
+  en_espera: '⏳ En espera',
 };
 
 /** Compact inline pill for table headers */
