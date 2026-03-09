@@ -439,6 +439,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado')
               .not('estado', 'eq', 'cancelada');
 
+            console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas, with id_plani: ${visitasData?.filter(v => v.id_plani).length || 0}`);
             if (visitasData && visitasData.length > 0) {
               const diasDict3: Record<number, string> = {};
               diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
