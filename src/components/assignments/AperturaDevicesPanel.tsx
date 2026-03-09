@@ -60,13 +60,20 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     setIsLoading(true);
     try {
       const updateObj: any = {};
-      updateObj['acompaña_grupo'] = !current;
-      const { error } = await supabase.from('menu')
+      updateObj['acompa\u00f1a_grupo'] = !current;
+      const { error, data: updated } = await supabase.from('menu')
         .update(updateObj)
         .eq('id_agente', resId)
         .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(deviceId));
+        .eq('id_dispositivo', parseInt(deviceId))
+        .select();
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        console.warn('[AcompañaGrupo] Update matched 0 rows', { resId, fechaDB, deviceId });
+        toast.error('No se encontró la fila para actualizar');
+        setIsLoading(false);
+        return;
+      }
       toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
       refresh();
     } catch (err: any) {
