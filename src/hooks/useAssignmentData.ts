@@ -4,6 +4,7 @@ import { buildResidentCaps } from '@/lib/caps-builder';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
+  VisitaInfo, VisitasByDateMap,
 } from '@/types/assignments';
 
 interface UseAssignmentDataProps {
