@@ -19,8 +19,10 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     dbDevices, assignmentsDb, calendarDb, setCalendarDb,
     convocadosDb, allResidentsDb, isAgentAbsent,
     agentConvocatoriaMap, isLoading, setIsLoading, refresh,
-    visitasByDate,
+    visitasByDate, turnoFilter, dateTurnoMap,
   } = data;
+
+  const isAperturaMode = turnoFilter === 'apertura';
 
   const [selectedOpenDevice, setSelectedOpenDevice] = useState<string | null>(null);
   const [selectedClosedDevice, setSelectedClosedDevice] = useState<string | null>(null);
@@ -61,15 +63,28 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     try {
       const updateObj: any = {};
       updateObj['acompa\u00f1a_grupo'] = !current;
-      const { error, data: updated } = await supabase.from('menu')
-        .update(updateObj)
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(deviceId))
-        .select();
+      let query: any;
+      if (isAperturaMode) {
+        query = supabase.from('menu')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId))
+          .select();
+      } else {
+        const turnoId = dateTurnoMap[execDate] || 4;
+        query = supabase.from('menu_semana')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId))
+          .eq('id_turno', turnoId)
+          .select();
+      }
+      const { error, data: updated } = await query;
       if (error) throw error;
       if (!updated || updated.length === 0) {
-        console.warn('[AcompañaGrupo] Update matched 0 rows', { resId, fechaDB, deviceId });
+        console.warn('[Acompa\u00f1aGrupo] Update matched 0 rows', { resId, fechaDB, deviceId, isAperturaMode });
         toast.error('No se encontró la fila para actualizar');
         setIsLoading(false);
         return;
@@ -77,7 +92,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
       refresh();
     } catch (err: any) {
-      console.error('Error toggling acompaña_grupo:', err);
+      console.error('Error toggling acompa\u00f1a_grupo:', err);
       toast.error(`Error: ${err.message || err}`);
       setIsLoading(false);
     }
