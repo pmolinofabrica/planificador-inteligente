@@ -4,6 +4,7 @@ import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, ge
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 import { toast } from 'sonner';
+import { VisitChip } from './VisitBadge';
 
 interface PlanningMatrixProps {
   data: any;
@@ -27,7 +28,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
   const totalDeviceCount = dbDevices.length;
 
@@ -170,10 +171,11 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                               <Users className="w-3 h-3 inline mr-0.5" />{count}
                             </span>
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap justify-center">
                             {free > 0 && <span className="score-low border px-1 py-0.5 rounded text-[9px] font-bold">{free} LIBR.</span>}
                             {absentFree > 0 && <span className="bg-stone-100 text-stone-600 border border-stone-300 px-1 py-0.5 rounded text-[9px] font-bold">🚫 {absentFree}</span>}
                             {vacant > 0 && <span className="score-high border px-1 py-0.5 rounded text-[9px] font-bold">{vacant} VAC.</span>}
+                            {(visitasByDate[d] || []).length > 0 && <VisitChip visitas={visitasByDate[d]} />}
                           </div>
                         </div>
                       </th>

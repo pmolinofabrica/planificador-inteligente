@@ -4,6 +4,7 @@ import { buildResidentCaps } from '@/lib/caps-builder';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
+  VisitaInfo, VisitasByDateMap,
 } from '@/types/assignments';
 
 interface UseAssignmentDataProps {
@@ -26,6 +27,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [inasistenciasDb, setInasistenciasDb] = useState<InasistenciasMap>({});
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
+  const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
@@ -427,6 +429,57 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           console.error('Error inasistencias:', e);
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // 10. VISITAS GRUPALES (solo tarde/mañana)
+        // ═══════════════════════════════════════════════════════════
+        if (turnoFilter !== 'apertura') {
+          try {
+            const { data: visitasData } = await supabase
+              .from('asignaciones_visita')
+              .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado')
+              .in('estado', ['pendiente', 'confirmada', 'asignada']);
+
+            if (visitasData && visitasData.length > 0) {
+              const diasDict3: Record<number, string> = {};
+              diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
+
+              const planiDateMap: Record<number, string> = {};
+              planisData.forEach(p => {
+                const tipo = turnoTypeMap[p.id_turno] || '';
+                if (!matchesTurnoFilter(tipo)) return;
+                const fecha = diasDict3[p.id_dia];
+                if (!fecha) return;
+                const [fy, fm, fd] = fecha.split('-');
+                if (fy !== yFilt || fm !== mmFilt) return;
+                planiDateMap[p.id_plani] = `${fd}/${fm}`;
+              });
+
+              const vMap: VisitasByDateMap = {};
+              visitasData.forEach(v => {
+                if (!v.id_plani) return;
+                const uiDate = planiDateMap[v.id_plani];
+                if (!uiDate) return;
+                if (!vMap[uiDate]) vMap[uiDate] = [];
+                vMap[uiDate].push({
+                  id_asignacion: v.id_asignacion,
+                  nombre_institucion: v.nombre_institucion,
+                  cantidad_personas: v.cantidad_personas_original,
+                  rango_etario: v.rango_etario,
+                  estado: v.estado,
+                });
+              });
+              setVisitasByDate(vMap);
+            } else {
+              setVisitasByDate({});
+            }
+          } catch (e) {
+            console.error('Error visitas:', e);
+            setVisitasByDate({});
+          }
+        } else {
+          setVisitasByDate({});
+        }
+
       } catch (err) {
         console.error("Error loading Supabase:", err);
       }
@@ -451,6 +504,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     convocadosDb, isLoading, setIsLoading, activeDates,
     dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
+    visitasByDate,
     refresh, isAgentAbsent, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };

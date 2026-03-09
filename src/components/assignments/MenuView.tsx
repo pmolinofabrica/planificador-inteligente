@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
+import { VisitBlock } from './VisitBadge';
 
 interface MenuViewProps {
   data: any;
@@ -16,7 +17,7 @@ const UNLOCK_CODE = '2350';
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked = false }) => {
-  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh } = data;
+  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
@@ -220,6 +221,9 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
               {totalVacant > 0 && <span className="text-[10px] sm:text-xs font-bold text-destructive">⚠️ Vac. {totalVacant}</span>}
               {freeConvocados.length > 0 && <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--score-mid-text))]">🆓 Libres {actuallyFree.length}</span>}
               {(absentAssigned.length + absentFreeNames.length) > 0 && <span className="text-[10px] sm:text-xs font-bold text-stone-500">🚫 Ausent. {absentAssigned.length + absentFreeNames.length}</span>}
+              {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+                <span className="text-[10px] sm:text-xs font-bold text-[hsl(var(--floor-2-text))]">🏫 Visitas {visitasByDate[currentDate].length}</span>
+              )}
             </div>
             {orgType !== 'dispositivos fijos' && (
               <span className="inline-block mt-1 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]">
@@ -254,7 +258,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
           })}
         </div>
 
-        {/* Org type selector removed — now lives in DevicesTab */}
+        {/* ══════ VISITAS GRUPALES ══════ */}
+        {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+          <div className="mb-4 sm:mb-6">
+            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} />
+          </div>
+        )}
 
         {/* ── Rotacion Completa: Group Legend ── */}
         {isRotacionCompleta && distinctGroups.length > 1 && (

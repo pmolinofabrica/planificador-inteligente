@@ -59,10 +59,19 @@ export interface UndoSnapshot {
   _isInsert?: boolean;
 }
 
+export interface VisitaInfo {
+  id_asignacion: number;
+  nombre_institucion: string | null;
+  cantidad_personas: number;
+  rango_etario: string | null;
+  estado: string;
+}
+
 export type AssignmentsMatrix = Record<string, Record<string, AssignmentEntry[]>>;
 export type CalendarMatrix = Record<string, Record<string, number>>;
 export type ConvocadosMap = Record<string, number[]>;
 export type InasistenciasMap = Record<string, InasistenciaEntry[]>;
+export type VisitasByDateMap = Record<string, VisitaInfo[]>;
 
 export const MONTHS = ["Febrero 2026", "Marzo 2026", "Abril 2026"];
 
