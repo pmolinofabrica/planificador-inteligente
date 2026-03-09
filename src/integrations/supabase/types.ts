@@ -317,6 +317,170 @@ export type Database = {
             referencedRelation: "vista_convocatoria_mes_activo"
             referencedColumns: ["id_turno"]
           },
+          {
+            foreignKeyName: "fk_asig_turno"
+            columns: ["id_turno"]
+            isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_turno"]
+          },
+        ]
+      }
+      asignaciones_visita: {
+        Row: {
+          agente_asigno: string | null
+          cantidad_personas_original: number
+          coeficiente_aplicado: number
+          created_at: string | null
+          cupo_calculado: number
+          email_referente: string | null
+          estado: string
+          id_asignacion: number
+          id_coeficiente: number | null
+          id_plani: number | null
+          id_visita: number | null
+          mes_solicitado: number | null
+          nombre_empresa: string | null
+          nombre_institucion: string | null
+          nombre_referente: string | null
+          observaciones: string | null
+          rango_etario: string | null
+          telefono_institucion: string | null
+          telefono_referente: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agente_asigno?: string | null
+          cantidad_personas_original?: number
+          coeficiente_aplicado?: number
+          created_at?: string | null
+          cupo_calculado?: number
+          email_referente?: string | null
+          estado?: string
+          id_asignacion?: number
+          id_coeficiente?: number | null
+          id_plani?: number | null
+          id_visita?: number | null
+          mes_solicitado?: number | null
+          nombre_empresa?: string | null
+          nombre_institucion?: string | null
+          nombre_referente?: string | null
+          observaciones?: string | null
+          rango_etario?: string | null
+          telefono_institucion?: string | null
+          telefono_referente?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agente_asigno?: string | null
+          cantidad_personas_original?: number
+          coeficiente_aplicado?: number
+          created_at?: string | null
+          cupo_calculado?: number
+          email_referente?: string | null
+          estado?: string
+          id_asignacion?: number
+          id_coeficiente?: number | null
+          id_plani?: number | null
+          id_visita?: number | null
+          mes_solicitado?: number | null
+          nombre_empresa?: string | null
+          nombre_institucion?: string | null
+          nombre_referente?: string | null
+          observaciones?: string | null
+          rango_etario?: string | null
+          telefono_institucion?: string | null
+          telefono_referente?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asignaciones_visita_id_coeficiente_fkey"
+            columns: ["id_coeficiente"]
+            isOneToOne: false
+            referencedRelation: "config_visitas_coeficientes"
+            referencedColumns: ["id_coeficiente"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_plani_fkey"
+            columns: ["id_plani"]
+            isOneToOne: false
+            referencedRelation: "planificacion"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_plani_fkey"
+            columns: ["id_plani"]
+            isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_plani_fkey"
+            columns: ["id_plani"]
+            isOneToOne: false
+            referencedRelation: "vista_estado_cobertura"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_plani_fkey"
+            columns: ["id_plani"]
+            isOneToOne: false
+            referencedRelation: "vista_ocupacion"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_plani_fkey"
+            columns: ["id_plani"]
+            isOneToOne: false
+            referencedRelation: "vista_planificacion_anio"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "asignaciones_visita_id_visita_fkey"
+            columns: ["id_visita"]
+            isOneToOne: false
+            referencedRelation: "visitas_grupales"
+            referencedColumns: ["id_visita"]
+          },
+        ]
+      }
+      asignaciones_visita_historial: {
+        Row: {
+          created_at: string | null
+          estado_anterior: string | null
+          estado_nuevo: string
+          id_asignacion: number
+          id_hist: number
+          motivo: string | null
+          usuario: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          estado_anterior?: string | null
+          estado_nuevo: string
+          id_asignacion: number
+          id_hist?: number
+          motivo?: string | null
+          usuario?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          estado_anterior?: string | null
+          estado_nuevo?: string
+          id_asignacion?: number
+          id_hist?: number
+          motivo?: string | null
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asignaciones_visita_historial_id_asignacion_fkey"
+            columns: ["id_asignacion"]
+            isOneToOne: false
+            referencedRelation: "asignaciones_visita"
+            referencedColumns: ["id_asignacion"]
+          },
         ]
       }
       calendario_dispositivos: {
@@ -399,6 +563,13 @@ export type Database = {
             columns: ["id_turno"]
             isOneToOne: false
             referencedRelation: "vista_convocatoria_mes_activo"
+            referencedColumns: ["id_turno"]
+          },
+          {
+            foreignKeyName: "fk_cal_turno"
+            columns: ["id_turno"]
+            isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
             referencedColumns: ["id_turno"]
           },
         ]
@@ -861,6 +1032,13 @@ export type Database = {
             columns: ["id_turno"]
             isOneToOne: false
             referencedRelation: "vista_convocatoria_mes_activo"
+            referencedColumns: ["id_turno"]
+          },
+          {
+            foreignKeyName: "capacitaciones_id_turno_fkey"
+            columns: ["id_turno"]
+            isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
             referencedColumns: ["id_turno"]
           },
           {
@@ -1453,6 +1631,13 @@ export type Database = {
             foreignKeyName: "fk_conv_plani"
             columns: ["id_plani"]
             isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "fk_conv_plani"
+            columns: ["id_plani"]
+            isOneToOne: false
             referencedRelation: "vista_estado_cobertura"
             referencedColumns: ["id_plani"]
           },
@@ -1653,6 +1838,59 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vista_planificacion_escuelas"
             referencedColumns: ["id_convocatoria"]
+          },
+        ]
+      }
+      correos_visita: {
+        Row: {
+          asunto: string | null
+          created_at: string | null
+          cuerpo: string | null
+          destinatario_email: string
+          estado_envio: string
+          fecha_envio: string | null
+          fecha_respuesta: string | null
+          id_asignacion: number
+          id_correo: number
+          notas: string | null
+          respuesta_recibida: boolean | null
+          tipo_correo: string
+        }
+        Insert: {
+          asunto?: string | null
+          created_at?: string | null
+          cuerpo?: string | null
+          destinatario_email: string
+          estado_envio?: string
+          fecha_envio?: string | null
+          fecha_respuesta?: string | null
+          id_asignacion: number
+          id_correo?: number
+          notas?: string | null
+          respuesta_recibida?: boolean | null
+          tipo_correo?: string
+        }
+        Update: {
+          asunto?: string | null
+          created_at?: string | null
+          cuerpo?: string | null
+          destinatario_email?: string
+          estado_envio?: string
+          fecha_envio?: string | null
+          fecha_respuesta?: string | null
+          id_asignacion?: number
+          id_correo?: number
+          notas?: string | null
+          respuesta_recibida?: boolean | null
+          tipo_correo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "correos_visita_id_asignacion_fkey"
+            columns: ["id_asignacion"]
+            isOneToOne: false
+            referencedRelation: "asignaciones_visita"
+            referencedColumns: ["id_asignacion"]
           },
         ]
       }
@@ -2626,6 +2864,13 @@ export type Database = {
             referencedRelation: "vista_convocatoria_mes_activo"
             referencedColumns: ["id_turno"]
           },
+          {
+            foreignKeyName: "fk_menus_turno"
+            columns: ["id_turno"]
+            isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_turno"]
+          },
         ]
       }
       planificacion: {
@@ -2763,6 +3008,44 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vista_seguimiento_residentes"
             referencedColumns: ["id_agente"]
+          },
+        ]
+      }
+      seguimiento_llamados_visita: {
+        Row: {
+          agente: string | null
+          atendio: boolean | null
+          created_at: string | null
+          fecha_hora: string | null
+          id_asignacion: number | null
+          id_llamado: number
+          observaciones: string | null
+        }
+        Insert: {
+          agente?: string | null
+          atendio?: boolean | null
+          created_at?: string | null
+          fecha_hora?: string | null
+          id_asignacion?: number | null
+          id_llamado?: number
+          observaciones?: string | null
+        }
+        Update: {
+          agente?: string | null
+          atendio?: boolean | null
+          created_at?: string | null
+          fecha_hora?: string | null
+          id_asignacion?: number | null
+          id_llamado?: number
+          observaciones?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seguimiento_llamados_visita_id_asignacion_fkey"
+            columns: ["id_asignacion"]
+            isOneToOne: false
+            referencedRelation: "asignaciones_visita"
+            referencedColumns: ["id_asignacion"]
           },
         ]
       }
@@ -3290,6 +3573,13 @@ export type Database = {
             foreignKeyName: "visitas_grupales_id_plani_asignado_fkey"
             columns: ["id_plani_asignado"]
             isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "visitas_grupales_id_plani_asignado_fkey"
+            columns: ["id_plani_asignado"]
+            isOneToOne: false
             referencedRelation: "vista_estado_cobertura"
             referencedColumns: ["id_plani"]
           },
@@ -3568,6 +3858,13 @@ export type Database = {
             foreignKeyName: "fk_conv_plani"
             columns: ["id_plani"]
             isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "fk_conv_plani"
+            columns: ["id_plani"]
+            isOneToOne: false
             referencedRelation: "vista_estado_cobertura"
             referencedColumns: ["id_plani"]
           },
@@ -3672,6 +3969,13 @@ export type Database = {
             foreignKeyName: "fk_conv_plani"
             columns: ["id_plani"]
             isOneToOne: false
+            referencedRelation: "vista_disponibilidad_visitas"
+            referencedColumns: ["id_plani"]
+          },
+          {
+            foreignKeyName: "fk_conv_plani"
+            columns: ["id_plani"]
+            isOneToOne: false
             referencedRelation: "vista_estado_cobertura"
             referencedColumns: ["id_plani"]
           },
@@ -3708,6 +4012,26 @@ export type Database = {
           id_turno: number | null
           nombre_turno: string | null
           notas: string | null
+        }
+        Relationships: []
+      }
+      vista_disponibilidad_visitas: {
+        Row: {
+          anio: number | null
+          cupo_disponible: number | null
+          cupo_en_espera: number | null
+          cupo_ocupado_firme: number | null
+          cupo_total: number | null
+          fecha: string | null
+          hora_fin: string | null
+          hora_inicio: string | null
+          id_plani: number | null
+          id_turno: number | null
+          mes: number | null
+          numero_dia_semana: number | null
+          residentes_convocados: number | null
+          semaforo: string | null
+          tipo_turno: string | null
         }
         Relationships: []
       }
