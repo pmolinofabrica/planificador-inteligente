@@ -114,7 +114,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           .update(updateObj)
           .eq('id_agente', resId)
           .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(deviceId));
+          .eq('id_dispositivo', parseInt(deviceId))
+          .select();
       } else {
         const turnoId = dateTurnoMap[date] || 4;
         query = supabase.from('menu_semana')
@@ -122,13 +123,21 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           .eq('id_agente', resId)
           .eq('fecha_asignacion', fechaDB)
           .eq('id_dispositivo', parseInt(deviceId))
-          .eq('id_turno', turnoId);
+          .eq('id_turno', turnoId)
+          .select();
       }
-      const { error } = await query;
+      const { error, data: updated } = await query;
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        console.warn('[AcompañaGrupo] Update matched 0 rows', { resId, fechaDB, deviceId, isAperturaMode });
+        toast.error('No se encontró la fila para actualizar');
+        setIsLoading(false);
+        return;
+      }
+      console.log('[AcompañaGrupo] Updated:', updated.length, 'rows, new value:', updated[0]?.['acompa\u00f1a_grupo']);
       refresh();
     } catch (err: any) {
-      console.error('Error toggling acompaña_grupo:', err);
+      console.error('Error toggling acompa\u00f1a_grupo:', err);
       toast.error(`Error: ${err.message || err}`);
       setIsLoading(false);
     }
