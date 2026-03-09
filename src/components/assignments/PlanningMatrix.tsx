@@ -4,6 +4,7 @@ import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, ge
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 import { toast } from 'sonner';
+import { VisitChip } from './VisitBadge';
 
 interface PlanningMatrixProps {
   data: any;
