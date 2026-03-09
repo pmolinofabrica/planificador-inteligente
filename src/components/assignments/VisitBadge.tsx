@@ -131,8 +131,10 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
             <span className="text-[9px] flex-shrink-0">👥{v.cantidad_personas}</span>
             {v.rango_etario && <span className="text-[9px] flex-shrink-0 opacity-70">📅{v.rango_etario}</span>}
             {v.numero_grupo && v.numero_grupo.length > 0 && (
-              <span className={`text-[8px] px-1 py-0.5 rounded font-mono border ${getGroupColor(v.numero_grupo[0])}`}>
-                {formatGroups(v.numero_grupo)}
+              <span className="inline-flex gap-0.5">
+                {v.numero_grupo.map(g => (
+                  <span key={g} className={`text-[8px] px-1 py-0.5 rounded font-mono border ${getGroupColor(g)}`}>G{g}</span>
+                ))}
               </span>
             )}
           </div>
