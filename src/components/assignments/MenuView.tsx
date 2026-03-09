@@ -259,9 +259,9 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
         </div>
 
         {/* ══════ VISITAS GRUPALES ══════ */}
-        {isNonApertura && (visitasByDate?.[currentDate] || []).length > 0 && (
+        {(visitasByDate?.[currentDate] || []).length > 0 && (
           <div className="mb-4 sm:mb-6">
-            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} />
+            <VisitBlock visitas={visitasByDate[currentDate]} locked={isLocked} interactive={isNonApertura} onGroupChange={() => refresh()} />
           </div>
         )}
 
