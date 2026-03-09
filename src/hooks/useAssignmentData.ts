@@ -47,6 +47,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     return { yFilt, mmFilt, startOfMonth, endOfMonth };
   }, [selectedMonth]);
 
+  const formatUiDate = (d: string | number, m: string | number) => {
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  };
+
   useEffect(() => {
     async function loadInitialData() {
       setIsLoading(true);
@@ -172,10 +176,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           grupoMap[key] = ms.numero_grupo;
           // Store tipo_organizacion per date (from menu_semana)
           const [fy, fm, fd] = ms.fecha_asignacion.split('-');
-          if (fy === yFilt && fm === mmFilt) {
-            const uiDate = `${fd}/${fm}`;
-            if (ms.tipo_organizacion) orgTypeMap[uiDate] = ms.tipo_organizacion;
-          }
+            if (fy === yFilt && fm === mmFilt) {
+              const uiDate = formatUiDate(fd, fm);
+              if (ms.tipo_organizacion) orgTypeMap[uiDate] = ms.tipo_organizacion;
+            }
         });
         setTipoOrganizacionMap(orgTypeMap);
 
@@ -197,7 +201,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (!a.fecha_asignacion) return;
               const [y, m, d] = a.fecha_asignacion.split("-");
               if (y !== yFilt || m !== mmFilt) return;
-              const uiDate = `${d}/${m}`;
+              const uiDate = formatUiDate(d, m);
 
               if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
               if (!convocadosList[uiDate].includes(a.id_agente)) {
@@ -233,7 +237,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (!matchesTurnoFilter(tipo)) return;
               const [y, m, d] = ms.fecha_asignacion.split("-");
               if (y !== yFilt || m !== mmFilt) return;
-              const uiDate = `${d}/${m}`;
+              const uiDate = formatUiDate(d, m);
 
               if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
               if (!convocadosList[uiDate].includes(ms.id_agente)) {
@@ -278,7 +282,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 if (!fecha) return;
                 const [fy, fm, fd] = fecha.split('-');
                 if (fy !== yFilt || fm !== mmFilt) return;
-                const uiDate = `${fd}/${fm}`;
+                const uiDate = formatUiDate(fd, fm);
                 planiToUiDate[p.id_plani] = uiDate;
                 filteredPlaniIds.push(p.id_plani);
               });
@@ -363,7 +367,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             if (!fecha) return;
             const [fy, fm, fd] = fecha.split('-');
             if (fy !== yFilt || fm !== mmFilt) return;
-            const uiDate = `${fd}/${fm}`;
+            const uiDate = formatUiDate(fd, fm);
             allActiveDates.add(uiDate);
             turnoPerDate[uiDate] = p.id_turno;
           });
@@ -376,7 +380,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (!matchesTurnoFilter(tipo)) return;
               const [fy, fm, fd] = ms.fecha_asignacion.split('-');
               if (fy !== yFilt || fm !== mmFilt) return;
-              const uiDate = `${fd}/${fm}`;
+              const uiDate = formatUiDate(fd, fm);
               allActiveDates.add(uiDate);
               if (!turnoPerDate[uiDate]) turnoPerDate[uiDate] = ms.id_turno;
             });

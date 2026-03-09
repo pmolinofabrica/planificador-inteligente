@@ -46,10 +46,40 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
     }
 
     const { agentConvocatoriaMap } = data;
-    const convId = agentConvocatoriaMap[selectedVacant.date]?.[selectedVacant.id];
+    let convId = agentConvocatoriaMap[selectedVacant.date]?.[selectedVacant.id];
 
     if (!convId) {
-      alert(`⚠️ No se encontró una convocatoria vigente para este residente en la fecha ${selectedVacant.date}.\n\nDebe existir una convocatoria para poder asignar.`);
+      console.log(`[VacantActionSidebar] Convocatoria not in map for agent ${selectedVacant.id} on ${selectedVacant.date}. Trying fallback...`);
+      setIsLoading(true);
+      try {
+        const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
+        if (diaData) {
+          const turnoId = data.dateTurnoMap[selectedVacant.date] || (data.turnoFilter === 'apertura' ? 4 : 4);
+          const { data: convRows } = await supabase
+            .from('convocatoria')
+            .select(`
+              id_convocatoria,
+              planificacion!inner(id_turno, id_dia)
+            `)
+            .eq('id_agente', selectedVacant.id)
+            .eq('estado', 'vigente')
+            .eq('planificacion.id_turno', turnoId)
+            .eq('planificacion.id_dia', diaData.id_dia)
+            .limit(1);
+
+          if (convRows?.[0]) {
+            convId = convRows[0].id_convocatoria;
+            console.log(`[VacantActionSidebar] Fallback found conv ${convId}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error in fallback conv lookup:", err);
+      }
+      setIsLoading(false);
+    }
+
+    if (!convId) {
+      alert(`⚠️ No se encontró una convocatoria vigente para el turno ${data.turnoFilter} en la fecha ${selectedVacant.date}.\n\nDebe existir una convocatoria para poder asignar.`);
       return;
     }
 

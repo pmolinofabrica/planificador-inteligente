@@ -201,10 +201,31 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       } else {
         let convId = agentConvocatoriaMap[execDate]?.[resId];
         if (!convId) {
-          const { data: convRows } = await supabase
-            .from('convocatoria').select('id_convocatoria')
-            .eq('id_agente', resId).eq('fecha_convocatoria', fechaDB).eq('estado', 'vigente').limit(1);
-          if (convRows?.[0]) convId = convRows[0].id_convocatoria;
+          console.log(`[AperturaDevicesPanel] Convocatoria not in map for agent ${resId} on ${execDate}. Trying fallback...`);
+          try {
+            const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
+            if (diaData) {
+              const turnoId = data.dateTurnoMap[execDate] || (data.turnoFilter === 'apertura' ? 4 : 4);
+              const { data: convRows } = await supabase
+                .from('convocatoria')
+                .select(`
+                  id_convocatoria,
+                  planificacion!inner(id_turno, id_dia)
+                `)
+                .eq('id_agente', resId)
+                .eq('estado', 'vigente')
+                .eq('planificacion.id_turno', turnoId)
+                .eq('planificacion.id_dia', diaData.id_dia)
+                .limit(1);
+
+              if (convRows?.[0]) {
+                convId = convRows[0].id_convocatoria;
+                console.log(`[AperturaDevicesPanel] Fallback found conv ${convId}`);
+              }
+            }
+          } catch (err) {
+            console.error("Error in fallback conv lookup:", err);
+          }
         }
         if (!convId) {
           toast.error('No se encontró convocatoria vigente para este residente.');
