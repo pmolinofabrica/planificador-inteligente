@@ -66,8 +66,10 @@ export const VisitDetailChip: React.FC<{ visitas: VisitaInfo[] }> = ({ visitas }
           <span className="text-muted-foreground">👥{v.cantidad_personas}</span>
           {v.rango_etario && <span className="text-primary/80">📅 {v.rango_etario}</span>}
           {v.numero_grupo && v.numero_grupo.length > 0 && (
-            <span className={`px-1 py-0.5 rounded text-[8px] font-mono border ${getGroupColor(v.numero_grupo[0])}`}>
-              {formatGroups(v.numero_grupo)}
+            <span className="inline-flex gap-0.5">
+              {v.numero_grupo.map(g => (
+                <span key={g} className={`px-1 py-0.5 rounded text-[8px] font-mono border ${getGroupColor(g)}`}>G{g}</span>
+              ))}
             </span>
           )}
         </div>
