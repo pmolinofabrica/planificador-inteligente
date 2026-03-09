@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings } from 'lucide-react';
-import { VisitChip } from './VisitBadge';
+import { VisitChip, VisitDetailChip } from './VisitBadge';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 
