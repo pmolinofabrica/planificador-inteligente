@@ -108,14 +108,21 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     try {
       const updateObj: any = {};
       updateObj['acompaña_grupo'] = !current;
-      let query = supabase.from(table)
-        .update(updateObj)
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(deviceId));
-      if (!isAperturaMode) {
+      let query: any;
+      if (isAperturaMode) {
+        query = supabase.from('menu')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId));
+      } else {
         const turnoId = dateTurnoMap[date] || 4;
-        query = query.eq('id_turno', turnoId);
+        query = supabase.from('menu_semana')
+          .update(updateObj)
+          .eq('id_agente', resId)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_dispositivo', parseInt(deviceId))
+          .eq('id_turno', turnoId);
       }
       const { error } = await query;
       if (error) throw error;
