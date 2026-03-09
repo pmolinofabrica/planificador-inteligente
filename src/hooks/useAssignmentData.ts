@@ -469,6 +469,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                   estado: v.estado,
                 });
               });
+              console.log(`[Visitas] Mapped to dates:`, Object.keys(vMap).map(d => `${d}(${vMap[d].length})`).join(', ') || 'none');
               setVisitasByDate(vMap);
             } else {
               setVisitasByDate({});
