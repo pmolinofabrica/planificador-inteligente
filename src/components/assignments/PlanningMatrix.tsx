@@ -28,10 +28,17 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, allResidentsDb, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
   const isApertura = turnoFilter === 'apertura';
   const totalDeviceCount = dbDevices.length;
+
+  // Pre-build caps lookup: agentId (string) → caps Record<deviceId, date>
+  const capsMap = useMemo(() => {
+    const m: Record<string, Record<string, string>> = {};
+    (allResidentsDb || []).forEach((r: any) => { m[String(r.id)] = r.caps || {}; });
+    return m;
+  }, [allResidentsDb]);
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
@@ -320,6 +327,18 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       }`}>
                                         {absent && <span className="mr-1">🚫</span>}{res.name}
                                       </span>
+                                      {/* No-cap indicator */}
+                                      {!absent && (() => {
+                                        const [dd, mm] = date.split('/');
+                                        const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+                                        const caps = capsMap[String(res.id)] || {};
+                                        const capDate = caps[String(device.id)];
+                                        const isCapacitado = !!capDate && capDate <= fechaDB;
+                                        if (!isCapacitado) {
+                                          return <span className="text-[8px] font-bold text-red-600 bg-red-50 border border-red-200 px-0.5 rounded leading-none" title="Sin capacitación para este dispositivo">⚠</span>;
+                                        }
+                                        return null;
+                                      })()}
                                       {!absent && (
                                         <span className={`text-[8px] font-mono px-1 py-0.5 rounded ${
                                           metrics.localReps <= 1 ? 'bg-emerald-100 text-emerald-700' : metrics.localReps <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { buildResidentCaps } from '@/lib/caps-builder';
+import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
@@ -87,11 +88,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 2. RESIDENTES
         // ═══════════════════════════════════════════════════════════
+        const activeCohorte = getActiveCohorteSync();
         const { data: resiData } = await supabase
           .from('datos_personales')
           .select('id_agente, nombre, apellido, cohorte')
           .eq('activo', true)
-          .eq('cohorte', 2026);
+          .eq('cohorte', activeCohorte);
 
         if (resiData) setDbResidents(resiData);
 
@@ -108,7 +110,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
-          supabase.from('dias').select('id_dia, fecha').limit(5000),
+          supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
           supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani')
             .eq('estado', 'vigente')
             .limit(10000), // Note: we filter by planificacion links later

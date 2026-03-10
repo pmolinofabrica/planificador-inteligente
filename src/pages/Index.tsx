@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { Calendar, Undo2 } from 'lucide-react';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
@@ -14,7 +15,7 @@ import { VacantsSidebar } from '@/components/assignments/VacantsSidebar';
 import { VacantActionSidebar } from '@/components/assignments/VacantActionSidebar';
 import type { ActiveTab, SelectedResident, SelectedDevice, SelectedVacant } from '@/types/assignments';
 
-const MONTHS_LIST = ["Febrero 2026", "Marzo 2026", "Abril 2026"];
+const MONTHS_LIST = generateSchoolYearMonths();
 const TURNO_FILTERS = [
   { key: 'apertura', label: 'Apertura' },
   { key: 'tarde', label: 'Turno tarde' },
@@ -25,7 +26,7 @@ type TurnoFilter = typeof TURNO_FILTERS[number]['key'];
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
-  const [selectedMonth, setSelectedMonth] = useState("Marzo 2026");
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentSchoolYearMonth);
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
   const [menuLocked, setMenuLocked] = useState(false);
 

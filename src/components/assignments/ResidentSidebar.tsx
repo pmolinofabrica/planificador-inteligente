@@ -141,10 +141,46 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
     } else {
       const turnoId = dateTurnoMap[date] || 4;
-      await supabase.from('menu_semana').update({ id_dispositivo: 999 })
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
-      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: turnoId } });
+      console.log(`[handleRemove] menu_semana: agente=${selectedResident.id} dispositivo=${Number(disp?.id)} fecha=${fechaDB} turno=${turnoId}`);
+
+      // Fetch the specific row first to get its PK, avoiding turnoId fallback mismatch issues
+      const { data: targetRow, error: fetchErr } = await supabase.from('menu_semana')
+        .select('id_menu_semana, id_turno')
+        .eq('id_agente', selectedResident.id)
+        .eq('id_dispositivo', Number(disp?.id))
+        .eq('fecha_asignacion', fechaDB)
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.error('[handleRemove] Error fetching row:', fetchErr);
+        alert('Error al buscar la asignación: ' + fetchErr.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!targetRow) {
+        console.warn('[handleRemove] No row found for:', { agente: selectedResident.id, dispositivo: Number(disp?.id), fecha: fechaDB });
+        alert('No se encontró la asignación para quitar. ¿Ya fue removida?');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log(`[handleRemove] Found row id_menu_semana=${targetRow.id_menu_semana} id_turno=${targetRow.id_turno}`);
+
+      const { error: updateErr } = await supabase.from('menu_semana')
+        .update({ id_dispositivo: 999 })
+        .eq('id_menu_semana', targetRow.id_menu_semana);
+
+      if (updateErr) {
+        alert('Error al quitar: ' + updateErr.message);
+        setIsLoading(false);
+        return;
+      }
+
+      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: targetRow.id_turno } });
     }
+
     setSelectedResident(null);
     refresh();
   };

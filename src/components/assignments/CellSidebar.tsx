@@ -170,15 +170,34 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         const turnoId = dateTurnoMap[selectedDate] || 4;
 
         if (isRotation) {
-          // Rotación simple/completa: always INSERT new row
+          // Rotación simple/completa: always INSERT new row.
+          // Inherit numero_grupo from any existing assignment for this agent/date/turno.
+          let inheritedGroup: number | null = null;
+          try {
+            const { data: existingRows } = await supabase.from('menu_semana')
+              .select('numero_grupo')
+              .eq('id_agente', agentId)
+              .eq('fecha_asignacion', fechaDB)
+              .eq('id_turno', turnoId)
+              .neq('id_dispositivo', 999)
+              .limit(1);
+            if (existingRows && existingRows.length > 0 && existingRows[0].numero_grupo != null) {
+              inheritedGroup = existingRows[0].numero_grupo;
+            }
+          } catch (e) {
+            console.warn('[CellSidebar] Could not fetch existing group for inheritance:', e);
+          }
+
           const { error } = await supabase.from('menu_semana').insert([{
             id_agente: agentId, id_dispositivo: parseInt(deviceId),
             fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
             id_convocatoria: convId, id_turno: turnoId,
             tipo_organizacion: orgType,
+            ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {}),
           }]);
           if (error) throw error;
           pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' } });
+
         } else {
           // Dispositivos fijos: update existing or insert new
           const { data: existing, error: fetchErr } = await supabase.from('menu_semana').select('*')
@@ -275,7 +294,11 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         <div className="p-4 border-b border-border bg-muted/30">
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Asignados actualmente</span>
           <div className="space-y-1">
-            {currentAssignments.map((res: any, i: number) => (
+            {currentAssignments.map((res: any, i: number) => {
+              const caps = (allResidentsDb.find((r: any) => r.id === res.id)?.caps) || {};
+              const capDate = caps[deviceId];
+              const isCapacitado = !!capDate && capDate <= fechaDB;
+              return (
               <div key={i}
                 onClick={() => {
                   setSelectedResident({ id: res.id, name: res.name, score: res.score, device: selectedDevice.name, date: selectedDate });
@@ -283,10 +306,17 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   setSelectedDateFilter(null);
                 }}
                 className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps)}`}>
-                <span>{res.name}</span>
+                <span className="flex items-center gap-1">
+                  {res.name}
+                  {!isCapacitado && (
+                    <span className="text-[8px] font-bold text-red-600 bg-red-50 border border-red-200 px-0.5 rounded leading-none" title="Sin capacitación para este dispositivo">⚠</span>
+                  )}
+                </span>
                 <span className="text-[9px] font-mono opacity-70">{computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps}×</span>
               </div>
-            ))}
+              );
+            })}
+
           </div>
         </div>
       )}

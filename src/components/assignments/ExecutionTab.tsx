@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, Settings, Monitor } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, AlertTriangle } from 'lucide-react';
 import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
@@ -27,8 +27,15 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   const {
     dbDevices, activeDates, assignmentsDb, convocadosDb,
     allResidentsDb, isAgentAbsent, getAbsenceMotivo,
-    dateTurnoMap, isLoading, setIsLoading, refresh
+    dateTurnoMap, isLoading, setIsLoading, refresh, agentGroups
   } = data;
+
+  // Pre-build caps lookup for no-cap indicator
+  const capsMap = useMemo(() => {
+    const m: Record<string, Record<string, string>> = {};
+    (allResidentsDb || []).forEach((r: any) => { m[String(r.id)] = r.caps || {}; });
+    return m;
+  }, [allResidentsDb]);
 
   const [subTab, setSubTab] = useState<'kanban' | 'devices'>('kanban');
 
@@ -190,10 +197,30 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                       }`}>
                         <div className="flex items-center justify-between">
                           <div className="flex flex-col">
-                            <span className={`font-bold text-sm ${isAbsent ? 'text-stone-500 line-through opacity-70' : 'text-foreground'}`}>
+                            <span className={`font-bold text-sm ${
+                              isAbsent ? 'text-stone-500 line-through opacity-70'
+                              : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
+                              : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
+                              : 'text-foreground'
+                            }`}>
                               {res.name}
                             </span>
-                            {isAbsent && <span className="text-[10px] text-stone-500 font-bold mt-0.5">MARCADO AUSENTE</span>}
+                            {/* No-cap indicator */}
+                            {!isAbsent && (() => {
+                              const [dd, mm] = execDate.split('/');
+                              const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+                              const caps = capsMap[String(res.id)] || {};
+                              const capDate = caps[String(device.id)];
+                              const isCapacitado = !!capDate && capDate <= fechaDB;
+                              if (!isCapacitado) {
+                                return (
+                                  <span className="text-[10px] text-red-600 font-bold flex items-center gap-1 mt-0.5">
+                                    <AlertTriangle className="w-3 h-3" /> Sin capacitación
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <button
                             onClick={() => handleQuitar(res.id, device.id)}
