@@ -30,7 +30,11 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
   const handleOrgTypeChange = async (date: string, newType: string) => {
     const [d, m] = date.split('/');
     const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    const turnoId = dateTurnoMap[date] || 4;
+    let defaultTurnoId = 4;
+    if (turnoFilter === 'manana') defaultTurnoId = 3;
+    if (turnoFilter === 'apertura') defaultTurnoId = 45;
+
+    const turnoId = dateTurnoMap[date] || defaultTurnoId;
     const prev = tipoOrganizacionMap[date] || 'dispositivos fijos';
 
     setTipoOrganizacionMap((old: Record<string, string>) => ({ ...old, [date]: newType }));
@@ -42,7 +46,7 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
           fecha: fechaDB, 
           id_turno: turnoId, 
           tipo_organizacion: newType 
-        }, { onConflict: 'fecha, id_turno' });
+        });
       if (error) throw error;
     } catch (err) {
       console.error('Error updating org type:', err);
