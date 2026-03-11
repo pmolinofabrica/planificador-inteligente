@@ -122,7 +122,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     try {
       if (toCupo === 0 || toAssigned >= toCupo) {
         const newCupo = (toCupo || 0) + 1;
-        const turnoId = 4;
+        const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
         await supabase.from('calendario_dispositivos')
           .upsert({
             fecha: fechaDB, id_turno: turnoId,
@@ -176,7 +176,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     setIsLoading(true);
     try {
       const newCupo = toCupo + 1;
-      const turnoId = 4;
+      const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
       await supabase.from('calendario_dispositivos')
         .upsert({
           fecha: fechaDB, id_turno: turnoId,

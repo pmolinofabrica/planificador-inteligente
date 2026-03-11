@@ -34,17 +34,40 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
     const currentCount = assignmentsOfDate[deviceId]?.length || 0;
     const cupoLimit = cuposDelDia[deviceId] || dbDevices.find((d: any) => d.id === deviceId)?.max || 0;
 
-    if (currentCount >= cupoLimit) {
-      const confirmed = confirm(
-        `⚠️ El dispositivo ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
-      );
-      if (!confirmed) return;
-      const newCalendar = { ...data.calendarDb };
-      if (!newCalendar[selectedVacant.date]) newCalendar[selectedVacant.date] = {};
-      newCalendar[selectedVacant.date][deviceId] = cupoLimit + 1;
-      data.setCalendarDb(newCalendar);
-    }
-
+      if (currentCount >= cupoLimit) {
+        if (!confirm(
+          `⚠️ El dispositivo ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
+        )) return;
+        
+        data.setIsLoading(true);
+        try {
+          // Persist the new cupo to the database
+          const [d, mStr] = selectedVacant.date.split("/");
+          const fechaDB = `${data.year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          const turnoId = data.dateTurnoMap[selectedVacant.date] || 1;
+          const { error: calErr } = await supabase.from('calendario_dispositivos')
+            .upsert({
+              fecha: fechaDB,
+              id_turno: turnoId,
+              id_dispositivo: Number(deviceId),
+              cupo_objetivo: cupoLimit + 1
+            }, { onConflict: 'fecha, id_turno, id_dispositivo' });
+          if (calErr) throw calErr;
+          
+          // Optimistically update calendarDb
+          data.setCalendarDb((prev: any) => {
+            const newCalendar = { ...prev };
+            if (!newCalendar[selectedVacant.date]) newCalendar[selectedVacant.date] = {};
+            newCalendar[selectedVacant.date][deviceId] = cupoLimit + 1;
+            return newCalendar;
+          });
+        } catch (e: any) {
+          console.error("Error al extender cupo:", e);
+          data.setIsLoading(false);
+          alert("Error interno al ampliar el cupo: " + e.message);
+          return;
+        }
+      }
     const { agentConvocatoriaMap } = data;
     let convId = agentConvocatoriaMap[selectedVacant.date]?.[selectedVacant.id];
 
