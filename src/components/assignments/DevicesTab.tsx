@@ -37,10 +37,12 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
 
     try {
       const { error } = await supabase
-        .from('menu_semana')
-        .update({ tipo_organizacion: newType })
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', turnoId);
+        .from('configuracion_turnos')
+        .upsert({ 
+          fecha: fechaDB, 
+          id_turno: turnoId, 
+          tipo_organizacion: newType 
+        }, { onConflict: 'fecha, id_turno' });
       if (error) throw error;
     } catch (err) {
       console.error('Error updating org type:', err);
@@ -185,12 +187,11 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                 </tr>
               </thead>
               <tbody>
-                {/* ── Org Type Row — only for tarde/mañana ── */}
-                {isNonApertura && (
-                  <tr className="border-b-2 border-primary/20 bg-primary/5">
-                    <td className="sticky left-0 bg-primary/5 px-4 py-3 border-r border-border font-bold text-xs text-primary z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                      📋 Tipo Organización
-                    </td>
+                {/* ── Org Type Row — Available for all filter views ── */}
+                <tr className="border-b-2 border-primary/20 bg-primary/5">
+                  <td className="sticky left-0 bg-primary/5 px-4 py-3 border-r border-border font-bold text-xs text-primary z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    📋 Tipo Organización
+                  </td>
                     {activeDates.map((date: string) => {
                       const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
                       return (
@@ -217,9 +218,8 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                         </td>
                       );
                     })}
-                    <td className="p-2 border-border" />
-                  </tr>
-                )}
+                  <td className="p-2 border-border" />
+                </tr>
                 {dbDevices.map((device: any) => (
                   <tr key={device.id} className="hover:bg-accent/30 transition-colors group">
                     <td className={`sticky left-0 px-4 py-3 border-b border-r border-border font-semibold text-xs z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] ${getFloorColor(device.name)}`}>

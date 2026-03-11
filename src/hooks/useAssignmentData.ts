@@ -146,9 +146,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 5. ASIGNACIONES (menu + menu_semana)
+        // 5. ASIGNACIONES Y CONFIGURACION
         // ═══════════════════════════════════════════════════════════
-        const [menuRes, menuSemanaRes] = await Promise.all([
+        const [menuRes, menuSemanaRes, configRes] = await Promise.all([
           supabase.from('menu')
             .select('*')
             .gte('fecha_asignacion', startOfMonth)
@@ -156,15 +156,32 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('menu_semana')
             .select('*')
             .gte('fecha_asignacion', startOfMonth)
-            .lte('fecha_asignacion', endOfMonth)
+            .lte('fecha_asignacion', endOfMonth),
+          supabase.from('configuracion_turnos')
+            .select('*')
+            .gte('fecha', startOfMonth)
+            .lte('fecha', endOfMonth)
         ]);
 
         const menuData = menuRes.data || [];
         const menuSemanaData = menuSemanaRes.data || [];
+        const configData = configRes.data || [];
 
-        // Build numero_grupo + tipo_organizacion maps from menu_semana
+        // Build numero_grupo map from menu_semana
         const grupoMap: Record<string, number | null> = {};
+        
+        // Build tipo_organizacion map from configuracion_turnos
         const orgTypeMap: Record<string, string> = {};
+        configData.forEach(cfg => {
+          if (!cfg.fecha) return;
+          const tipoTurno = turnoTypeMap[cfg.id_turno] || '';
+          if (!matchesTurnoFilter(tipoTurno)) return;
+          const [fy, fm, fd] = cfg.fecha.split('-');
+          if (fy === yFilt && fm === mmFilt) {
+            const uiDate = formatUiDate(fd, fm);
+            orgTypeMap[uiDate] = cfg.tipo_organizacion;
+          }
+        });
 
         menuSemanaData.forEach(ms => {
           if (!ms.fecha_asignacion) return;
@@ -172,12 +189,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           if (!matchesTurnoFilter(tipo)) return;
           const key = `${ms.id_agente}-${ms.fecha_asignacion}-${ms.id_dispositivo}`;
           grupoMap[key] = ms.numero_grupo;
-          // Store tipo_organizacion per date (from menu_semana)
-          const [fy, fm, fd] = ms.fecha_asignacion.split('-');
-            if (fy === yFilt && fm === mmFilt) {
-              const uiDate = formatUiDate(fd, fm);
-              if (ms.tipo_organizacion) orgTypeMap[uiDate] = ms.tipo_organizacion;
-            }
         });
         setTipoOrganizacionMap(orgTypeMap);
 

@@ -1488,6 +1488,32 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracion_turnos: {
+        Row: {
+          fecha: string
+          id_turno: number
+          tipo_organizacion: string
+        }
+        Insert: {
+          fecha: string
+          id_turno: number
+          tipo_organizacion?: string
+        }
+        Update: {
+          fecha?: string
+          id_turno?: number
+          tipo_organizacion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_config_turnos"
+            columns: ["id_turno"]
+            isOneToOne: false
+            referencedRelation: "turnos"
+            referencedColumns: ["id_turno"]
+          }
+        ]
+      }
       convocatoria: {
         Row: {
           estado: string | null
