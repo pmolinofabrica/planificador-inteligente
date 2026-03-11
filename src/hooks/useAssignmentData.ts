@@ -337,7 +337,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 const tipo = turnoTypeMap[row.id_turno] || '';
                 if (!matchesTurnoFilter(tipo)) return;
                 const [fy, fm, fd] = row.fecha.substring(0, 10).split('-');
-                const uiDate = `${fd}/${fm}`;
+                const uiDate = formatUiDate(fd, fm);
                 if (!newCalendarDb[uiDate]) newCalendarDb[uiDate] = {};
                 // Cumulative sum if multiple aperturas exist for the same device
                 const currentVal = newCalendarDb[uiDate][String(row.id_dispositivo)] || 0;
