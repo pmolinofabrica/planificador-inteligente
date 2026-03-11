@@ -15,7 +15,7 @@ interface ResidentSidebarProps {
 export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   selectedResident, setSelectedResident, data, pushUndo, year,
 }) => {
-  const { dbDevices, allResidentsDb, assignmentsDb, convocadosDb, isAgentAbsent, getAbsenceMotivo, isLoading, setIsLoading, refresh, turnoFilter, dateTurnoMap } = data;
+  const { dbDevices, allResidentsDb, assignmentsDb, convocadosDb, isAgentAbsent, getAbsenceMotivo, isLoading, setIsLoading, refresh, turnoFilter, dateTurnoMap, agentConvocatoriaMap, tipoOrganizacionMap } = data;
   const disp = dbDevices.find((d: any) => d.name === selectedResident.device);
   const deviceId = disp?.id;
   const date = selectedResident.date;
@@ -76,56 +76,113 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     if (isLoading) return;
     setIsLoading(true);
 
+    const convId = (agentConvocatoriaMap && agentConvocatoriaMap[date] && agentConvocatoriaMap[date][newResId]) || null;
+
     if (isApertura) {
-      // Apertura: use menu table
+      // ---------------- APERTURA ----------------
       const { data: snapOriginal } = await supabase.from('menu')
-        .select('id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion')
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB)
+        .select('id_menu, id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion')
+        .eq('id_agente', selectedResident.id)
+        .eq('id_dispositivo', Number(disp?.id))
+        .eq('fecha_asignacion', fechaDB)
+        .limit(1)
         .maybeSingle();
 
-      if (!snapOriginal) { alert("No se encontró la asignación original."); setIsLoading(false); return; }
+      if (!snapOriginal) { 
+        alert("No se encontró la asignación original para quitar."); 
+        setIsLoading(false); 
+        return; 
+      }
 
-      await supabase.from('menu').update({ id_dispositivo: 999 })
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
+      const { error: err1 } = await supabase.from('menu')
+        .update({ id_dispositivo: 999 })
+        .eq('id_menu', snapOriginal.id_menu);
+        
+      if (err1) { alert("Error al quitar original: " + err1.message); setIsLoading(false); return; }
 
-      const { data: filaNew } = await supabase.from('menu').select('*')
-        .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).maybeSingle();
+      const { data: filaNew } = await supabase.from('menu')
+        .select('id_menu')
+        .eq('id_agente', newResId)
+        .eq('fecha_asignacion', fechaDB)
+        .limit(1)
+        .maybeSingle();
 
       if (filaNew) {
-        await supabase.from('menu').update({ id_dispositivo: Number(disp?.id) })
-          .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB);
-        pushUndo({ snapshots: [snapOriginal, filaNew] });
+        const { error: err2 } = await supabase.from('menu')
+          .update({ id_dispositivo: Number(disp?.id) })
+          .eq('id_menu', filaNew.id_menu);
+        if (err2) { alert("Error al asignar nuevo: " + err2.message); }
       } else {
-        await supabase.from('menu').insert([{ id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: 0 }]);
-        pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true }] });
+        const payload: any = { 
+          id_agente: newResId, 
+          id_dispositivo: Number(disp?.id), 
+          fecha_asignacion: fechaDB, 
+          estado_ejecucion: 'planificado' 
+        };
+        if (convId) payload.id_convocatoria = convId;
+        
+        const { error: err3 } = await supabase.from('menu').insert([payload]);
+        if (err3) { alert("Error al insertar nuevo: " + err3.message); }
       }
+      pushUndo({ snapshots: [snapOriginal, filaNew || { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu' }] });
+      
     } else {
-      // Tarde/Mañana: use menu_semana table
-      const turnoId = dateTurnoMap[date] || 4;
-      const { data: snapOriginal } = await supabase.from('menu_semana')
-        .select('id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion, id_turno')
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId)
+      // ---------------- NON-APERTURA ----------------
+      const { data: snapOriginal, error: fetchErr } = await supabase.from('menu_semana')
+        .select('id_menu_semana, id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion, id_turno, numero_grupo')
+        .eq('id_agente', selectedResident.id)
+        .eq('id_dispositivo', Number(disp?.id))
+        .eq('fecha_asignacion', fechaDB)
+        .limit(1)
         .maybeSingle();
 
-      if (!snapOriginal) { alert("No se encontró la asignación original."); setIsLoading(false); return; }
+      if (fetchErr || !snapOriginal) { 
+        alert("No se encontró la asignación original para quitar."); 
+        setIsLoading(false); 
+        return; 
+      }
 
-      await supabase.from('menu_semana').update({ id_dispositivo: 999 })
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
+      const { error: err1 } = await supabase.from('menu_semana')
+        .update({ id_dispositivo: 999 })
+        .eq('id_menu_semana', snapOriginal.id_menu_semana);
+        
+      if (err1) { alert("Error al quitar original: " + err1.message); setIsLoading(false); return; }
 
-      const { data: filaNew } = await supabase.from('menu_semana').select('*')
-        .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId).maybeSingle();
+      const inheritedGroup = snapOriginal.numero_grupo;
+
+      const { data: filaNew } = await supabase.from('menu_semana')
+        .select('id_menu_semana')
+        .eq('id_agente', newResId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_turno', snapOriginal.id_turno) // use exact turno of original
+        .limit(1)
+        .maybeSingle();
 
       if (filaNew) {
-        await supabase.from('menu_semana').update({ id_dispositivo: Number(disp?.id) })
-          .eq('id_agente', newResId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
-        pushUndo({ snapshots: [snapOriginal, filaNew] });
+        const { error: err2 } = await supabase.from('menu_semana')
+          .update({ 
+            id_dispositivo: Number(disp?.id),
+            ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {})
+          })
+          .eq('id_menu_semana', filaNew.id_menu_semana);
+        if (err2) { alert("Error al asignar nuevo: " + err2.message); }
       } else {
-        await supabase.from('menu_semana').insert([{
-          id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB,
-          estado_ejecucion: 'planificado', id_convocatoria: 0, id_turno: turnoId
-        }]);
-        pushUndo({ snapshots: [snapOriginal, { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' }] });
+        const payload: any = {
+          id_agente: newResId, 
+          id_dispositivo: Number(disp?.id), 
+          fecha_asignacion: fechaDB,
+          estado_ejecucion: 'planificado', 
+          id_turno: snapOriginal.id_turno
+        };
+        if (convId) payload.id_convocatoria = convId;
+        if (inheritedGroup != null) payload.numero_grupo = inheritedGroup;
+        const orgType = tipoOrganizacionMap && tipoOrganizacionMap[date] ? tipoOrganizacionMap[date] : 'rotacion_completa';
+        payload.tipo_organizacion = orgType;
+        
+        const { error: err3 } = await supabase.from('menu_semana').insert([payload]);
+        if (err3) { alert("Error al insertar nuevo: " + err3.message); }
       }
+      pushUndo({ snapshots: [snapOriginal, filaNew || { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana', id_turno: snapOriginal.id_turno }] });
     }
     setSelectedResident(null);
     refresh();
