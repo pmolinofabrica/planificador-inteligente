@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, AlertTriangle } from 'lucide-react';
-import { getFloorColor, getScoreColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
 import { AperturaDevicesPanel } from './AperturaDevicesPanel';
@@ -205,22 +205,22 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                             }`}>
                               {res.name}
                             </span>
-                            {/* No-cap indicator */}
-                            {!isAbsent && (() => {
-                              const [dd, mm] = execDate.split('/');
-                              const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
-                              const caps = capsMap[String(res.id)] || {};
-                              const capDate = caps[String(device.id)];
-                              const isCapacitado = !!capDate && capDate <= fechaDB;
-                              if (!isCapacitado) {
-                                return (
-                                  <span className="text-[10px] text-red-600 font-bold flex items-center gap-1 mt-0.5">
-                                    <AlertTriangle className="w-3 h-3" /> Sin capacitación
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()}
+                             {/* No-cap indicator */}
+                             {!isAbsent && (() => {
+                               const [dd, mm] = execDate.split('/');
+                               const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+                               const resInfo = allResidentsDb.find((r: any) => r.id === res.id);
+                               const notCapStyle = getNotCapacitadoStyle(resInfo?.caps, String(device.id), fechaDB);
+                               
+                               if (notCapStyle) {
+                                 return (
+                                   <span className="text-[10px] text-red-600 font-bold flex items-center gap-1 mt-0.5 animate-pulse">
+                                     <AlertTriangle className="w-3 h-3" /> NO CAPACITADO
+                                   </span>
+                                 );
+                               }
+                               return null;
+                             })()}
                           </div>
                           <button
                             onClick={() => handleQuitar(res.id, device.id)}

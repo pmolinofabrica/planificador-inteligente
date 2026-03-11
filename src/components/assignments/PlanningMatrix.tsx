@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, Users, AlertCircle, Zap } from 'lucide-react';
-import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice } from '@/types/assignments';
 import { toast } from 'sonner';
@@ -331,11 +331,11 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       {!absent && (() => {
                                         const [dd, mm] = date.split('/');
                                         const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
-                                        const caps = capsMap[String(res.id)] || {};
-                                        const capDate = caps[String(device.id)];
-                                        const isCapacitado = !!capDate && capDate <= fechaDB;
-                                        if (!isCapacitado) {
-                                          return <span className="text-[8px] font-bold text-red-600 bg-red-50 border border-red-200 px-0.5 rounded leading-none" title="Sin capacitación para este dispositivo">⚠</span>;
+                                        const caps = capsMap[String(res.id)];
+                                        const notCapStyle = getNotCapacitadoStyle(caps, String(device.id), fechaDB);
+                                        
+                                        if (notCapStyle) {
+                                          return <span className={`${notCapStyle.text} text-[9px] px-1 font-bold animate-pulse`}>⚠️ SIN CAP</span>;
                                         }
                                         return null;
                                       })()}

@@ -125,3 +125,24 @@ export const dbDateToUI = (dbDate: string): string => {
   if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
   return dbDate;
 };
+
+/**
+ * Devuelve clases para indicar si un residente NO está capacitado para un dispositivo específico.
+ */
+export const getNotCapacitadoStyle = (
+  residentCaps: Record<string, string> | undefined, 
+  deviceId: string, 
+  fechaActual: string
+): { bg: string; text: string; border: string } | null => {
+  const capDate = residentCaps ? residentCaps[deviceId] : undefined;
+  const isCapacitado = !!capDate && capDate <= fechaActual;
+  
+  if (!isCapacitado) {
+    return {
+      bg: 'bg-red-50 text-red-700 border-red-300',
+      text: 'text-red-700',
+      border: 'border-2 border-red-400 border-dashed'
+    };
+  }
+  return null;
+};

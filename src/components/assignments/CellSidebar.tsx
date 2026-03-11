@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, AlertCircle, Moon, Lock } from 'lucide-react';
-import { getFloorColor, getScoreColor, computeRotationMetrics, getRepsColor } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedDevice, SelectedResident } from '@/types/assignments';
 
@@ -308,9 +308,17 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                 className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps)}`}>
                 <span className="flex items-center gap-1">
                   {res.name}
-                  {!isCapacitado && (
-                    <span className="text-[8px] font-bold text-red-600 bg-red-50 border border-red-200 px-0.5 rounded leading-none" title="Sin capacitación para este dispositivo">⚠</span>
-                  )}
+                  {/* No-cap indicator */}
+                  {(() => {
+                    const resInfo = allResidentsDb.find((r: any) => r.id === res.id);
+                    const [dd, mm] = selectedDate.split('/');
+                    const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+                    const notCapStyle = getNotCapacitadoStyle(resInfo?.caps, deviceId, fechaDB);
+                    if (notCapStyle) {
+                      return <span className="ml-1 text-[8px] text-red-600 bg-red-100 px-1 rounded font-bold animate-pulse">⚠️ SIN CAP</span>;
+                    }
+                    return null;
+                  })()}
                 </span>
                 <span className="text-[9px] font-mono opacity-70">{computeRotationMetrics(res.id, selectedDevice.id, data.assignmentsDb, data.dbDevices.length).localReps}×</span>
               </div>

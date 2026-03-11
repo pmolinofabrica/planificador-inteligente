@@ -189,6 +189,43 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   };
 
   const handleRemove = async () => {
+    const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'dispositivos fijos';
+    const isRotation = orgType.toLowerCase().includes('rotación') || orgType.toLowerCase().includes('rotacion');
+    const turnoId = dateTurnoMap[date] || 4;
+
+    if (!isApertura && isRotation) {
+      // Check if assigned to multiple devices
+      const { data: allDevs } = await supabase.from('menu_semana')
+        .select('id_dispositivo')
+        .eq('id_agente', selectedResident.id)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_turno', turnoId)
+        .not('id_dispositivo', 'eq', 999);
+      
+      const deviceCount = allDevs?.length || 0;
+      if (deviceCount > 1) {
+        const confirmed = confirm(`⚠️ ${selectedResident.name} está asignado a ${deviceCount} dispositivos.\n\n¿Desea quitarlo de TODOS los dispositivos?`);
+        if (!confirmed) return;
+        
+        setIsLoading(true);
+        const { error } = await supabase.from('menu_semana')
+          .update({ id_dispositivo: 999 })
+          .eq('id_agente', selectedResident.id)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_turno', turnoId);
+        
+        if (error) {
+          alert("Error: " + error.message);
+        } else {
+          pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: 999, estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: turnoId } });
+          setSelectedResident(null);
+          refresh();
+        }
+        setIsLoading(false);
+        return;
+      }
+    }
+
     if (!confirm(`¿Quitar a ${selectedResident.name}?`)) return;
     setIsLoading(true);
 
@@ -197,10 +234,9 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
       pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
     } else {
-      const turnoId = dateTurnoMap[date] || 4;
       console.log(`[handleRemove] menu_semana: agente=${selectedResident.id} dispositivo=${Number(disp?.id)} fecha=${fechaDB} turno=${turnoId}`);
 
-      // Fetch the specific row first to get its PK, avoiding turnoId fallback mismatch issues
+      // Fetch the specific row first to get its PK
       const { data: targetRow, error: fetchErr } = await supabase.from('menu_semana')
         .select('id_menu_semana, id_turno')
         .eq('id_agente', selectedResident.id)
@@ -222,8 +258,6 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         setIsLoading(false);
         return;
       }
-
-      console.log(`[handleRemove] Found row id_menu_semana=${targetRow.id_menu_semana} id_turno=${targetRow.id_turno}`);
 
       const { error: updateErr } = await supabase.from('menu_semana')
         .update({ id_dispositivo: 999 })
