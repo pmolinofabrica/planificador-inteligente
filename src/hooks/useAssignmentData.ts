@@ -339,9 +339,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 const [fy, fm, fd] = row.fecha.substring(0, 10).split('-');
                 const uiDate = formatUiDate(fd, fm);
                 if (!newCalendarDb[uiDate]) newCalendarDb[uiDate] = {};
-                // Cumulative sum if multiple aperturas exist for the same device
-                const currentVal = newCalendarDb[uiDate][String(row.id_dispositivo)] || 0;
-                newCalendarDb[uiDate][String(row.id_dispositivo)] = currentVal + (row.cupo_objetivo || 0);
+                // Take the cupo directly instead of cumulatively summing it
+                // to prevent duplicated shifts from inflating the matrix value
+                newCalendarDb[uiDate][String(row.id_dispositivo)] = row.cupo_objetivo || 0;
               });
             }
           } catch (e) {
