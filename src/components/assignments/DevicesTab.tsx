@@ -172,8 +172,8 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
         </div>
 
         {/* Devices Table */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-          <div className="overflow-x-auto custom-scrollbar">
+        <div className="bg-card rounded-2xl shadow-sm border border-border">
+          <div className="custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
@@ -181,11 +181,11 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                     Dispositivo
                   </th>
                   {activeDates.map((date: string) => (
-                    <th key={date} className="sticky top-0 bg-muted z-10 p-3 border-b border-r border-border font-bold text-xs text-center text-muted-foreground min-w-[80px]">
+                    <th key={date} className="sticky top-0 bg-muted z-20 p-3 border-b border-r border-border font-bold text-xs text-center text-muted-foreground min-w-[80px]">
                       {date}
                     </th>
                   ))}
-                  <th className="sticky top-0 bg-muted z-10 p-3 border-b border-border font-bold text-xs text-center text-muted-foreground min-w-[120px]">
+                  <th className="sticky top-0 bg-muted z-20 p-3 border-b border-border font-bold text-xs text-center text-muted-foreground min-w-[120px]">
                     Acciones
                   </th>
                 </tr>
@@ -226,7 +226,7 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                 </tr>
                 {dbDevices.map((device: any) => (
                   <tr key={device.id} className="hover:bg-accent/30 transition-colors group">
-                    <td className={`sticky left-0 px-4 py-3 border-b border-r border-border font-semibold text-xs z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] ${getFloorColor(device.name)}`}>
+                    <td className={`sticky left-0 bg-card px-4 py-3 border-b border-r border-border font-semibold text-xs z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] ${getFloorColor(device.name)}`}>
                       {device.name}
                     </td>
                     {activeDates.map((date: string) => {

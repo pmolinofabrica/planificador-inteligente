@@ -183,8 +183,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
         </div>
 
         {/* Matrix Table */}
-        <div className="bg-card rounded-2xl shadow-warm border border-border overflow-hidden">
-          <div className="overflow-x-auto custom-scrollbar">
+        <div className="bg-card rounded-2xl shadow-warm border border-border">
+          <div className="custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
@@ -211,7 +211,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       <th
                         key={d}
                         onClick={() => setSelectedDateFilter(selectedDateFilter === d ? null : d)}
-                        className={`sticky top-0 p-3 border-b border-r border-border font-bold text-xs text-center min-w-[130px] cursor-pointer transition-colors backdrop-blur-md z-10 ${
+                        className={`sticky top-0 p-3 border-b border-r border-border font-bold text-xs text-center min-w-[130px] cursor-pointer transition-colors backdrop-blur-md z-20 ${
                           selectedDateFilter === d ? 'bg-primary/20 ring-2 ring-primary/30' : 'bg-muted/95 hover:bg-accent'
                         }`}
                       >
@@ -271,7 +271,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                   <tr key={device.id} className="border-b border-border hover:bg-accent/30 transition-colors group">
                     <td
                       onClick={() => { setSelectedDevice(device); setSelectedResident(null); }}
-                      className={`px-4 py-3 border-r border-border cursor-pointer transition-colors whitespace-normal break-words text-xs ${getFloorColor(device.name)} ${
+                      className={`sticky left-0 bg-card z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] px-4 py-3 border-r border-border cursor-pointer transition-colors whitespace-normal break-words text-xs ${getFloorColor(device.name)} ${
                         selectedDevice?.id === device.id ? 'ring-2 ring-inset ring-primary font-bold' : 'font-semibold'
                       }`}
                     >
