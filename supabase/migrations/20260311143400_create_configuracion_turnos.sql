@@ -23,3 +23,8 @@ SELECT DISTINCT fecha_asignacion, id_turno, tipo_organizacion
 FROM public.menu_semana
 WHERE tipo_organizacion IS NOT NULL
 ON CONFLICT (fecha, id_turno) DO NOTHING;
+
+-- 4. Grant table privileges to API roles
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.configuracion_turnos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.configuracion_turnos TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.configuracion_turnos TO service_role;
