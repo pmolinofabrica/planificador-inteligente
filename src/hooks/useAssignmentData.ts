@@ -104,23 +104,19 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, allConvsRes] = await Promise.all([
+        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes] = await Promise.all([
           supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
-          supabase.from('convocatoria').select('id_convocatoria, id_agente, id_plani')
-            .eq('estado', 'vigente')
-            .limit(10000), // Note: we filter by planificacion links later
         ]);
 
         const capData = capsRep.data || [];
         const partsData = partsRes.data || [];
         const dispoCapData = dispoCapsRes.data || [];
         const convocadosMatriz = convocadosMatrizRes.data || [];
-        const convsData = allConvsRes.data || [];
         const planisData = allPlanisRes.data || [];
         const diasData = allDiasRes.data || [];
 
@@ -290,23 +286,32 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               });
 
               if (filteredPlaniIds.length > 0) {
-                const matchingConvs = convsData.filter(c => filteredPlaniIds.includes(c.id_plani));
-                matchingConvs.forEach(c => {
-                  const uiDate = planiToUiDate[c.id_plani];
-                  if (!uiDate) return;
+                // Fetch only for these planiIds to avoid hitting the 1000 row API limit
+                const { data: convsData, error: convErr } = await supabase.from('convocatoria')
+                  .select('id_convocatoria, id_agente, id_plani')
+                  .eq('estado', 'vigente')
+                  .in('id_plani', filteredPlaniIds);
+                
+                if (convErr) {
+                  console.error("Error fetching convocatoria:", convErr);
+                } else if (convsData) {
+                  convsData.forEach(c => {
+                    const uiDate = planiToUiDate[c.id_plani];
+                    if (!uiDate) return;
 
-                  if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
-                  // Don't overwrite if already set from menu rows
-                  if (!dateAgentConv[uiDate][c.id_agente]) {
-                    dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
-                  }
+                    if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
+                    // Don't overwrite if already set from menu rows
+                    if (!dateAgentConv[uiDate][c.id_agente]) {
+                      dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
+                    }
 
-                  if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-                  if (!convocadosList[uiDate].includes(c.id_agente)) {
-                    convocadosList[uiDate].push(c.id_agente);
-                    convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-                  }
-                });
+                    if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+                    if (!convocadosList[uiDate].includes(c.id_agente)) {
+                      convocadosList[uiDate].push(c.id_agente);
+                      convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+                    }
+                  });
+                }
               }
               setAgentConvocatoriaMap(dateAgentConv);
             } catch (e) {
