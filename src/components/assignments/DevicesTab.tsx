@@ -177,15 +177,15 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="sticky left-0 bg-muted p-3 border-b border-r border-border font-bold text-sm text-foreground min-w-[200px] z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                  <th className="sticky top-0 left-0 bg-muted p-3 border-b border-r border-border font-bold text-sm text-foreground min-w-[200px] z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     Dispositivo
                   </th>
                   {activeDates.map((date: string) => (
-                    <th key={date} className="p-3 border-b border-r border-border font-bold text-xs text-center text-muted-foreground min-w-[80px]">
+                    <th key={date} className="sticky top-0 bg-muted z-10 p-3 border-b border-r border-border font-bold text-xs text-center text-muted-foreground min-w-[80px]">
                       {date}
                     </th>
                   ))}
-                  <th className="p-3 border-b border-border font-bold text-xs text-center text-muted-foreground min-w-[120px]">
+                  <th className="sticky top-0 bg-muted z-10 p-3 border-b border-border font-bold text-xs text-center text-muted-foreground min-w-[120px]">
                     Acciones
                   </th>
                 </tr>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2 } from 'lucide-react';
+import { Calendar, Undo2, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
@@ -32,6 +33,7 @@ const Index = () => {
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
+  const { signOut } = useAuth();
 
   // Selection states
   const [selectedResident, setSelectedResident] = useState<SelectedResident | null>(null);
@@ -88,26 +90,36 @@ const Index = () => {
           </div>
 
           {/* Actions — desktop only inline, mobile collapsed */}
-          <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={() => {
+                  if (undoStack.length === 0) { alert("No hay acciones recientes para deshacer."); return; }
+                  handleUndo(data.setIsLoading);
+                }}
+                className={`font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 flex items-center gap-1.5
+                  ${undoStack.length > 0
+                    ? 'bg-card border-primary/30 text-primary hover:bg-accent'
+                    : 'bg-muted border-border text-muted-foreground cursor-not-allowed'
+                  }`}
+              >
+                <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
+              </button>
+              {isNonAperturaFilter && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
+                  <span className="text-xs font-bold text-foreground">{Object.values(data.tipoOrganizacionMap)[0] || 'Sin datos'}</span>
+                </div>
+              )}
+            </div>
+            
             <button
-              onClick={() => {
-                if (undoStack.length === 0) { alert("No hay acciones recientes para deshacer."); return; }
-                handleUndo(data.setIsLoading);
-              }}
-              className={`font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 flex items-center gap-1.5
-                ${undoStack.length > 0
-                  ? 'bg-card border-primary/30 text-primary hover:bg-accent'
-                  : 'bg-muted border-border text-muted-foreground cursor-not-allowed'
-                }`}
+              onClick={() => signOut()}
+              className="p-1.5 sm:p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors ml-1 sm:ml-2"
+              title="Cerrar sesión"
             >
-              <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
+              <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
-            {isNonAperturaFilter && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
-                <span className="text-xs font-bold text-foreground">{Object.values(data.tipoOrganizacionMap)[0] || 'Sin datos'}</span>
-              </div>
-            )}
           </div>
         </div>
 

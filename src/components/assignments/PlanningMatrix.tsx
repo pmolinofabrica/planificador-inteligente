@@ -188,7 +188,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="sticky left-0 bg-muted p-3 border-b border-r border-border font-bold text-sm text-foreground min-w-[200px] z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                  <th className="sticky top-0 left-0 bg-muted p-3 border-b border-r border-border font-bold text-sm text-foreground min-w-[200px] z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     Dispositivo
                   </th>
                   {activeDates.map((d: string) => {
@@ -211,8 +211,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       <th
                         key={d}
                         onClick={() => setSelectedDateFilter(selectedDateFilter === d ? null : d)}
-                        className={`p-3 border-b border-r border-border font-bold text-xs text-center min-w-[130px] cursor-pointer transition-colors ${
-                          selectedDateFilter === d ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-muted/50 hover:bg-accent'
+                        className={`sticky top-0 p-3 border-b border-r border-border font-bold text-xs text-center min-w-[130px] cursor-pointer transition-colors backdrop-blur-md z-10 ${
+                          selectedDateFilter === d ? 'bg-primary/20 ring-2 ring-primary/30' : 'bg-muted/95 hover:bg-accent'
                         }`}
                       >
                         <div className="flex flex-col items-center gap-1.5">
