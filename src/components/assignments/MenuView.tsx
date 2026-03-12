@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
@@ -8,22 +9,18 @@ import { VisitBlock } from './VisitBadge';
 interface MenuViewProps {
   data: any;
   year: string;
-  onLock?: (locked: boolean) => void;
   isLocked?: boolean;
+  onLock?: (locked: boolean) => void;
 }
-
-const UNLOCK_CODE = '2350';
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
-export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked = false }) => {
+export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
-  const [showUnlockInput, setShowUnlockInput] = useState(false);
-  const [unlockCode, setUnlockCode] = useState('');
 
   const currentDate = activeDates[selectedDateIdx] || activeDates[0] || '';
   const orgType = tipoOrganizacionMap[currentDate] || 'dispositivos fijos';
@@ -109,25 +106,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
   });
 
   const restingCount = (allResidentsDb?.length || 0) - convocadosCount;
-
-  const handleLockToggle = () => {
-    if (!isLocked) {
-      onLock?.(true);
-    } else {
-      setShowUnlockInput(true);
-      setUnlockCode('');
-    }
-  };
-
-  const handleUnlockSubmit = () => {
-    if (unlockCode === UNLOCK_CODE) {
-      onLock?.(false);
-      setShowUnlockInput(false);
-      setUnlockCode('');
-    } else {
-      setUnlockCode('');
-    }
-  };
 
   // Org type change removed — now handled in DevicesTab
 

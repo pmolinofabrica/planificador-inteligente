@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2, LogOut } from 'lucide-react';
+import { Calendar, Undo2, LogOut, Lock, Unlock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
@@ -25,11 +25,15 @@ const TURNO_FILTERS = [
 
 type TurnoFilter = typeof TURNO_FILTERS[number]['key'];
 
+const UNLOCK_CODE = '2350';
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentSchoolYearMonth);
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
   const [menuLocked, setMenuLocked] = useState(false);
+  const [showUnlockInput, setShowUnlockInput] = useState(false);
+  const [unlockCode, setUnlockCode] = useState('');
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
@@ -62,6 +66,25 @@ const Index = () => {
 
   const isNonAperturaFilter = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
+  const handleLockToggle = () => {
+    if (!menuLocked) {
+      setMenuLocked(true);
+    } else {
+      setShowUnlockInput(true);
+      setUnlockCode('');
+    }
+  };
+
+  const handleUnlockSubmit = () => {
+    if (unlockCode === UNLOCK_CODE) {
+      setMenuLocked(false);
+      setShowUnlockInput(false);
+      setUnlockCode('');
+    } else {
+      setUnlockCode('');
+    }
+  };
+
   // Determine which sidebar to show on the right
   const showResidentSidebar = !!selectedResident;
   const showCellSidebar = !selectedResident && !!selectedDevice && !!selectedDateFilter;
@@ -70,16 +93,51 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
-      {/* HEADER - hidden when menu is locked */}
-      {!(menuLocked && activeTab === 'menu') && (
+      {/* HEADER - conditionally show reduced header when locked */}
+      {menuLocked ? (
+        <header className="bg-card border-b border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex flex-col gap-2 sticky top-0 z-20 shadow-warm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight flex-1">
+              El Molino Fábrica Cultural
+            </h2>
+            <div className="flex items-center gap-2">
+              {showUnlockInput ? (
+                <div className="flex items-center gap-2 bg-card border border-border rounded-xl p-1 shadow-warm">
+                  <Lock className="w-4 h-4 text-muted-foreground ml-2" />
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={unlockCode}
+                    onChange={e => setUnlockCode(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleUnlockSubmit()}
+                    placeholder="Código"
+                    className="w-20 bg-transparent border-none outline-none text-sm font-bold placeholder:font-medium"
+                    autoFocus
+                  />
+                  <button onClick={handleUnlockSubmit} className="px-3 py-1 bg-primary text-primary-foreground rounded-md text-xs font-bold">OK</button>
+                  <button onClick={() => setShowUnlockInput(false)} className="px-2.5 py-1 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">✕</button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleLockToggle}
+                  className="p-1.5 sm:p-2 rounded-xl border-2 transition-all bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+                  title="Desbloquear vista"
+                >
+                  <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+      ) : (
       <header className="bg-card border-b border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex flex-col gap-2 sticky top-0 z-20 shadow-warm">
-        {/* Row 1: Logo + Title + Month selector */}
+        {/* Row 1: Logo + Title + Month selector + Lock */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="bg-primary p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl text-primary-foreground shadow-warm">
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <h1 className="text-base sm:text-xl font-bold text-foreground tracking-tight leading-tight">Asignaciones</h1>
+            <h1 className="text-base sm:text-xl font-bold text-foreground tracking-tight leading-tight hidden sm:block">Asignaciones</h1>
             <select
               className="bg-muted border border-border rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-bold text-foreground outline-none hover:bg-accent cursor-pointer"
               value={selectedMonth}
@@ -87,6 +145,13 @@ const Index = () => {
             >
               {MONTHS_LIST.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
+            <button
+              onClick={handleLockToggle}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+              title="Bloquear vista"
+            >
+              <Unlock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
           </div>
 
           {/* Actions — desktop only inline, mobile collapsed */}
