@@ -148,41 +148,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
             <div className="flex items-center gap-2 sm:gap-3">
               <div>
                 <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
-                
               </div>
             </div>
           )}
-          <button
-            onClick={handleLockToggle}
-            className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all flex-shrink-0 ${
-              isLocked
-                ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20'
-                : 'bg-muted border-border text-muted-foreground hover:bg-accent'
-            }`}
-            title={isLocked ? 'Desbloquear' : 'Bloquear vista'}
-          >
-            {isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />}
-          </button>
         </div>
-
-        {/* Unlock code input */}
-        {showUnlockInput && (
-          <div className="mb-3 flex items-center gap-2 bg-card border border-border rounded-xl p-2.5 sm:p-3 shadow-warm">
-            <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <input
-              type="password"
-              maxLength={4}
-              value={unlockCode}
-              onChange={e => setUnlockCode(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleUnlockSubmit()}
-              placeholder="Código"
-              className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm font-mono w-20 outline-none focus:ring-2 focus:ring-primary/30"
-              autoFocus
-            />
-            <button onClick={handleUnlockSubmit} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-bold">OK</button>
-            <button onClick={() => setShowUnlockInput(false)} className="px-2.5 py-1.5 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">✕</button>
-          </div>
-        )}
 
         {/* ── Date Selector ── */}
         <div className="flex items-center gap-2 sm:gap-3 mb-3 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
