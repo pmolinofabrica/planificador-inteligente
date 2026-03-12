@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
@@ -8,22 +9,18 @@ import { VisitBlock } from './VisitBadge';
 interface MenuViewProps {
   data: any;
   year: string;
-  onLock?: (locked: boolean) => void;
   isLocked?: boolean;
+  onLock?: (locked: boolean) => void;
 }
-
-const UNLOCK_CODE = '2350';
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
-export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked = false }) => {
+export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
-  const [showUnlockInput, setShowUnlockInput] = useState(false);
-  const [unlockCode, setUnlockCode] = useState('');
 
   const currentDate = activeDates[selectedDateIdx] || activeDates[0] || '';
   const orgType = tipoOrganizacionMap[currentDate] || 'dispositivos fijos';
@@ -110,25 +107,6 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
 
   const restingCount = (allResidentsDb?.length || 0) - convocadosCount;
 
-  const handleLockToggle = () => {
-    if (!isLocked) {
-      onLock?.(true);
-    } else {
-      setShowUnlockInput(true);
-      setUnlockCode('');
-    }
-  };
-
-  const handleUnlockSubmit = () => {
-    if (unlockCode === UNLOCK_CODE) {
-      onLock?.(false);
-      setShowUnlockInput(false);
-      setUnlockCode('');
-    } else {
-      setUnlockCode('');
-    }
-  };
-
   // Org type change removed — now handled in DevicesTab
 
   // Piso accent dot color using design tokens
@@ -170,41 +148,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, onLock, isLocked
             <div className="flex items-center gap-2 sm:gap-3">
               <div>
                 <h2 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight leading-tight">Menú del Día</h2>
-                
               </div>
             </div>
           )}
-          <button
-            onClick={handleLockToggle}
-            className={`p-2 sm:p-2.5 rounded-xl border-2 transition-all flex-shrink-0 ${
-              isLocked
-                ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20'
-                : 'bg-muted border-border text-muted-foreground hover:bg-accent'
-            }`}
-            title={isLocked ? 'Desbloquear' : 'Bloquear vista'}
-          >
-            {isLocked ? <Lock className="w-4 h-4 sm:w-5 sm:h-5" /> : <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />}
-          </button>
         </div>
-
-        {/* Unlock code input */}
-        {showUnlockInput && (
-          <div className="mb-3 flex items-center gap-2 bg-card border border-border rounded-xl p-2.5 sm:p-3 shadow-warm">
-            <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <input
-              type="password"
-              maxLength={4}
-              value={unlockCode}
-              onChange={e => setUnlockCode(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleUnlockSubmit()}
-              placeholder="Código"
-              className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm font-mono w-20 outline-none focus:ring-2 focus:ring-primary/30"
-              autoFocus
-            />
-            <button onClick={handleUnlockSubmit} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-bold">OK</button>
-            <button onClick={() => setShowUnlockInput(false)} className="px-2.5 py-1.5 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">✕</button>
-          </div>
-        )}
 
         {/* ── Date Selector ── */}
         <div className="flex items-center gap-2 sm:gap-3 mb-3 bg-card rounded-xl border border-border p-2.5 sm:p-3 shadow-warm">
