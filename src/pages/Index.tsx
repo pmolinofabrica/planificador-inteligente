@@ -69,6 +69,8 @@ const Index = () => {
   const handleLockToggle = () => {
     if (!menuLocked) {
       setMenuLocked(true);
+      setActiveTab('menu');
+      clearSelections();
     } else {
       setShowUnlockInput(true);
       setUnlockCode('');
