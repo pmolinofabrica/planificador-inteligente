@@ -479,39 +479,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      // PHASE 3: Emergency — place remaining convocados+capacitados somewhere (overflow)
-      const sinAsignar = agentesDisponibles.filter(
-        (r: { id_agente: number }) => !asignadosHoy.has(r.id_agente)
-      );
-      for (const r of sinAsignar) {
-        // Find any device where this agent is capacitado, pick best score
-        let bestDispo: { dispoId: number; score: number } | null = null;
-        for (const dispo of disposHoy) {
-          const fcap = capsPorAgente[r.id_agente]?.[dispo.id];
-          if (!fcap || fcap > fecha) continue;
-          // Penalize overflow: -200 per extra person above cupo
-          const overflow = Math.max(
-            0,
-            grilla[fecha][dispo.id].length - dispo.cupo
-          );
-          const score =
-            calcScore(r.id_agente, dispo.id, fecha) - 200 * overflow;
-          if (!bestDispo || score > bestDispo.score) {
-            bestDispo = { dispoId: dispo.id, score };
-          }
-        }
-        if (bestDispo) {
-          asignadosHoy.add(r.id_agente);
-          grilla[fecha][bestDispo.dispoId].push({
-            id: r.id_agente,
-            score: bestDispo.score,
-          });
-          historialRotacion[r.id_agente][bestDispo.dispoId] =
-            (historialRotacion[r.id_agente][bestDispo.dispoId] || 0) + 1;
-          cargaGlobal[r.id_agente] = (cargaGlobal[r.id_agente] || 0) + 1;
-        }
-        // If agent has no capacitación for any device today, they stay unassigned (P0/pool)
-      }
+      // PHASE 3: Eliminada a petición del usuario.
+      // Los agentes que no pudieron ser asignados en FASE 1 o 2 (porque los dispositivos
+      // a los que están capacitados ya llenaron su cupo) quedarán sin asignar
+      // y se insertarán luego como vacantes (dispositivo 999).
 
       const libresHoy = agentesDisponibles.filter(
         (r: { id_agente: number }) => !asignadosHoy.has(r.id_agente)
