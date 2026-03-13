@@ -120,13 +120,22 @@ const Index = () => {
                   <button onClick={() => setShowUnlockInput(false)} className="px-2.5 py-1 bg-muted text-muted-foreground rounded-md text-xs font-bold border border-border">✕</button>
                 </div>
               ) : (
-                <button
-                  onClick={handleLockToggle}
-                  className="p-1.5 sm:p-2 rounded-xl border-2 transition-all bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
-                  title="Desbloquear vista"
-                >
-                  <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleLockToggle}
+                    className="p-1.5 sm:p-2 rounded-xl border-2 transition-all bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20"
+                    title="Desbloquear vista"
+                  >
+                    <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                  <button
+                    onClick={() => signOut()}
+                    className="p-1.5 sm:p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
