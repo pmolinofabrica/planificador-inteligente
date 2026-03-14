@@ -42,8 +42,6 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
         data.setIsLoading(true);
         try {
           // Persist the new cupo to the database
-          const [d, mStr] = selectedVacant.date.split("/");
-          const fechaDB = `${data.year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
           const turnoId = data.dateTurnoMap[selectedVacant.date] || 1;
           const { error: calErr } = await supabase.from('calendario_dispositivos')
             .upsert({
