@@ -177,11 +177,24 @@ Deno.serve(async (req) => {
       capDispos[cd.id_cap].push(cd.id_dispositivo);
     }
 
-    // Path 1: Direct attendance
+    // Path 1: Direct attendance (traer a todos para ver quiénes asistieron y quiénes tienen falta explícita)
     const { data: partsData } = await supabase
       .from("capacitaciones_participantes")
-      .select("id_agente, id_cap, asistio")
-      .eq("asistio", true);
+      .select("id_agente, id_cap, asistio");
+
+    const inasistenciasCapacitacion: Record<number, Set<number>> = {}; // id_cap -> Set de id_agente que faltaron
+    const asistenciasCapacitacion: { id_agente: number; id_cap: number }[] = [];
+
+    for (const p of partsData || []) {
+      if (p.asistio === true) {
+        asistenciasCapacitacion.push(p);
+      } else if (p.asistio === false) {
+        if (!inasistenciasCapacitacion[p.id_cap]) {
+          inasistenciasCapacitacion[p.id_cap] = new Set();
+        }
+        inasistenciasCapacitacion[p.id_cap].add(p.id_agente);
+      }
+    }
 
     // Path 2: RPC convocados matriz
     const { data: convocadosMatriz } = await supabase.rpc(
@@ -203,7 +216,8 @@ Deno.serve(async (req) => {
       }
     };
 
-    for (const p of partsData || []) {
+    // Otorgar capacitaciones a quienes explícitamente asistieron
+    for (const p of asistenciasCapacitacion) {
       const cDate = capDates[p.id_cap];
       const dispos = capDispos[p.id_cap] || [];
       if (cDate) {
@@ -211,7 +225,11 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Otorgar capacitaciones a los de la matriz SÓLO si no tienen una falta explícita cargada
     for (const row of convocadosMatriz || []) {
+      // Si el agente tiene inasistencia explícita para esta capacitación, NO se la damos
+      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente)) continue;
+
       const cDate = capDates[row.id_cap];
       const dispos = capDispos[row.id_cap] || [];
       if (cDate) {
