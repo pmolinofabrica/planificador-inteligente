@@ -77,8 +77,20 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   const grupoCountMap: Record<string, Record<string, number>> = {};
   let path1Count = 0;
 
+  // Track explicit absences to prevent Path 2 from overriding them
+  const inasistenciasCapacitacion: Record<number, Set<number>> = {};
+
   partsData.forEach(p => {
+    if (p.asistio === false) {
+      if (!inasistenciasCapacitacion[p.id_cap]) {
+        inasistenciasCapacitacion[p.id_cap] = new Set();
+      }
+      inasistenciasCapacitacion[p.id_cap].add(p.id_agente);
+      return;
+    }
+
     if (p.asistio !== true) return;
+
     const cId = p.id_cap;
     const cDate = capDates[cId];
     const dispos = capDispos[cId] || [];
@@ -103,6 +115,9 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
 
   if (convocadosMatriz && convocadosMatriz.length > 0) {
     convocadosMatriz.forEach(row => {
+      // If the agent has an explicit absence for this cap, skip granting skills
+      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente)) return;
+
       const cDate = capDates[row.id_cap];
       const dispos = capDispos[row.id_cap] || [];
       if (cDate && dispos.length > 0) {
