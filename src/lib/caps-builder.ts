@@ -17,6 +17,8 @@ interface DiaRow { id_dia: number; fecha: string }
 interface ResiRow { id_agente: number; nombre: string; apellido: string }
 interface ConvocadosMatrizRow { id_cap: number; id_agente: number }
 
+interface InasistenciaRow { id_agente: number; fecha_inasistencia: string }
+
 export interface CapsBuilderInput {
   capData: CapRow[];
   partsData: PartRow[];
@@ -24,6 +26,7 @@ export interface CapsBuilderInput {
   diasData: DiaRow[];
   resiData: ResiRow[];
   convocadosMatriz?: ConvocadosMatrizRow[];
+  inasistenciasRaw?: InasistenciaRow[];
 }
 
 export interface CapsBuilderOutput {
@@ -32,7 +35,7 @@ export interface CapsBuilderOutput {
 }
 
 export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
-  const { capData, partsData, dispoData, diasData, resiData, convocadosMatriz } = input;
+  const { capData, partsData, dispoData, diasData, resiData, convocadosMatriz, inasistenciasRaw } = input;
 
   // ── Step 1: Build lookup dictionaries ──────────────────────────────
   const diasDict: Record<number, string> = {};
@@ -77,10 +80,36 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   const grupoCountMap: Record<string, Record<string, number>> = {};
   let path1Count = 0;
 
+  // Create a fast lookup for general absences: { dateString -> Set(agentIds) }
+  const inasistenciasGenerales: Record<string, Set<number>> = {};
+  (inasistenciasRaw || []).forEach(row => {
+    if (!row.fecha_inasistencia) return;
+    if (!inasistenciasGenerales[row.fecha_inasistencia]) {
+      inasistenciasGenerales[row.fecha_inasistencia] = new Set();
+    }
+    inasistenciasGenerales[row.fecha_inasistencia].add(row.id_agente);
+  });
+
+  // Track explicit absences to prevent Path 2 from overriding them
+  const inasistenciasCapacitacion: Record<number, Set<number>> = {};
+
   partsData.forEach(p => {
-    if (p.asistio !== true) return;
     const cId = p.id_cap;
     const cDate = capDates[cId];
+
+    // Check general absence on the date of the training
+    const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(p.id_agente);
+
+    if (p.asistio === false || hasGeneralAbsence) {
+      if (!inasistenciasCapacitacion[p.id_cap]) {
+        inasistenciasCapacitacion[p.id_cap] = new Set();
+      }
+      inasistenciasCapacitacion[p.id_cap].add(p.id_agente);
+      return;
+    }
+
+    // Only grant if asistio explicitly (we only give it to attendees here)
+    if (p.asistio !== true) return;
     const dispos = capDispos[cId] || [];
     if (capGroups[cId]) {
       const agId = String(p.id_agente);
@@ -104,6 +133,11 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
   if (convocadosMatriz && convocadosMatriz.length > 0) {
     convocadosMatriz.forEach(row => {
       const cDate = capDates[row.id_cap];
+      const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(row.id_agente);
+
+      // If the agent has an explicit absence for this cap OR a general absence for the date, skip
+      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente) || hasGeneralAbsence) return;
+
       const dispos = capDispos[row.id_cap] || [];
       if (cDate && dispos.length > 0) {
         dispos.forEach(dId => {

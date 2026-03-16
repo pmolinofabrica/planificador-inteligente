@@ -182,17 +182,34 @@ Deno.serve(async (req) => {
       .from("capacitaciones_participantes")
       .select("id_agente, id_cap, asistio");
 
+    // Path 1.5: Inasistencias Generales (Cruzar con la tabla principal de inasistencias)
+    const { data: inasData } = await supabase
+      .from("inasistencias")
+      .select("id_agente, fecha_inasistencia");
+
+    const inasistenciasGenerales: Record<string, Set<number>> = {}; // fecha -> Set(id_agente)
+    for (const inas of inasData || []) {
+      if (!inas.fecha_inasistencia) continue;
+      if (!inasistenciasGenerales[inas.fecha_inasistencia]) {
+        inasistenciasGenerales[inas.fecha_inasistencia] = new Set();
+      }
+      inasistenciasGenerales[inas.fecha_inasistencia].add(inas.id_agente);
+    }
+
     const inasistenciasCapacitacion: Record<number, Set<number>> = {}; // id_cap -> Set de id_agente que faltaron
     const asistenciasCapacitacion: { id_agente: number; id_cap: number }[] = [];
 
     for (const p of partsData || []) {
-      if (p.asistio === true) {
-        asistenciasCapacitacion.push(p);
-      } else if (p.asistio === false) {
+      const cDate = capDates[p.id_cap];
+      const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(p.id_agente);
+
+      if (p.asistio === false || hasGeneralAbsence) {
         if (!inasistenciasCapacitacion[p.id_cap]) {
           inasistenciasCapacitacion[p.id_cap] = new Set();
         }
         inasistenciasCapacitacion[p.id_cap].add(p.id_agente);
+      } else if (p.asistio === true) {
+        asistenciasCapacitacion.push(p);
       }
     }
 
@@ -227,10 +244,12 @@ Deno.serve(async (req) => {
 
     // Otorgar capacitaciones a los de la matriz SÓLO si no tienen una falta explícita cargada
     for (const row of convocadosMatriz || []) {
-      // Si el agente tiene inasistencia explícita para esta capacitación, NO se la damos
-      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente)) continue;
-
       const cDate = capDates[row.id_cap];
+      const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(row.id_agente);
+
+      // Si el agente tiene inasistencia explícita para esta capacitación o inasistencia general ese día, NO se la damos
+      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente) || hasGeneralAbsence) continue;
+
       const dispos = capDispos[row.id_cap] || [];
       if (cDate) {
         for (const dId of dispos) assignCap(row.id_agente, dId, cDate);
