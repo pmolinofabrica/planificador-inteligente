@@ -98,19 +98,20 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         if (resiData) setDbResidents(resiData);
 
         // ═══════════════════════════════════════════════════════════
-        // 3. CAPACITACIONES — rebuilt from scratch
+        // 3. CAPACITACIONES E INASISTENCIAS
         // ═══════════════════════════════════════════════════════════
         // Filter convocatorias by year to avoid 1000-row Supabase limit
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes] = await Promise.all([
+        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
           supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
+          supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').limit(5000),
         ]);
 
         const capData = capsRep.data || [];
@@ -119,6 +120,25 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const convocadosMatriz = convocadosMatrizRes.data || [];
         const planisData = allPlanisRes.data || [];
         const diasData = allDiasRes.data || [];
+        const inasistenciasRaw = inasRes.data || [];
+
+        // Pre-build inasistencias map for UI usage later
+        const inasMap: InasistenciasMap = {};
+        inasistenciasRaw.forEach(row => {
+          if (!row.fecha_inasistencia) return;
+          const parts = row.fecha_inasistencia.split('-');
+          if (parts.length === 3) {
+            const uiDate = `${parts[2]}/${parts[1]}`;
+            if (!inasMap[uiDate]) inasMap[uiDate] = [];
+            if (!inasMap[uiDate].some(x => x.id_agente === row.id_agente)) {
+              inasMap[uiDate].push({
+                id_agente: row.id_agente,
+                motivo: row.motivo || 'Sin justificar'
+              });
+            }
+          }
+        });
+        setInasistenciasDb(inasMap);
 
         console.log(`[DataLoad] caps=${capData.length} parts=${partsData.length} capDispos=${dispoCapData.length} convocadosMatriz=${convocadosMatriz.length} planis=${planisData.length} dias=${diasData.length} residents=${resiData?.length || 0}`);
 
@@ -131,6 +151,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             diasData,
             resiData,
             convocadosMatriz,
+            inasistenciasRaw,
           });
           setAgentGroups(groups);
           setAllResidentsDb(Object.values(residentsMap));
@@ -423,28 +444,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 9. INASISTENCIAS
         // ═══════════════════════════════════════════════════════════
-        try {
-          const { data: inasData } = await supabase
-            .from('inasistencias')
-            .select('id_agente, fecha_inasistencia, motivo');
-          if (inasData) {
-            const inasMap: InasistenciasMap = {};
-            inasData.forEach(row => {
-              if (!row.fecha_inasistencia) return;
-              const parts = row.fecha_inasistencia.split('-');
-              if (parts.length === 3) {
-                const uiDate = `${parts[2]}/${parts[1]}`;
-                if (!inasMap[uiDate]) inasMap[uiDate] = [];
-                if (!inasMap[uiDate].some(x => x.id_agente === row.id_agente)) {
-                  inasMap[uiDate].push({ id_agente: row.id_agente, motivo: row.motivo || 'otro' });
-                }
-              }
-            });
-            setInasistenciasDb(inasMap);
-          }
-        } catch (e) {
-          console.error('Error inasistencias:', e);
-        }
+        // (Inasistencias were already loaded in step 3 to feed caps-builder)
 
         // ═══════════════════════════════════════════════════════════
         // 10. VISITAS GRUPALES (all turnos — informational for apertura)
