@@ -16,7 +16,7 @@ interface MenuViewProps {
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
-  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
+  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
@@ -83,19 +83,22 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
   });
   const totalVacant = totalCupos - totalAssigned;
 
-  const absentAssigned: { name: string; device: string }[] = [];
+  const absentAssigned: { name: string; device: string, reason: string }[] = [];
   Object.entries(dateAssignments).forEach(([devId, arr]: [string, any]) => {
     const devObj = dbDevices.find((dd: any) => dd.id === devId);
     arr.forEach((r: any) => {
       if (isAgentAbsent(r.id, currentDate)) {
-        absentAssigned.push({ name: r.name, device: devObj?.name || devId });
+        absentAssigned.push({ name: r.name, device: devObj?.name || devId, reason: 'Ausente' });
+      } else if (isAgentCanceled && isAgentCanceled(r.id, currentDate)) {
+        absentAssigned.push({ name: r.name, device: devObj?.name || devId, reason: 'Cancelada' });
       }
     });
   });
 
   const freeConvocados = convocados.filter((id: number) => !assignedIds.has(id));
-  const absentFreeIds = freeConvocados.filter((id: number) => isAgentAbsent(id, currentDate));
-  const actuallyFree = freeConvocados.filter((id: number) => !isAgentAbsent(id, currentDate));
+  // absent/canceled are not actually free
+  const absentFreeIds = freeConvocados.filter((id: number) => isAgentAbsent(id, currentDate) || (isAgentCanceled && isAgentCanceled(id, currentDate)));
+  const actuallyFree = freeConvocados.filter((id: number) => !isAgentAbsent(id, currentDate) && !(isAgentCanceled && isAgentCanceled(id, currentDate)));
   const freeConvocadosNames = actuallyFree.map((id: number) => {
     const res = allResidentsDb?.find((r: any) => r.id === id);
     return res ? res.name : `#${id}`;
@@ -301,18 +304,20 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                             <div key={gNum} className="flex-1 min-w-0 space-y-0.5">
                               {groupAssignments.map((res, i) => {
                                 const absent = isAgentAbsent(res.id, currentDate);
+                                const canceled = isAgentCanceled && isAgentCanceled(res.id, currentDate);
+                                const isUnavailable = absent || canceled;
                                 return (
                                   <div key={i} className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md border text-[10px] sm:text-xs ${
-                                    absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                                    isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
                               <span className={`font-bold truncate ${
-                                      absent ? 'line-through text-muted-foreground'
+                                      isUnavailable ? 'line-through text-muted-foreground'
                                       : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
                                       : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                       : ''
                                     }`}>
-                                       {absent && '🚫 '}{res.name}
+                                       {absent ? '🚫 ' : canceled ? '❌ ' : ''}{res.name}
                                      </span>
                                   </div>
                                 );
@@ -325,18 +330,20 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                       <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
                         {assignments.map((res, i) => {
                           const absent = isAgentAbsent(res.id, currentDate);
+                          const canceled = isAgentCanceled && isAgentCanceled(res.id, currentDate);
+                          const isUnavailable = absent || canceled;
                           const group = res.numero_grupo;
                           return (
                             <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
-                              absent ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                              isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                             }`}>
                               <span className={`font-bold truncate ${
-                                absent ? 'line-through text-muted-foreground'
+                                isUnavailable ? 'line-through text-muted-foreground'
                                 : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
                                 : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                 : ''
                               }`}>
-                                {absent && '🚫 '}{res.name}
+                                {absent ? '🚫 ' : canceled ? '❌ ' : ''}{res.name}
                               </span>
                               <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
                                 {group != null && (
