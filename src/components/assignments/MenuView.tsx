@@ -15,8 +15,18 @@ interface MenuViewProps {
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
+// We read banners from the public/banners folder. The user must name their files banner1.jpg, banner2.jpg...
+const piso4Banners = [
+  '/banners/banner1.jpg',
+  '/banners/banner2.jpg',
+  '/banners/banner3.jpg',
+  '/banners/banner4.jpg'
+];
+
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
+
+  const [bannerIdx, setBannerIdx] = useState(0);
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
@@ -266,10 +276,36 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
         {Object.entries(pisoGroups).sort(([a], [b]) => Number(a) - Number(b)).map(([piso, devices]) => (
           <div key={piso} className={`mb-4 sm:mb-6 rounded-xl border-2 overflow-hidden ${pisoBorder(Number(piso))}`}>
             {/* Piso header */}
-            <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border/30 flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${pisoAccent(Number(piso))}`} />
-              <span className="font-black text-xs sm:text-sm tracking-wide">{pisoNames[Number(piso)] || `Piso ${piso}`}</span>
-            </div>
+            {Number(piso) === 4 ? (
+              <div className="relative w-full h-24 sm:h-32 border-b border-border/30 bg-muted/30 overflow-hidden flex items-center justify-between group">
+                <img
+                  src={piso4Banners[bannerIdx]}
+                  alt="Banner Piso 4"
+                  className="absolute inset-0 w-full h-full object-cover object-center opacity-90 transition-opacity"
+                  onError={(e) => {
+                    // Fallback visual if the user hasn't uploaded the image yet
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    (e.target as HTMLImageElement).parentElement!.classList.add('bg-stone-200', 'dark:bg-stone-800');
+                    (e.target as HTMLImageElement).parentElement!.innerHTML += '<div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-stone-400">Subir imagen: public' + piso4Banners[bannerIdx] + '</div>';
+                  }}
+                />
+
+                <div className="relative z-10 w-full flex justify-end px-3 sm:px-4">
+                  <button
+                    onClick={() => setBannerIdx((prev) => (prev + 1) % piso4Banners.length)}
+                    title="Cambiar diseño del banner"
+                    className="p-1.5 sm:p-2 rounded-md bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition-colors text-xs font-bold opacity-0 group-hover:opacity-100 shadow-sm"
+                  >
+                    ✨ Rotar Imagen
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border/30 flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${pisoAccent(Number(piso))}`} />
+                <span className="font-black text-xs sm:text-sm tracking-wide">{pisoNames[Number(piso)] || `Piso ${piso}`}</span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 p-2 sm:p-3">
               {(devices as any[]).map((dev: any) => {
