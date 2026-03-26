@@ -27,6 +27,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [dateTurnoMap, setDateTurnoMap] = useState<Record<string, number>>({});
   const [inasistenciasDb, setInasistenciasDb] = useState<InasistenciasMap>({});
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
+  const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
@@ -219,6 +220,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           const convocadosList: ConvocadosMap = {};
           const nameDict: Record<number, string> = {};
           const dateAgentConv: Record<string, Record<number, number>> = {};
+          const dateAgentConvStatus: Record<string, Record<number, string>> = {};
           
           resiData.forEach(r => nameDict[r.id_agente] = `${r.apellido} ${r.nombre}`);
 
@@ -319,9 +321,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
               if (filteredPlaniIds.length > 0) {
                 // Fetch only for these planiIds to avoid hitting the 1000 row API limit
+                // Notice we removed .eq('estado', 'vigente') so we can also track 'cancelada'
                 const { data: convsData, error: convErr } = await supabase.from('convocatoria')
-                  .select('id_convocatoria, id_agente, id_plani')
-                  .eq('estado', 'vigente')
+                  .select('id_convocatoria, id_agente, id_plani, estado')
                   .in('id_plani', filteredPlaniIds);
                 
                 if (convErr) {
@@ -332,20 +334,29 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                     if (!uiDate) return;
 
                     if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
-                    // Don't overwrite if already set from menu rows
+                    if (!dateAgentConvStatus[uiDate]) dateAgentConvStatus[uiDate] = {};
+
+                    // Save id_convocatoria so we can reference it, even if canceled (we'll filter visually)
                     if (!dateAgentConv[uiDate][c.id_agente]) {
                       dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
                     }
 
-                    if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-                    if (!convocadosList[uiDate].includes(c.id_agente)) {
-                      convocadosList[uiDate].push(c.id_agente);
-                      convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+                    // Track status
+                    dateAgentConvStatus[uiDate][c.id_agente] = c.estado || 'vigente';
+
+                    // Only count them as "active" in the UI pool if they are actually vigente
+                    if (c.estado === 'vigente') {
+                      if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+                      if (!convocadosList[uiDate].includes(c.id_agente)) {
+                        convocadosList[uiDate].push(c.id_agente);
+                        convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+                      }
                     }
                   });
                 }
               }
               setAgentConvocatoriaMap(dateAgentConv);
+              setAgentConvocatoriaStatusMap(dateAgentConvStatus);
             } catch (e) {
               console.error("Error cargando convocatoria:", e);
             }
@@ -511,6 +522,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     return (inasistenciasDb[uiDate] || []).some(x => x.id_agente === agentId);
   }, [inasistenciasDb]);
 
+  const isAgentCanceled = useCallback((agentId: number, uiDate: string): boolean => {
+    return agentConvocatoriaStatusMap[uiDate]?.[agentId] === 'cancelada';
+  }, [agentConvocatoriaStatusMap]);
+
   const getAbsenceMotivo = useCallback((agentId: number, uiDate: string): string => {
     const found = (inasistenciasDb[uiDate] || []).find(x => x.id_agente === agentId);
     return found?.motivo || '';
@@ -521,9 +536,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     agentGroups, calendarDb, setCalendarDb, convocadosCountDb,
     convocadosDb, isLoading, setIsLoading, activeDates,
     dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
+    agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     visitasByDate,
-    refresh, isAgentAbsent, getAbsenceMotivo, getMonthParts,
+    refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };
 }

@@ -19,7 +19,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   selectedDevice, selectedDate, setSelectedDevice, setSelectedDateFilter,
   setSelectedResident, data, pushUndo, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, tipoOrganizacionMap } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isAgentCanceled, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, tipoOrganizacionMap } = data;
   const deviceId = selectedDevice.id;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
   const isApertura = turnoFilter === 'apertura';
@@ -40,7 +40,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   const currentAssignments = assignmentsDb[selectedDate]?.[deviceId] || [];
   const currentIds = new Set(currentAssignments.map((a: any) => a.id));
 
-  type AltItem = { id: number; name: string; reason: string; isBusy: boolean; isAbsent: boolean };
+  type AltItem = { id: number; name: string; reason: string; isBusy: boolean; isAbsent: boolean; isCanceled: boolean };
   const tier1: AltItem[] = []; // convocado + capacitado
   const tier2: AltItem[] = []; // convocado + no capacitado
   const tier3: AltItem[] = []; // descanso + capacitado
@@ -54,18 +54,20 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     const currentLocation = occupancies[res.id];
     const isBusy = !!currentLocation;
     const isAbsent = isAgentAbsent(res.id, selectedDate);
+    const isCanceled = isAgentCanceled && isAgentCanceled(res.id, selectedDate);
 
     const capInfo = capDate ? ` (Cap: ${capDate})` : '';
     let reason = '';
     if (isAbsent) reason = '🚫 Inasistente';
+    else if (isCanceled) reason = '❌ Convocatoria Cancelada';
     else if (isBusy && isConvocado && isApertura) reason = `🔄 ${currentLocation}`;
     else if (isBusy) reason = isRotation ? `🔄 ${currentLocation}` : `🔒 ${currentLocation}`;
     else reason = isConvocado ? 'Libre' : 'Descanso';
     reason += capInfo;
 
     // In rotation modes OR Apertura convocados, busy residents CAN be transferred
-    const effectivelyBusy = isAbsent || (isBusy && !isRotation && !(isConvocado && isApertura));
-    const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: effectivelyBusy, isAbsent };
+    const effectivelyBusy = isAbsent || isCanceled || (isBusy && !isRotation && !(isConvocado && isApertura));
+    const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: effectivelyBusy, isAbsent, isCanceled };
 
     if (isConvocado && isCapacitado) tier1.push(alt);
     else if (isConvocado && !isCapacitado) tier2.push(alt);
@@ -258,11 +260,11 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   : 'border-emerald-200 bg-emerald-50 hover:border-emerald-400 cursor-pointer'
               }`}>
               <div>
-                <div className={`font-bold text-sm ${alt.isAbsent ? 'line-through text-stone-400' : ''}`}>{alt.name}</div>
+                <div className={`font-bold text-sm ${alt.isAbsent || alt.isCanceled ? 'line-through text-stone-400' : ''}`}>{alt.name}</div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
               {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20">
-                {alt.isAbsent ? '🚫' : '🔒'}
+                {alt.isAbsent ? '🚫' : alt.isCanceled ? '❌' : '🔒'}
               </span>}
             </button>
           ))}
