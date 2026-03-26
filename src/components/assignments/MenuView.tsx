@@ -15,12 +15,12 @@ interface MenuViewProps {
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
 
-// We read banners from the public/banners folder. The user must name their files banner1.jpg, banner2.jpg...
+// We read banners from the public/banners folder. Default is PNG but falls back to JPG.
 const piso4Banners = [
-  '/banners/banner1.jpg',
-  '/banners/banner2.jpg',
-  '/banners/banner3.jpg',
-  '/banners/banner4.jpg'
+  '/banners/banner1',
+  '/banners/banner2',
+  '/banners/banner3',
+  '/banners/banner4'
 ];
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
@@ -279,14 +279,26 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
             {Number(piso) === 4 ? (
               <div className="relative w-full h-24 sm:h-32 border-b border-border/30 bg-muted/30 overflow-hidden flex items-center justify-between group">
                 <img
-                  src={piso4Banners[bannerIdx]}
+                  src={piso4Banners[bannerIdx] + '.png'}
                   alt="Banner Piso 4"
                   className="absolute inset-0 w-full h-full object-cover object-center opacity-90 transition-opacity"
                   onError={(e) => {
-                    // Fallback visual if the user hasn't uploaded the image yet
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    (e.target as HTMLImageElement).parentElement!.classList.add('bg-stone-200', 'dark:bg-stone-800');
-                    (e.target as HTMLImageElement).parentElement!.innerHTML += '<div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-stone-400">Subir imagen: public' + piso4Banners[bannerIdx] + '</div>';
+                    const target = e.target as HTMLImageElement;
+                    if (target.src.endsWith('.png')) {
+                      // If PNG failed, try JPG
+                      target.src = piso4Banners[bannerIdx] + '.jpg';
+                    } else if (target.src.endsWith('.jpg')) {
+                      // If JPG also failed, try WEBP
+                      target.src = piso4Banners[bannerIdx] + '.webp';
+                    } else {
+                      // If all failed, show the fallback text
+                      target.style.display = 'none';
+                      target.parentElement!.classList.add('bg-stone-200', 'dark:bg-stone-800');
+                      const msgDiv = document.createElement('div');
+                      msgDiv.className = 'absolute inset-0 flex items-center justify-center text-[10px] sm:text-xs font-bold text-stone-400 text-center px-4';
+                      msgDiv.innerText = `Sube tus imágenes como public${piso4Banners[bannerIdx]}.jpg (o .png)`;
+                      target.parentElement!.appendChild(msgDiv);
+                    }
                   }}
                 />
 
