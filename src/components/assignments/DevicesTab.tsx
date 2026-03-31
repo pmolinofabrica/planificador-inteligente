@@ -76,7 +76,15 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
       Object.entries(calendarDb).forEach(([strDate, deviceMap]: [string, any]) => {
         const [d, mStr] = strDate.split("/");
         const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        const turnoId = dateTurnoMap[strDate] || 1;
+
+        // Ensure we fall back to the selected turnoFilter if dateTurnoMap fails
+        let defaultTurnoId = 1; // Apertura - 4 by default?
+        if (turnoFilter === 'apertura') defaultTurnoId = 45;
+        if (turnoFilter === 'manana') defaultTurnoId = 3;
+        if (turnoFilter === 'tarde') defaultTurnoId = 4;
+
+        const turnoId = dateTurnoMap[strDate] || defaultTurnoId;
+
         Object.entries(deviceMap).forEach(([devId, cupo]: [string, any]) => {
           payload.push({
             id_dispositivo: Number(devId),
