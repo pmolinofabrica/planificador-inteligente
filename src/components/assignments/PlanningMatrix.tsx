@@ -152,31 +152,31 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6">
           <div>
-            <h2 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-primary" />
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2.5">
+              <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               Matriz de Planificación
             </h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {isApertura && (
               <button
                 onClick={() => handleRunEngine()}
                 disabled={isRunningEngine}
-                className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 font-bold px-3 py-2 rounded-xl transition-colors text-xs flex items-center gap-2 disabled:opacity-50"
+                className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 font-bold px-2.5 py-1.5 rounded-lg transition-colors text-[11px] sm:text-xs flex items-center gap-1.5 disabled:opacity-50"
               >
-                <Zap className="w-3.5 h-3.5" />
+                <Zap className="w-3 h-3" />
                 {isRunningEngine ? 'Ejecutando...' : 'Ejecutar Motor'}
               </button>
             )}
             <button
               onClick={() => setShowVacantsSidebar(!showVacantsSidebar)}
-              className="bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 font-bold px-4 py-2 rounded-xl transition-colors text-sm flex items-center gap-2"
+              className="bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 font-bold px-2.5 py-1.5 rounded-lg transition-colors text-[11px] sm:text-xs flex items-center gap-1.5"
             >
-              <AlertCircle className="w-4 h-4" />
+              <AlertCircle className="w-3 h-3" />
               Ver Vacantes / Sin Asignar
             </button>
           </div>
