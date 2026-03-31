@@ -65,7 +65,9 @@ Deno.serve(async (req) => {
 
     const [month, year] = mes_objetivo.split("-");
     const fechaInicio = `${year}-${month}-01`;
-    const fechaFin = `${year}-${month}-31`;
+    // PostgreSQL strict validation will reject '2026-04-31', so we must compute the exact last day
+    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+    const fechaFin = `${year}-${month}-${lastDay}`;
 
     const log: string[] = [];
     const addLog = (msg: string) => {
