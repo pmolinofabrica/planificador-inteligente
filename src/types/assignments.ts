@@ -75,7 +75,9 @@ export type ConvocadosMap = Record<string, number[]>;
 export type InasistenciasMap = Record<string, InasistenciaEntry[]>;
 export type VisitasByDateMap = Record<string, VisitaInfo[]>;
 
-export const MONTHS = ["Febrero 2026", "Marzo 2026", "Abril 2026"];
+import { generateSchoolYearMonths } from "@/utils/dateUtils";
+
+export const MONTHS = generateSchoolYearMonths();
 
 export const MONTH_NAMES: Record<string, string> = {
   "Enero": "01", "Febrero": "02", "Marzo": "03", "Abril": "04",

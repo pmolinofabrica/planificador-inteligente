@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertCircle, ArrowRightLeft } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, ArrowRightLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import { getPisoBadgeColor } from '@/lib/floor-utils';
 import type { SelectedVacant, SelectedDevice, SelectedResident } from '@/types/assignments';
 
@@ -17,6 +17,17 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
   data, selectedVacant, setSelectedVacant, setSelectedDevice, setSelectedResident, setShowVacantsSidebar, year,
 }) => {
   const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices, isAgentAbsent, isAgentCanceled } = data;
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  const toggleDate = (date: string) => {
+    const next = new Set(expandedDates);
+    if (next.has(date)) {
+      next.delete(date);
+    } else {
+      next.add(date);
+    }
+    setExpandedDates(next);
+  };
 
   return (
     <div className="w-96 bg-card border-r border-border shadow-2xl flex flex-col absolute left-0 h-full z-50 overflow-hidden">
@@ -44,10 +55,19 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
           const absentCount = vacantes.filter((id: number) => isAgentAbsent(id, date)).length;
           const canceledCount = vacantes.filter((id: number) => isAgentCanceled && isAgentCanceled(id, date)).length;
 
+          const isExpanded = expandedDates.has(date);
+
           return (
             <div key={idx} className="border border-border rounded-xl overflow-hidden">
-              <div className="bg-muted px-3 py-2 border-b border-border font-bold text-sm text-foreground flex justify-between items-center">
-                {date}
+              <button
+                type="button"
+                onClick={() => toggleDate(date)}
+                className="w-full bg-muted px-3 py-2 border-b border-border font-bold text-sm text-foreground flex justify-between items-center hover:bg-muted/80 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                  {date}
+                </div>
                 <div className="flex gap-1">
                   {absentCount > 0 && (
                     <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full text-xs shadow-sm">🚫 {absentCount}</span>
@@ -57,9 +77,10 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                   )}
                   <span className="bg-destructive/10 text-destructive px-2 py-0.5 rounded-full text-xs shadow-sm">{vacantes.length - absentCount - canceledCount} sueltos</span>
                 </div>
-              </div>
-              <div className="p-2 space-y-2 bg-card">
-                {vacantes.map((vid: number) => {
+              </button>
+              {isExpanded && (
+                <div className="p-2 space-y-2 bg-card">
+                  {vacantes.map((vid: number) => {
                   const res = allResidentsDb.find((r: any) => r.id === vid);
                   if (!res) return null;
                   const absent = isAgentAbsent(res.id, date);
@@ -78,10 +99,11 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                     }
                   });
 
-                  return (
-                    <button key={`${date}-${vid}`}
-                      disabled={isUnavailable}
-                      onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date }); setSelectedDevice(null); setSelectedResident(null); }}
+                    return (
+                      <button key={`${date}-${vid}`}
+                        type="button"
+                        disabled={isUnavailable}
+                        onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date }); setSelectedDevice(null); setSelectedResident(null); }}
                       className={`w-full text-left p-3 rounded-xl border transition-all shadow-sm ${
                         isUnavailable
                           ? 'border-stone-300 bg-stone-50 border-dashed opacity-80 cursor-not-allowed'
@@ -99,18 +121,19 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                         }
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {Object.keys(pisosCap).length === 0
-                          ? <span className="bg-muted text-destructive px-1.5 py-0.5 text-[9px] rounded font-bold border border-destructive/20">Sin caps</span>
-                          : Object.entries(pisosCap).map(([piso, count]) => (
-                            <span key={piso} className={`${getPisoBadgeColor(piso)} shadow-sm px-1.5 py-0.5 text-[9px] rounded font-bold border`}>
-                              {piso}: {count} Disp.
-                            </span>
-                          ))}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                          {Object.keys(pisosCap).length === 0
+                            ? <span className="bg-muted text-destructive px-1.5 py-0.5 text-[9px] rounded font-bold border border-destructive/20">Sin caps</span>
+                            : Object.entries(pisosCap).map(([piso, count]) => (
+                              <span key={piso} className={`${getPisoBadgeColor(piso)} shadow-sm px-1.5 py-0.5 text-[9px] rounded font-bold border`}>
+                                {piso}: {count} Disp.
+                              </span>
+                            ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}

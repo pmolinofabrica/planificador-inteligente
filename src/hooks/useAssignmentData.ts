@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { buildResidentCaps } from '@/lib/caps-builder';
 import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
@@ -35,8 +36,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
 
   const getMonthParts = useCallback(() => {
-    const smParts = (selectedMonth || "Marzo 2026").split(" ");
-    const yFilt = smParts[1] || "2026";
+    const smParts = (selectedMonth || getCurrentSchoolYearMonth()).split(" ");
+    const yFilt = smParts[1] || new Date().getFullYear().toString();
     const monthNames: Record<string, string> = {
       "Enero": "01", "Febrero": "02", "Marzo": "03", "Abril": "04",
       "Mayo": "05", "Junio": "06", "Julio": "07", "Agosto": "08",
