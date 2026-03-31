@@ -25,6 +25,9 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
     visitasByDate,
   } = data;
 
+  // Track modified cells to avoid overwriting other users' concurrent changes
+  const [dirtyCells, setDirtyCells] = React.useState<Record<string, Record<string, boolean>>>({});
+
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const handleOrgTypeChange = async (date: string, newType: string) => {
@@ -57,10 +60,18 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
   const handleSave = async () => {
     if (isLoading) return;
 
-    // Validate cupos
-    for (const strDate of Object.keys(calendarDb)) {
-      for (const devId of Object.keys(calendarDb[strDate])) {
-        const cupo = calendarDb[strDate][devId];
+    // Only process cells that have been modified by the user
+    const hasChanges = Object.keys(dirtyCells).length > 0;
+
+    if (!hasChanges) {
+      alert("No hay cambios pendientes para guardar.");
+      return;
+    }
+
+    // Validate cupos (only for modified ones)
+    for (const strDate of Object.keys(dirtyCells)) {
+      for (const devId of Object.keys(dirtyCells[strDate])) {
+        const cupo = calendarDb[strDate]?.[devId] || 0;
         const asigCount = assignmentsDb[strDate]?.[devId]?.length || 0;
         if (cupo < asigCount) {
           const devName = dbDevices.find((d: any) => String(d.id) === String(devId))?.name || devId;
@@ -73,19 +84,19 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
     setIsLoading(true);
     try {
       const payload: any[] = [];
-      Object.entries(calendarDb).forEach(([strDate, deviceMap]: [string, any]) => {
+      Object.entries(dirtyCells).forEach(([strDate, deviceMap]) => {
         const [d, mStr] = strDate.split("/");
         const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
 
-        // Ensure we fall back to the selected turnoFilter if dateTurnoMap fails
-        let defaultTurnoId = 1; // Apertura - 4 by default?
+        let defaultTurnoId = 1;
         if (turnoFilter === 'apertura') defaultTurnoId = 45;
         if (turnoFilter === 'manana') defaultTurnoId = 3;
         if (turnoFilter === 'tarde') defaultTurnoId = 4;
 
         const turnoId = dateTurnoMap[strDate] || defaultTurnoId;
 
-        Object.entries(deviceMap).forEach(([devId, cupo]: [string, any]) => {
+        Object.keys(deviceMap).forEach((devId) => {
+          const cupo = calendarDb[strDate]?.[devId] || 0;
           payload.push({
             id_dispositivo: Number(devId),
             fecha: fechaDB,
@@ -99,7 +110,9 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
         const { error } = await supabase.from('calendario_dispositivos')
           .upsert(payload, { onConflict: 'fecha, id_turno, id_dispositivo' });
         if (error) throw error;
+        setDirtyCells({}); // Clear dirty state
         alert("Matriz de Dispositivos guardada con éxito.");
+        refresh(); // Refetch latest data to sync with other users
       }
     } catch (e: any) {
       alert("Error: " + e.message);
@@ -113,6 +126,16 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
       activeDates.forEach((date: string) => {
         if (!next[date]) next[date] = {};
         next[date] = { ...next[date], [deviceId]: value };
+      });
+      return next;
+    });
+
+    // Mark row as dirty
+    setDirtyCells((prev) => {
+      const next = { ...prev };
+      activeDates.forEach((date: string) => {
+        if (!next[date]) next[date] = {};
+        next[date] = { ...next[date], [deviceId]: true };
       });
       return next;
     });
@@ -253,6 +276,12 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                                 const next = { ...prev };
                                 if (!next[date]) next[date] = {};
                                 next[date] = { ...next[date], [device.id]: val };
+                                return next;
+                              });
+                              setDirtyCells((prev) => {
+                                const next = { ...prev };
+                                if (!next[date]) next[date] = {};
+                                next[date] = { ...next[date], [device.id]: true };
                                 return next;
                               });
                             }}
