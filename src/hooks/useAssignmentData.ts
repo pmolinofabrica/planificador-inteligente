@@ -106,15 +106,20 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        // 2. CAPACITACIONES, PLANIFICACION Y DIAS
-        const [capsViewRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
-          supabase.rpc('rpc_obtener_vista_capacitados'),
+        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
+          supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
+          supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
+          supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
+          supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
           supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').limit(5000),
         ]);
 
-        const agentesCapacitados = capsViewRes.data || [];
+        const capData = capsRep.data || [];
+        const partsData = partsRes.data || [];
+        const dispoCapData = dispoCapsRes.data || [];
+        const convocadosMatriz = convocadosMatrizRes.data || [];
         const planisData = allPlanisRes.data || [];
         const diasData = allDiasRes.data || [];
         const inasistenciasRaw = inasRes.data || [];
@@ -138,6 +143,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         setInasistenciasDb(inasMap);
 
         console.log(`[DataLoad] caps=${capData.length} parts=${partsData.length} capDispos=${dispoCapData.length} convocadosMatriz=${convocadosMatriz.length} planis=${planisData.length} dias=${diasData.length} residents=${resiData?.length || 0}`);
+
+        // 2b. OBTENER CAPACITADOS DESDE VISTA UNIFICADA
+        const { data: agentesCapacitados } = await supabase.rpc('rpc_obtener_vista_capacitados');
 
         // Build caps using clean builder
         if (resiData && resiData.length > 0) {
