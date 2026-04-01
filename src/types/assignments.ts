@@ -84,3 +84,11 @@ export const MONTH_NAMES: Record<string, string> = {
   "Mayo": "05", "Junio": "06", "Julio": "07", "Agosto": "08",
   "Septiembre": "09", "Octubre": "10", "Noviembre": "11", "Diciembre": "12"
 };
+
+export interface AgentAnnualMetrics {
+  totalAssignments: number;
+  uniqueDevices: Set<string>;
+  deviceReps: Record<string, number>;
+}
+
+export type AnnualMetricsMap = Record<number, AgentAnnualMetrics>;

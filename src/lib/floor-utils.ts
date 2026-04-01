@@ -32,30 +32,27 @@ export interface RotationMetrics {
   diversityPct: number;    // 0-100
 }
 
+import { AnnualMetricsMap } from '@/types/assignments';
+
 export const computeRotationMetrics = (
   agentId: number,
   deviceId: string | undefined,
-  assignmentsMatrix: Record<string, Record<string, { id: number }[]>>,
   totalDeviceCount: number,
+  annualMetricsDb?: AnnualMetricsMap,
 ): RotationMetrics => {
   let localReps = 0;
-  const deviceSet = new Set<string>();
+  let uniqueDevices = 0;
   let totalAssignments = 0;
 
-  for (const dateKey of Object.keys(assignmentsMatrix)) {
-    const dateDevices = assignmentsMatrix[dateKey];
-    for (const [devId, agents] of Object.entries(dateDevices)) {
-      for (const ag of agents) {
-        if (ag.id === agentId) {
-          totalAssignments++;
-          deviceSet.add(devId);
-          if (deviceId && devId === deviceId) localReps++;
-        }
-      }
+  if (annualMetricsDb && annualMetricsDb[agentId]) {
+    const agentMetrics = annualMetricsDb[agentId];
+    totalAssignments = agentMetrics.totalAssignments;
+    uniqueDevices = agentMetrics.uniqueDevices.size;
+    if (deviceId) {
+      localReps = agentMetrics.deviceReps[deviceId] || 0;
     }
   }
 
-  const uniqueDevices = deviceSet.size;
   const diversityPct = totalDeviceCount > 0
     ? Math.round((uniqueDevices / totalDeviceCount) * 100)
     : 0;
