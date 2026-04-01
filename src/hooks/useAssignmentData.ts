@@ -106,20 +106,15 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
-          supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
-          supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
-          supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
-          supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
+        // 2. CAPACITACIONES, PLANIFICACION Y DIAS
+        const [capsViewRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
+          supabase.rpc('rpc_obtener_vista_capacitados'),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
           supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').limit(5000),
         ]);
 
-        const capData = capsRep.data || [];
-        const partsData = partsRes.data || [];
-        const dispoCapData = dispoCapsRes.data || [];
-        const convocadosMatriz = convocadosMatrizRes.data || [];
+        const agentesCapacitados = capsViewRes.data || [];
         const planisData = allPlanisRes.data || [];
         const diasData = allDiasRes.data || [];
         const inasistenciasRaw = inasRes.data || [];
