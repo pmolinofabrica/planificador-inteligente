@@ -136,125 +136,37 @@ Deno.serve(async (req) => {
       `✅ Cupos dinámicos calendario: ${(calendarioRows || []).length} registros`
     );
 
-    // 1d. Capacitaciones (caps_builder logic — direct attendance path)
-    const { data: capData } = await supabase
-      .from("capacitaciones")
-      .select("id_cap, id_dia, grupo");
-
-    const idsDias = [
-      ...new Set(
-        (capData || []).map((c: { id_dia: number }) => c.id_dia).filter(Boolean)
-      ),
-    ];
-
-    // Fetch dias in batches to avoid URL length limits
-    let diasData: { id_dia: number; fecha: string }[] = [];
-    const batchSize = 200;
-    for (let i = 0; i < idsDias.length; i += batchSize) {
-      const batch = idsDias.slice(i, i + batchSize);
-      const { data: batchDias } = await supabase
-        .from("dias")
-        .select("id_dia, fecha")
-        .in("id_dia", batch);
-      if (batchDias) diasData = diasData.concat(batchDias);
-    }
-
-    const diasDict: Record<number, string> = {};
-    for (const d of diasData) {
-      if (d.fecha) diasDict[d.id_dia] = d.fecha.substring(0, 10);
-    }
-
-    const capDates: Record<number, string> = {};
-    for (const c of capData || []) {
-      const realDate = diasDict[c.id_dia];
-      if (realDate) capDates[c.id_cap] = realDate;
-    }
-
-    const { data: capDispoData } = await supabase
-      .from("capacitaciones_dispositivos")
-      .select("id_cap, id_dispositivo");
-    const capDispos: Record<number, number[]> = {};
-    for (const cd of capDispoData || []) {
-      if (!capDispos[cd.id_cap]) capDispos[cd.id_cap] = [];
-      capDispos[cd.id_cap].push(cd.id_dispositivo);
-    }
-
-    // Path 1: Direct attendance (traer a todos para ver quiénes asistieron y quiénes tienen falta explícita)
-    const { data: partsData } = await supabase
-      .from("capacitaciones_participantes")
-      .select("id_agente, id_cap, asistio");
-
-    // Path 1.5: Inasistencias Generales (Cruzar con la tabla principal de inasistencias)
-    const { data: inasData } = await supabase
-      .from("inasistencias")
-      .select("id_agente, fecha_inasistencia");
-
-    const inasistenciasGenerales: Record<string, Set<number>> = {}; // fecha -> Set(id_agente)
-    for (const inas of inasData || []) {
-      if (!inas.fecha_inasistencia) continue;
-      if (!inasistenciasGenerales[inas.fecha_inasistencia]) {
-        inasistenciasGenerales[inas.fecha_inasistencia] = new Set();
-      }
-      inasistenciasGenerales[inas.fecha_inasistencia].add(inas.id_agente);
-    }
-
-    const inasistenciasCapacitacion: Record<number, Set<number>> = {}; // id_cap -> Set de id_agente que faltaron
-    const asistenciasCapacitacion: { id_agente: number; id_cap: number }[] = [];
-
-    for (const p of partsData || []) {
-      const cDate = capDates[p.id_cap];
-      const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(p.id_agente);
-
-      if (p.asistio === false || hasGeneralAbsence) {
-        if (!inasistenciasCapacitacion[p.id_cap]) {
-          inasistenciasCapacitacion[p.id_cap] = new Set();
-        }
-        inasistenciasCapacitacion[p.id_cap].add(p.id_agente);
-      } else if (p.asistio === true) {
-        asistenciasCapacitacion.push(p);
-      }
-    }
-
-    // Path 2: RPC convocados matriz
-    const { data: convocadosMatriz } = await supabase.rpc(
-      "rpc_obtener_convocados_matriz",
-      { anio_filtro: anio_cohorte }
-    );
-
-    // Build caps per agent: { agentId: { dispoId: earliestDate } }
+    // 1d. Capacitaciones (Reading directly from the source of truth view / RPC)
     const capsPorAgente: Record<number, Record<number, string>> = {};
     for (const r of residentes || []) {
       capsPorAgente[r.id_agente] = {};
     }
 
-    const assignCap = (agentId: number, deviceId: number, date: string) => {
-      if (!capsPorAgente[agentId]) return;
-      const existing = capsPorAgente[agentId][deviceId];
-      if (!existing || date < existing) {
-        capsPorAgente[agentId][deviceId] = date;
-      }
-    };
+    // Fetch unified view using the RPC wrapper (returns exactly what the UI shows as CAPACITADO)
+    const { data: agentesCapacitados, error: capsError } = await supabase.rpc(
+      "rpc_obtener_vista_capacitados"
+    );
 
-    // Otorgar capacitaciones a quienes explícitamente asistieron
-    for (const p of asistenciasCapacitacion) {
-      const cDate = capDates[p.id_cap];
-      const dispos = capDispos[p.id_cap] || [];
-      if (cDate) {
-        for (const dId of dispos) assignCap(p.id_agente, dId, cDate);
-      }
-    }
+    if (capsError) {
+      addLog(`❌ Error fetching vista_agentes_capacitados via RPC: ${capsError.message}`);
+    } else {
+      for (const row of agentesCapacitados || []) {
+        if (!row.id_agente || !row.id_dispositivo || !row.fecha_capacitacion) continue;
 
-    // Otorgar capacitaciones a los de la matriz SÓLO si no tienen una falta explícita cargada
-    for (const row of convocadosMatriz || []) {
-      const cDate = capDates[row.id_cap];
-      const hasGeneralAbsence = cDate && inasistenciasGenerales[cDate]?.has(row.id_agente);
+        // We only care about agents who are "CAPACITADO"
+        if (row.estado_capacitacion === 'CAPACITADO') {
+          const agentId = row.id_agente;
+          const dispoId = row.id_dispositivo;
+          // Clean the date (cut time portion if it exists)
+          const cleanDate = row.fecha_capacitacion.substring(0, 10);
 
-      // Si el agente tiene inasistencia explícita para esta capacitación o inasistencia general ese día, NO se la damos
-      if (inasistenciasCapacitacion[row.id_cap]?.has(row.id_agente) || hasGeneralAbsence) continue;
-
-      const dispos = capDispos[row.id_cap] || [];
-      if (cDate) {
-        for (const dId of dispos) assignCap(row.id_agente, dId, cDate);
+          if (capsPorAgente[agentId]) {
+            const existing = capsPorAgente[agentId][dispoId];
+            if (!existing || cleanDate < existing) {
+              capsPorAgente[agentId][dispoId] = cleanDate;
+            }
+          }
+        }
       }
     }
 
