@@ -304,7 +304,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                             ) : (
                               assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
-                                const metrics = computeRotationMetrics(res.id, String(device.id), assignmentsDb, totalDeviceCount);
+                                const metrics = computeRotationMetrics(res.id, String(device.id), totalDeviceCount, data.annualMetricsDb);
                                 return (
                                   <div
                                     key={idx}

@@ -6,7 +6,7 @@ import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
-  VisitaInfo, VisitasByDateMap,
+  VisitaInfo, VisitasByDateMap, AnnualMetricsMap, AgentAnnualMetrics,
 } from '@/types/assignments';
 
 interface UseAssignmentDataProps {
@@ -31,6 +31,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
+  const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
@@ -454,7 +455,42 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // (Inasistencias were already loaded in step 3 to feed caps-builder)
 
         // ═══════════════════════════════════════════════════════════
-        // 10. VISITAS GRUPALES (all turnos — informational for apertura)
+        // 10. METRICAS ANUALES DE ROTACION
+        // ═══════════════════════════════════════════════════════════
+        try {
+          const { data: metricsData, error: metricsErr } = await supabase.rpc('rpc_metricas_rotacion_anual', {
+            p_year: parseInt(yFilt),
+            p_turno: turnoFilter === 'apertura' ? 'apertura' : (turnoFilter === 'tarde' ? 'tarde' : 'manana')
+          });
+
+          if (metricsErr) {
+            console.error("Error fetching annual metrics:", metricsErr);
+          } else if (metricsData) {
+            const metricsMap: AnnualMetricsMap = {};
+            metricsData.forEach(row => {
+              const { id_agente, id_dispositivo, repeticiones } = row;
+              if (!metricsMap[id_agente]) {
+                metricsMap[id_agente] = {
+                  totalAssignments: 0,
+                  uniqueDevices: new Set<string>(),
+                  deviceReps: {},
+                };
+              }
+              const repCount = parseInt(repeticiones);
+              const devStr = String(id_dispositivo);
+
+              metricsMap[id_agente].totalAssignments += repCount;
+              metricsMap[id_agente].uniqueDevices.add(devStr);
+              metricsMap[id_agente].deviceReps[devStr] = repCount;
+            });
+            setAnnualMetricsDb(metricsMap);
+          }
+        } catch (e) {
+          console.error('Error metrics:', e);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 11. VISITAS GRUPALES (all turnos — informational for apertura)
         // ═══════════════════════════════════════════════════════════
         try {
           const { data: visitasData } = await supabase
@@ -535,6 +571,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     visitasByDate,
+    annualMetricsDb, // export anual metrics
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };
