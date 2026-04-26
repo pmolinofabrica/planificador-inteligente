@@ -21,6 +21,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
   const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
   const assignmentsOfDate = assignmentsDb[selectedVacant.date] || {};
   const cuposDelDia = calendarDb[selectedVacant.date] || {};
+  const isApertura = data.turnoFilter === 'apertura';
 
   const devCapacitados = dbDevices.filter((dev: any) => {
     const capDate = res.caps[dev.id];
@@ -42,7 +43,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
         data.setIsLoading(true);
         try {
           // Persist the new cupo to the database
-          const turnoId = data.dateTurnoMap[selectedVacant.date] || 1;
+          const turnoId = data.dateTurnoMap[selectedVacant.date] || (isApertura ? 45 : 4);
           const { error: calErr } = await supabase.from('calendario_dispositivos')
             .upsert({
               fecha: fechaDB,
@@ -106,25 +107,62 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
 
     setIsLoading(true);
     try {
-      const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
-        .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
-      if (fetchErr) throw fetchErr;
-
-      const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
-      if (vacanteRow) {
-        const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-          .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
-        if (error) throw error;
-      } else if (existing && existing.length > 0) {
-        const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
+      if (isApertura) {
+        // Modo apertura al público → tabla `menu`
+        const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
           .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
-        if (error) throw error;
+        if (fetchErr) throw fetchErr;
+
+        const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
+        if (vacanteRow) {
+          const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
+            .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
+          if (error) throw error;
+        } else if (existing && existing.length > 0) {
+          const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
+            .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('menu').insert([{
+            id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
+            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId
+          }]);
+          if (error) throw error;
+        }
       } else {
-        const { error } = await supabase.from('menu').insert([{
-          id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
-          fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId
-        }]);
-        if (error) throw error;
+        // Modo turno tarde/mañana → tabla `menu_semana`
+        const turnoId = data.dateTurnoMap[selectedVacant.date] || 4;
+        const { data: existing, error: fetchErr } = await supabase.from('menu_semana').select('*')
+          .eq('id_agente', selectedVacant.id)
+          .eq('fecha_asignacion', fechaDB)
+          .eq('id_turno', turnoId);
+        if (fetchErr) throw fetchErr;
+
+        const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
+        if (vacanteRow) {
+          const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
+            .eq('id_agente', selectedVacant.id)
+            .eq('fecha_asignacion', fechaDB)
+            .eq('id_dispositivo', 999)
+            .eq('id_turno', turnoId);
+          if (error) throw error;
+        } else if (existing && existing.length > 0) {
+          const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
+            .eq('id_menu_semana', existing[0].id_menu_semana);
+          if (error) throw error;
+        } else {
+          const orgType = data.tipoOrganizacionMap?.[selectedVacant.date] || 'dispositivos fijos';
+          const { error } = await supabase.from('menu_semana').insert([{
+            id_agente: selectedVacant.id,
+            id_dispositivo: parseInt(deviceId),
+            fecha_asignacion: fechaDB,
+            estado_ejecucion: 'planificado',
+            id_convocatoria: convId,
+            id_turno: turnoId,
+            tipo_organizacion: orgType
+          }]);
+          if (error) throw error;
+        }
       }
       setSelectedVacant(null);
       refresh();
