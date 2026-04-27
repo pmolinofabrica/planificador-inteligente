@@ -51,19 +51,31 @@ export function useUndoStack(refresh: () => void) {
 
       const results = await Promise.all(
         snaps.map(snap => {
+          // Determinar tabla objetivo según el modo en que se originó la acción.
+          // Fallback a 'menu' para compatibilidad con entradas previas sin _table.
+          const table = snap._table ?? 'menu';
+
           if (snap._isInsert) {
-            return supabase.from('menu')
-              .delete()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let q: any = supabase.from(table).delete()
               .eq('id_agente', snap.id_agente)
               .eq('fecha_asignacion', snap.fecha_asignacion);
+            // En menu_semana, acotar por id_turno para no borrar otras filas del mismo día
+            if (table === 'menu_semana' && snap.id_turno) {
+              q = q.eq('id_turno', snap.id_turno);
+            }
+            return q;
           } else {
-            return supabase.from('menu')
-              .update({
-                id_dispositivo: snap.id_dispositivo,
-                estado_ejecucion: snap.estado_ejecucion,
-              })
-              .eq('id_agente', snap.id_agente)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let q: any = supabase.from(table).update({
+              id_dispositivo: snap.id_dispositivo,
+              estado_ejecucion: snap.estado_ejecucion,
+            }).eq('id_agente', snap.id_agente)
               .eq('fecha_asignacion', snap.fecha_asignacion);
+            if (table === 'menu_semana' && snap.id_turno) {
+              q = q.eq('id_turno', snap.id_turno);
+            }
+            return q;
           }
         })
       );

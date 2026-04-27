@@ -58,6 +58,10 @@ export interface UndoSnapshot {
   id_dispositivo: number;
   estado_ejecucion?: string;
   _isInsert?: boolean;
+  /** Tabla destino del undo. Por defecto 'menu' (apertura). */
+  _table?: 'menu' | 'menu_semana';
+  /** id_turno requerido para operar sobre menu_semana con precisión. */
+  id_turno?: number;
 }
 
 export interface VisitaInfo {
