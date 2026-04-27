@@ -198,8 +198,11 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                 <button key={dev.id} onClick={() => handleAssign(dev.id)}
                   className={`w-full text-left p-3 rounded-lg border-2 transition-all ${getFloorColor(dev.name)} hover:ring-2 hover:ring-primary/30 cursor-pointer`}>
                   <div className="font-bold text-sm">{dev.name}</div>
-                  <div className="text-[10px] font-medium mt-1 opacity-80">
+                  <div className="text-[10px] font-medium mt-1 opacity-80 flex items-center justify-between gap-2">
                     Ocupación: {assignmentsOfDate[dev.id]?.length || 0} de {cuposDelDia[dev.id] || 0}
+                    <span className="px-1.5 py-0.5 rounded border border-primary/25 bg-primary/10 text-primary">
+                      Coord: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                    </span>
                   </div>
                 </button>
               ))}
@@ -215,8 +218,11 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
               <button key={dev.id} onClick={() => handleAssign(dev.id)}
                 className="w-full text-left p-2.5 rounded-md border border-border bg-muted/50 hover:bg-accent transition-all cursor-pointer">
                 <div className="font-medium text-xs text-muted-foreground">{dev.name}</div>
-                <div className="text-[9px] text-muted-foreground/70 mt-0.5">
+                <div className="text-[9px] text-muted-foreground/70 mt-0.5 flex items-center justify-between gap-2">
                   Ocupación: {assignmentsOfDate[dev.id]?.length || 0} de {cuposDelDia[dev.id] || 0}
+                  <span className="px-1.5 py-0.5 rounded border border-border bg-background text-foreground/80">
+                    Coord: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                  </span>
                 </div>
               </button>
             ))}

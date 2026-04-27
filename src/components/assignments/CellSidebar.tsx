@@ -263,9 +263,14 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                 <div className={`font-bold text-sm ${alt.isAbsent || alt.isCanceled ? 'line-through text-stone-400' : ''}`}>{alt.name}</div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
-              {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20">
-                {alt.isAbsent ? '🚫' : alt.isCanceled ? '❌' : '🔒'}
-              </span>}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary whitespace-nowrap">
+                  Coord: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[selectedDevice.id] || 0}
+                </span>
+                {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20 whitespace-nowrap">
+                  {alt.isAbsent ? '🚫' : alt.isCanceled ? '❌' : '🔒'}
+                </span>}
+              </div>
             </button>
           ))}
         </div>

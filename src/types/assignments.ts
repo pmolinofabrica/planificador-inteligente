@@ -131,5 +131,6 @@ export interface AssignmentDataContext {
   // Visitas y métricas
   visitasByDate: VisitasByDateMap;
   annualMetricsDb: AnnualMetricsMap;
+  aperturaMetricsDb: AnnualMetricsMap;
   agentGroups: Record<string, string>;
 }

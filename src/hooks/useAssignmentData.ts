@@ -32,6 +32,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
+  const [aperturaMetricsDb, setAperturaMetricsDb] = useState<AnnualMetricsMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
@@ -466,32 +467,51 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 10. METRICAS ANUALES DE ROTACION
         // ═══════════════════════════════════════════════════════════
         try {
-          const { data: metricsData, error: metricsErr } = await supabase.rpc('rpc_metricas_rotacion_anual', {
+          const currentPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
             p_year: parseInt(yFilt),
             p_turno: turnoFilter === 'apertura' ? 'apertura' : (turnoFilter === 'tarde' ? 'tarde' : 'manana')
           });
+          const aperturaPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
+            p_year: parseInt(yFilt),
+            p_turno: 'apertura'
+          });
 
-          if (metricsErr) {
-            console.error("Error fetching annual metrics:", metricsErr);
-          } else if (metricsData) {
+          const [metricsRes, aperturaRes] = await Promise.all([currentPromise, aperturaPromise]);
+
+          if (metricsRes.error) {
+            console.error("Error fetching annual metrics:", metricsRes.error);
+          } else if (metricsRes.data) {
             const metricsMap: AnnualMetricsMap = {};
-            metricsData.forEach(row => {
+            metricsRes.data.forEach(row => {
               const { id_agente, id_dispositivo, repeticiones } = row;
               if (!metricsMap[id_agente]) {
-                metricsMap[id_agente] = {
-                  totalAssignments: 0,
-                  uniqueDevices: new Set<string>(),
-                  deviceReps: {},
-                };
+                metricsMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
               }
               const repCount = parseInt(repeticiones);
               const devStr = String(id_dispositivo);
-
               metricsMap[id_agente].totalAssignments += repCount;
               metricsMap[id_agente].uniqueDevices.add(devStr);
               metricsMap[id_agente].deviceReps[devStr] = repCount;
             });
             setAnnualMetricsDb(metricsMap);
+          }
+
+          if (aperturaRes.error) {
+            console.error("Error fetching apertura metrics:", aperturaRes.error);
+          } else if (aperturaRes.data) {
+            const aperturaMap: AnnualMetricsMap = {};
+            aperturaRes.data.forEach(row => {
+              const { id_agente, id_dispositivo, repeticiones } = row;
+              if (!aperturaMap[id_agente]) {
+                aperturaMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
+              }
+              const repCount = parseInt(repeticiones);
+              const devStr = String(id_dispositivo);
+              aperturaMap[id_agente].totalAssignments += repCount;
+              aperturaMap[id_agente].uniqueDevices.add(devStr);
+              aperturaMap[id_agente].deviceReps[devStr] = repCount;
+            });
+            setAperturaMetricsDb(aperturaMap);
           }
         } catch (e) {
           console.error('Error metrics:', e);
@@ -580,6 +600,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     visitasByDate,
     annualMetricsDb, // export anual metrics
+    aperturaMetricsDb, // export apertura metrics
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
   };
