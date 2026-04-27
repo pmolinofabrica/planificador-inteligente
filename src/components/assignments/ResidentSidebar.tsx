@@ -2,13 +2,13 @@ import React, { useMemo } from 'react';
 import { Calendar, Activity, ArrowRightLeft, Check, AlertCircle, UserMinus, BarChart3 } from 'lucide-react';
 import { getFloorColor, getScoreColor, computeRotationMetrics } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { SelectedResident } from '@/types/assignments';
+import type { SelectedResident, AssignmentDataContext, UndoEntry } from '@/types/assignments';
 
 interface ResidentSidebarProps {
   selectedResident: SelectedResident;
   setSelectedResident: (r: SelectedResident | null) => void;
-  data: any;
-  pushUndo: (entry: any) => void;
+  data: AssignmentDataContext;
+  pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
 }
 

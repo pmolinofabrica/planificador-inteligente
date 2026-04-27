@@ -3,9 +3,10 @@ import { Settings } from 'lucide-react';
 import { VisitChip, VisitDetailChip } from './VisitBadge';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
+import type { AssignmentDataContext } from '@/types/assignments';
 
 interface DevicesTabProps {
-  data: any;
+  data: AssignmentDataContext & { activeDates: string[]; inasistenciasDb: Record<string, unknown[]>; setTipoOrganizacionMap: React.Dispatch<React.SetStateAction<Record<string, string>>> };
   year: string;
 }
 

@@ -2,12 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { Calendar, Users, AlertCircle, Zap } from 'lucide-react';
 import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { SelectedResident, SelectedDevice } from '@/types/assignments';
+import type { SelectedResident, SelectedDevice, AssignmentDataContext } from '@/types/assignments';
 import { toast } from 'sonner';
 import { VisitChip } from './VisitBadge';
 
 interface PlanningMatrixProps {
-  data: any;
+  data: AssignmentDataContext & { activeDates: string[] };
   selectedResident: SelectedResident | null;
   setSelectedResident: (r: SelectedResident | null) => void;
   selectedDevice: SelectedDevice | null;

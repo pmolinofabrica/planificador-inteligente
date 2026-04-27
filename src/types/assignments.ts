@@ -1,3 +1,5 @@
+import type React from 'react';
+
 export type ActiveTab = 'plan' | 'menu' | 'exec' | 'devices';
 
 export interface DeviceInfo {
@@ -96,3 +98,38 @@ export interface AgentAnnualMetrics {
 }
 
 export type AnnualMetricsMap = Record<number, AgentAnnualMetrics>;
+
+/**
+ * Contrato del objeto `data` que `useAssignmentData` provee
+ * y los componentes del módulo de asignaciones consumen.
+ * Reemplaza `data: any` en todas las props de componentes de assignments.
+ */
+export interface AssignmentDataContext {
+  // Datos base
+  dbDevices: DeviceInfo[];
+  allResidentsDb: ResidentInfo[];
+  assignmentsDb: AssignmentsMatrix;
+  setAssignmentsDb: React.Dispatch<React.SetStateAction<AssignmentsMatrix>>;
+  calendarDb: CalendarMatrix;
+  setCalendarDb: React.Dispatch<React.SetStateAction<CalendarMatrix>>;
+  convocadosDb: ConvocadosMap;
+  convocadosCountDb: Record<string, number>;
+  // Estado de carga
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
+  refresh: () => void;
+  // Turno y fechas
+  turnoFilter: string;
+  dateTurnoMap: Record<string, number>;
+  tipoOrganizacionMap: Record<string, string>;
+  // Convocatorias y asistencia
+  agentConvocatoriaMap: Record<string, Record<number, number>>;
+  agentConvocatoriaStatusMap: Record<string, Record<number, string>>;
+  isAgentAbsent: (agentId: number, uiDate: string) => boolean;
+  isAgentCanceled: (agentId: number, uiDate: string) => boolean;
+  getAbsenceMotivo?: (agentId: number, uiDate: string) => string;
+  // Visitas y métricas
+  visitasByDate: VisitasByDateMap;
+  annualMetricsDb: AnnualMetricsMap;
+  agentGroups: Record<string, string>;
+}

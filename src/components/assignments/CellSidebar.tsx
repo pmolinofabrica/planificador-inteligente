@@ -2,7 +2,7 @@ import React from 'react';
 import { Check, AlertCircle, Moon, Lock } from 'lucide-react';
 import { getFloorColor, getScoreColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { SelectedDevice, SelectedResident } from '@/types/assignments';
+import type { SelectedDevice, SelectedResident, AssignmentDataContext, UndoEntry } from '@/types/assignments';
 
 interface CellSidebarProps {
   selectedDevice: SelectedDevice;
@@ -10,8 +10,8 @@ interface CellSidebarProps {
   setSelectedDevice: (d: SelectedDevice | null) => void;
   setSelectedDateFilter: (d: string | null) => void;
   setSelectedResident: (r: SelectedResident | null) => void;
-  data: any;
-  pushUndo: (entry: any) => void;
+  data: AssignmentDataContext;
+  pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
 }
 

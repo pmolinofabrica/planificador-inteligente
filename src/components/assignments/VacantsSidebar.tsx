@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowRightLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import { getPisoBadgeColor } from '@/lib/floor-utils';
-import type { SelectedVacant, SelectedDevice, SelectedResident } from '@/types/assignments';
+import type { SelectedVacant, SelectedDevice, SelectedResident, AssignmentDataContext } from '@/types/assignments';
 
 interface VacantsSidebarProps {
-  data: any;
+  data: AssignmentDataContext & { activeDates: string[] };
   selectedVacant: SelectedVacant | null;
   setSelectedVacant: (v: SelectedVacant | null) => void;
   setSelectedDevice: (d: SelectedDevice | null) => void;

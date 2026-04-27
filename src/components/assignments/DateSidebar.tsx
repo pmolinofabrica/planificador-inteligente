@@ -1,11 +1,12 @@
 import React from 'react';
 import { Calendar, Check, AlertCircle, MapPin } from 'lucide-react';
 import { VisitBlock } from './VisitBadge';
+import type { AssignmentDataContext } from '@/types/assignments';
 
 interface DateSidebarProps {
   selectedDate: string;
   setSelectedDateFilter: (d: string | null) => void;
-  data: any;
+  data: AssignmentDataContext;
   year: string;
 }
 

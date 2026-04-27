@@ -4,11 +4,12 @@ import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { VisitBlock } from './VisitBadge';
+import type { AssignmentDataContext, UndoEntry } from '@/types/assignments';
 
 interface AperturaDevicesPanelProps {
-  data: any;
+  data: AssignmentDataContext;
   execDate: string;
-  pushUndo: (entry: any) => void;
+  pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
 }
 

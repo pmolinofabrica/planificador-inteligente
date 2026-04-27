@@ -1,12 +1,12 @@
 import React from 'react';
 import { Monitor, Check, AlertCircle } from 'lucide-react';
 import { getFloorColor } from '@/lib/floor-utils';
-import type { SelectedDevice } from '@/types/assignments';
+import type { SelectedDevice, AssignmentDataContext } from '@/types/assignments';
 
 interface DeviceSidebarProps {
   selectedDevice: SelectedDevice;
   setSelectedDevice: (d: SelectedDevice | null) => void;
-  data: any;
+  data: AssignmentDataContext;
   year: string;
 }
 

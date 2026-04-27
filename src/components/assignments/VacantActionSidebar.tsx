@@ -1,12 +1,12 @@
 import React from 'react';
 import { getFloorColor } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { SelectedVacant } from '@/types/assignments';
+import type { SelectedVacant, AssignmentDataContext } from '@/types/assignments';
 
 interface VacantActionSidebarProps {
   selectedVacant: SelectedVacant;
   setSelectedVacant: (v: SelectedVacant | null) => void;
-  data: any;
+  data: AssignmentDataContext;
   year: string;
 }
 
