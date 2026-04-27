@@ -41,21 +41,45 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
 
   const handleQuitar = async (resId: number, deviceId: string) => {
     if (isLoading) return;
-    if (!confirm("¿Quitar residente de este dispositivo?")) return;
+    if (!confirm("??Quitar residente de este dispositivo?")) return;
     setIsLoading(true);
     const [d, mStr] = execDate.split("/");
     const fechaDB = `${year}-${mStr}-${d}`;
 
-    const { error } = await supabase.from('menu')
-      .update({ id_dispositivo: 999, estado_ejecucion: 'planificado' })
-      .eq('id_agente', resId)
-      .eq('fecha_asignacion', fechaDB)
-      .eq('id_dispositivo', parseInt(deviceId));
+    try {
+      const { data: targetRow, error: fetchErr } = await supabase.from('menu')
+        .select('id_menu, id_dispositivo')
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', parseInt(deviceId))
+        .limit(1)
+        .maybeSingle();
 
-    if (error) {
-      alert("Error: " + error.message);
-      setIsLoading(false);
-    } else {
+      if (fetchErr) throw fetchErr;
+      if (!targetRow) throw new Error('No se encontr? la asignaci?n para quitar.');
+
+      const { data: vacantRow, error: vacantErr } = await supabase.from('menu')
+        .select('id_menu')
+        .eq('id_agente', resId)
+        .eq('fecha_asignacion', fechaDB)
+        .eq('id_dispositivo', 999)
+        .limit(1)
+        .maybeSingle();
+
+      if (vacantErr) throw vacantErr;
+
+      if (vacantRow) {
+        const { error: deleteErr } = await supabase.from('menu')
+          .delete()
+          .eq('id_menu', targetRow.id_menu);
+        if (deleteErr) throw deleteErr;
+      } else {
+        const { error } = await supabase.from('menu')
+          .update({ id_dispositivo: 999, estado_ejecucion: 'planificado' })
+          .eq('id_menu', targetRow.id_menu);
+        if (error) throw error;
+      }
+
       pushUndo({
         snapshot: {
           id_agente: resId,
@@ -65,6 +89,9 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
         }
       });
       refresh();
+    } catch (err: any) {
+      alert("Error: " + (err.message || err));
+      setIsLoading(false);
     }
   };
 

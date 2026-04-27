@@ -47,6 +47,38 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const [dayStr, monthStr] = date.split("/");
   const fechaDB = `${year}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
 
+  const vacateMenuRowSafely = async (
+    table: 'menu' | 'menu_semana',
+    rowId: number,
+    agentId: number,
+    turnoId?: number
+  ) => {
+    const baseQuery = supabase
+      .from(table)
+      .select(table === 'menu' ? 'id_menu,id_dispositivo' : 'id_menu_semana,id_dispositivo')
+      .eq('id_agente', agentId)
+      .eq('fecha_asignacion', fechaDB);
+
+    const maybeVacantQuery = turnoId != null ? baseQuery.eq('id_turno', turnoId) : baseQuery;
+    const { data: vacantRow, error: vacantErr } = await maybeVacantQuery.eq('id_dispositivo', 999).limit(1).maybeSingle();
+
+    if (vacantErr) throw vacantErr;
+
+    if (vacantRow) {
+      const { error: deleteErr } = await supabase.from(table)
+        .delete()
+        .eq(table === 'menu' ? 'id_menu' : 'id_menu_semana', rowId);
+      if (deleteErr) throw deleteErr;
+      return 'deleted' as const;
+    }
+
+    const { error: updateErr } = await supabase.from(table)
+      .update({ id_dispositivo: 999 })
+      .eq(table === 'menu' ? 'id_menu' : 'id_menu_semana', rowId);
+    if (updateErr) throw updateErr;
+    return 'updated' as const;
+  };
+
   const occupancies: Record<number, string> = {};
   Object.entries(assignmentsDb[date] || {}).forEach(([devIdStr, arr]: [string, any]) => {
     const devObj = dbDevices.find((d: any) => d.id === devIdStr);
@@ -94,11 +126,13 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         return; 
       }
 
-      const { error: err1 } = await supabase.from('menu')
-        .update({ id_dispositivo: 999 })
-        .eq('id_menu', snapOriginal.id_menu);
-        
-      if (err1) { alert("Error al quitar original: " + err1.message); setIsLoading(false); return; }
+      try {
+        await vacateMenuRowSafely('menu', snapOriginal.id_menu, selectedResident.id);
+      } catch (err: any) {
+        alert("Error al quitar original: " + (err.message || err));
+        setIsLoading(false);
+        return;
+      }
 
       const { data: filaNew } = await supabase.from('menu')
         .select('id_menu')
@@ -142,11 +176,13 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         return; 
       }
 
-      const { error: err1 } = await supabase.from('menu_semana')
-        .update({ id_dispositivo: 999 })
-        .eq('id_menu_semana', snapOriginal.id_menu_semana);
-        
-      if (err1) { alert("Error al quitar original: " + err1.message); setIsLoading(false); return; }
+      try {
+        await vacateMenuRowSafely('menu_semana', snapOriginal.id_menu_semana, selectedResident.id, snapOriginal.id_turno);
+      } catch (err: any) {
+        alert("Error al quitar original: " + (err.message || err));
+        setIsLoading(false);
+        return;
+      }
 
       const inheritedGroup = snapOriginal.numero_grupo;
 
@@ -196,30 +232,49 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     if (!isApertura && isRotation) {
       // Check if assigned to multiple devices
       const { data: allDevs } = await supabase.from('menu_semana')
-        .select('id_dispositivo')
+        .select('id_menu_semana,id_dispositivo')
         .eq('id_agente', selectedResident.id)
         .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', turnoId)
-        .not('id_dispositivo', 'eq', 999);
+        .eq('id_turno', turnoId);
       
-      const deviceCount = allDevs?.length || 0;
+      const activeRows = (allDevs || []).filter((row: any) => row.id_dispositivo !== 999);
+      const vacantRows = (allDevs || []).filter((row: any) => row.id_dispositivo === 999);
+      const deviceCount = activeRows.length;
       if (deviceCount > 1) {
         const confirmed = confirm(`⚠️ ${selectedResident.name} está asignado a ${deviceCount} dispositivos.\n\n¿Desea quitarlo de TODOS los dispositivos?`);
         if (!confirmed) return;
         
         setIsLoading(true);
-        const { error } = await supabase.from('menu_semana')
-          .update({ id_dispositivo: 999 })
-          .eq('id_agente', selectedResident.id)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_turno', turnoId);
-        
-        if (error) {
-          alert("Error: " + error.message);
-        } else {
+        try {
+          if (vacantRows.length > 0) {
+            const { error } = await supabase.from('menu_semana')
+              .delete()
+              .eq('id_agente', selectedResident.id)
+              .eq('fecha_asignacion', fechaDB)
+              .eq('id_turno', turnoId)
+              .not('id_dispositivo', 'eq', 999);
+            if (error) throw error;
+          } else {
+            const [keepRow, ...rowsToDelete] = activeRows;
+            if (keepRow) {
+              const { error: keepErr } = await supabase.from('menu_semana')
+                .update({ id_dispositivo: 999 })
+                .eq('id_menu_semana', keepRow.id_menu_semana);
+              if (keepErr) throw keepErr;
+            }
+            for (const row of rowsToDelete) {
+              const { error: deleteErr } = await supabase.from('menu_semana')
+                .delete()
+                .eq('id_menu_semana', row.id_menu_semana);
+              if (deleteErr) throw deleteErr;
+            }
+          }
+
           pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: 999, estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: turnoId } });
           setSelectedResident(null);
           refresh();
+        } catch (error: any) {
+          alert("Error: " + error.message);
         }
         setIsLoading(false);
         return;
@@ -230,15 +285,41 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     setIsLoading(true);
 
     if (isApertura) {
-      await supabase.from('menu').update({ id_dispositivo: 999 })
-        .eq('id_agente', selectedResident.id).eq('id_dispositivo', Number(disp?.id)).eq('fecha_asignacion', fechaDB);
+      const { data: targetRow, error: fetchErr } = await supabase.from('menu')
+        .select('id_menu, id_dispositivo')
+        .eq('id_agente', selectedResident.id)
+        .eq('id_dispositivo', Number(disp?.id))
+        .eq('fecha_asignacion', fechaDB)
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr) {
+        alert('Error al buscar la asignación: ' + fetchErr.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!targetRow) {
+        alert('No se encontró la asignación para quitar. ¿Ya fue removida?');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        await vacateMenuRowSafely('menu', targetRow.id_menu, selectedResident.id);
+      } catch (err: any) {
+        alert('Error al quitar: ' + (err.message || err));
+        setIsLoading(false);
+        return;
+      }
+
       pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
     } else {
       console.log(`[handleRemove] menu_semana: agente=${selectedResident.id} dispositivo=${Number(disp?.id)} fecha=${fechaDB} turno=${turnoId}`);
 
       // Fetch the specific row first to get its PK
       const { data: targetRow, error: fetchErr } = await supabase.from('menu_semana')
-        .select('id_menu_semana, id_turno')
+        .select('id_menu_semana, id_turno, id_dispositivo')
         .eq('id_agente', selectedResident.id)
         .eq('id_dispositivo', Number(disp?.id))
         .eq('fecha_asignacion', fechaDB)
@@ -259,12 +340,10 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         return;
       }
 
-      const { error: updateErr } = await supabase.from('menu_semana')
-        .update({ id_dispositivo: 999 })
-        .eq('id_menu_semana', targetRow.id_menu_semana);
-
-      if (updateErr) {
-        alert('Error al quitar: ' + updateErr.message);
+      try {
+        await vacateMenuRowSafely('menu_semana', targetRow.id_menu_semana, selectedResident.id, targetRow.id_turno);
+      } catch (err: any) {
+        alert('Error al quitar: ' + (err.message || err));
         setIsLoading(false);
         return;
       }
