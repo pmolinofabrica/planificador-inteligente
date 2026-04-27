@@ -290,7 +290,14 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
                 <div className="font-bold text-sm">{alt.name}</div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
-              {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20">🔒</span>}
+              <div className="flex items-center gap-2">
+                {deviceId && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary whitespace-nowrap">
+                    Coord: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[deviceId] || 0}
+                  </span>
+                )}
+                {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20 whitespace-nowrap">🔒</span>}
+              </div>
             </button>
           ))}
         </div>
