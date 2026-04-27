@@ -20,7 +20,7 @@ export function useUndoStack(refresh: () => void) {
 
   const saveStack = useCallback((stack: UndoEntry[]) => {
     const capped = stack.length > UNDO_MAX_ENTRIES ? stack.slice(-UNDO_MAX_ENTRIES) : stack;
-    try { localStorage.setItem(UNDO_STORAGE_KEY, JSON.stringify(capped)); } catch {}
+    try { localStorage.setItem(UNDO_STORAGE_KEY, JSON.stringify(capped)); } catch { /* intencional */ }
     return capped;
   }, []);
 
