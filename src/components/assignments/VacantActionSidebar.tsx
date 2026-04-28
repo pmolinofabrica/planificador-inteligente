@@ -22,6 +22,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
   const assignmentsOfDate = assignmentsDb[selectedVacant.date] || {};
   const cuposDelDia = calendarDb[selectedVacant.date] || {};
   const isApertura = data.turnoFilter === 'apertura';
+  const agentId = selectedVacant.id;
 
   const devCapacitados = dbDevices.filter((dev: any) => {
     const capDate = res.caps[dev.id];
@@ -43,7 +44,12 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
         data.setIsLoading(true);
         try {
           // Persist the new cupo to the database
-          const turnoId = data.dateTurnoMap[selectedVacant.date] || (isApertura ? 45 : 4);
+          const turnoId = data.dateTurnoMap[selectedVacant.date] || (isApertura ? 45 : null);
+          if (!turnoId) {
+            data.setIsLoading(false);
+            alert(`No se pudo resolver id_turno para ${selectedVacant.date}.`);
+            return;
+          }
           const { error: calErr } = await supabase.from('calendario_dispositivos')
             .upsert({
               fecha: fechaDB,
@@ -76,7 +82,12 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
       try {
         const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
         if (diaData) {
-        const turnoId = data.dateTurnoMap[selectedVacant.date] || (data.turnoFilter === 'apertura' ? 45 : 4);
+        const turnoId = data.dateTurnoMap[selectedVacant.date] || (data.turnoFilter === 'apertura' ? 45 : null);
+        if (!turnoId) {
+          setIsLoading(false);
+          alert(`No se pudo resolver id_turno para ${selectedVacant.date}.`);
+          return;
+        }
           const { data: convRows } = await supabase
             .from('convocatoria')
             .select(`
@@ -149,7 +160,12 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
           });
         }
       } else {
-        const turnoId = data.dateTurnoMap[selectedVacant.date] || 4;
+        const turnoId = data.dateTurnoMap[selectedVacant.date];
+        if (!turnoId) {
+          setIsLoading(false);
+          alert(`No se pudo resolver id_turno para ${selectedVacant.date}. Sin ese dato no se guarda para evitar inconsistencias.`);
+          return;
+        }
         const { data: existing, error: fetchErr } = await supabase.from('menu_semana').select('*')
           .eq('id_agente', selectedVacant.id)
           .eq('fecha_asignacion', fechaDB)

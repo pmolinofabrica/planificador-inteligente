@@ -43,6 +43,26 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
 
+  const dateGroupColumns = useMemo(() => {
+    const map: Record<string, number[]> = {};
+    activeDates.forEach((date) => {
+      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+      const isRotation = orgType === 'rotacion simple' || orgType === 'rotacion completa';
+      if (!isRotation) return;
+
+      const groups = new Set<number>();
+      (visitasByDate?.[date] || []).forEach((v: any) => {
+        (v.numero_grupo || []).forEach((g: number) => {
+          if (g >= 1 && g <= 3) groups.add(g);
+        });
+      });
+
+      const sorted = Array.from(groups).sort((a, b) => a - b);
+      map[date] = sorted.length > 0 ? sorted : [1];
+    });
+    return map;
+  }, [activeDates, tipoOrganizacionMap, visitasByDate]);
+
 
   const handleRunEngine = async () => {
     if (isRunningEngine) return;
@@ -88,22 +108,36 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     setEditingGroup(null);
     const [d, m] = date.split('/');
     const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    const turnoId = dateTurnoMap[date] || 4;
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.from('menu_semana')
-        .update({ numero_grupo: newGroup })
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(deviceId))
-        .eq('id_turno', turnoId);
-      if (error) throw error;
-      refresh();
-    } catch (err: any) {
-      console.error('Error cambiando grupo:', err);
-      alert(`Error: ${err.message || err}`);
-      setIsLoading(false);
+    const turnoId = dateTurnoMap[date];
+    if (!turnoId) {
+      alert(`No se pudo resolver id_turno para ${date}. Sin ese dato no se guarda para evitar inconsistencias.`);
+      return;
     }
+    data.addAssignmentDraft({
+      id: `group-${resId}-${fechaDB}-${turnoId}`,
+      table: 'menu_semana',
+      action: 'upsert',
+      matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId },
+      payload: {
+        id_agente: resId,
+        fecha_asignacion: fechaDB,
+        id_turno: turnoId,
+        id_dispositivo: parseInt(deviceId),
+        numero_grupo: newGroup,
+      },
+      uiDate: date,
+    });
+
+    data.setAssignmentsDb(prev => {
+      const next = { ...prev };
+      const day = next[date] || {};
+      const deviceResidents = day[deviceId] || [];
+      day[deviceId] = deviceResidents.map((r: any) =>
+        r.id === resId ? { ...r, numero_grupo: newGroup } : r
+      );
+      next[date] = day;
+      return next;
+    });
   };
 
   const handleToggleAcompana = async (resId: number, date: string, deviceId: string, current: boolean) => {
@@ -124,7 +158,12 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           .eq('id_dispositivo', parseInt(deviceId))
           .select();
       } else {
-        const turnoId = dateTurnoMap[date] || 4;
+        const turnoId = dateTurnoMap[date];
+        if (!turnoId) {
+          toast.error(`No se pudo resolver id_turno para ${date}`);
+          setIsLoading(false);
+          return;
+        }
         query = supabase.from('menu_semana')
           .update(updateObj)
           .eq('id_agente', resId)
@@ -286,6 +325,9 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       const current = assignments.length;
                       const isUnderMin = current < device.min;
                       const isOverMax = current > device.max;
+                      const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+                      const isRotation = isNonApertura && (orgType === 'rotacion simple' || orgType === 'rotacion completa');
+                      const groupCols = isRotation ? (dateGroupColumns[date] || [1]) : [];
 
                       let statusClass = '';
                       if (isUnderMin) statusClass = 'bg-destructive/5 border-destructive/20';
@@ -302,9 +344,22 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                             {assignments.length === 0 ? (
                               <div className="text-center text-muted-foreground/40 text-sm font-mono mt-2">—</div>
                             ) : (
-                              assignments.map((res: any, idx: number) => {
+                              <>
+                                {isRotation && groupCols.length > 0 && (
+                                  <div className={`grid gap-1 ${groupCols.length === 1 ? 'grid-cols-1' : groupCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                                    {groupCols.map((g) => (
+                                      <div key={`hdr-${date}-${device.id}-${g}`} className={`text-[9px] font-mono font-bold text-center rounded border px-1 py-0.5 ${getGroupColor(g)}`}>
+                                        G{g}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className={`grid gap-1.5 ${isRotation ? (groupCols.length === 1 ? 'grid-cols-1' : groupCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3') : 'grid-cols-1'}`}>
+                                {assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
                                 const metrics = computeRotationMetrics(res.id, String(device.id), totalDeviceCount, data.annualMetricsDb);
+                                const groupNum = (res.numero_grupo && res.numero_grupo >= 1 && res.numero_grupo <= 3) ? res.numero_grupo : (groupCols[0] || 1);
+                                const colIndex = Math.max(0, groupCols.indexOf(groupNum));
                                 return (
                                   <div
                                     key={idx}
@@ -317,6 +372,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getRepsColor(metrics.localReps)}
                                       ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
                                     }
+                                    style={isRotation ? { gridColumn: `${colIndex + 1} / ${colIndex + 2}` } : undefined}
                                   >
                                     <span className="flex items-center gap-1 min-w-0">
                                       <span className={`font-bold truncate max-w-[80px] text-xs ${
@@ -419,7 +475,9 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                     </div>
                                   </div>
                                 );
-                              })
+                              })}
+                                </div>
+                              </>
                             )}
                           </div>
                         </td>

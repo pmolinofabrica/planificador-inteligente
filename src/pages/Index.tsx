@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { Calendar, Undo2, LogOut, Lock, Unlock } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
@@ -34,6 +35,7 @@ const Index = () => {
   const [menuLocked, setMenuLocked] = useState(false);
   const [showUnlockInput, setShowUnlockInput] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
@@ -65,6 +67,26 @@ const Index = () => {
   const year = selectedMonth.split(" ")[1] || "2026";
 
   const isNonAperturaFilter = turnoFilter === 'tarde' || turnoFilter === 'manana';
+
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    data.setIsLoading(true);
+    const start = Date.now();
+    try {
+      await data.hardRefresh();
+      const elapsed = Date.now() - start;
+      if (elapsed < 700) {
+        await new Promise((resolve) => setTimeout(resolve, 700 - elapsed));
+      }
+      toast.success('Sincronización completada');
+    } catch (err: any) {
+      toast.error(`Error al sincronizar: ${err?.message || err}`);
+    } finally {
+      data.setIsLoading(false);
+      setIsSyncing(false);
+    }
+  };
 
   const handleLockToggle = () => {
     if (!menuLocked) {
@@ -188,15 +210,12 @@ const Index = () => {
                 </>
               ) : (
                 <button
-                  onClick={async () => {
-                   data.setIsLoading(true);
-                   await data.hardRefresh();
-                   data.setIsLoading(false);
-                  }}
+                  onClick={handleSync}
+                  disabled={isSyncing}
                   className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-card border-border text-foreground hover:bg-accent flex items-center gap-1.5"
                   title="Recarga inasistencias, dispositivos y personal"
                 >
-                  🔄 Sincronizar
+                  {isSyncing ? '⏳ Sincronizando...' : '🔄 Sincronizar'}
                 </button>
               )}
               {isNonAperturaFilter && (
@@ -282,14 +301,11 @@ const Index = () => {
             </>
           ) : (
             <button
-              onClick={async () => {
-                data.setIsLoading(true);
-                await data.hardRefresh();
-                data.setIsLoading(false);
-              }}
+              onClick={handleSync}
+              disabled={isSyncing}
               className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1 bg-card border-border text-foreground"
             >
-              🔄 Sincronizar
+              {isSyncing ? '⏳ Sincronizando...' : '🔄 Sincronizar'}
             </button>
           )}
           {isNonAperturaFilter && (

@@ -102,7 +102,12 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           uiDate: date
         });
       } else {
-        const turnoId = dateTurnoMap[date] || 4;
+        const turnoId = dateTurnoMap[date];
+        if (!turnoId) {
+          alert(`No se pudo resolver id_turno para ${date}. Sin ese dato no se guarda para evitar inconsistencias.`);
+          setIsLoading(false);
+          return;
+        }
         const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa';
 
         // Quitar original
@@ -142,7 +147,12 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     setIsLoading(true);
     
     try {
-      const turnoId = dateTurnoMap[date] || 4;
+      const turnoId = isApertura ? null : dateTurnoMap[date];
+      if (!isApertura && !turnoId) {
+        alert(`No se pudo resolver id_turno para ${date}. Sin ese dato no se guarda para evitar inconsistencias.`);
+        setIsLoading(false);
+        return;
+      }
       data.addAssignmentDraft({
         id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
         table: isApertura ? 'menu' : 'menu_semana',

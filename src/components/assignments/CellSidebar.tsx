@@ -113,7 +113,12 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
         if (diaData) {
           // dateTurnoMap for Apertura should have id_turno=45; default to 45 if missing
-          const turnoId = data.dateTurnoMap[selectedDate] || (data.turnoFilter === 'apertura' ? 45 : 4);
+          const turnoId = data.dateTurnoMap[selectedDate] || (data.turnoFilter === 'apertura' ? 45 : null);
+          if (!turnoId) {
+            setIsLoading(false);
+            alert(`No se pudo resolver id_turno para ${selectedDate}.`);
+            return;
+          }
           console.log(`[CellSidebar] Fallback: fecha=${fechaDB} idDia=${diaData.id_dia} turnoId=${turnoId}`);
           const { data: convRows } = await supabase
             .from('convocatoria')
@@ -189,7 +194,12 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
           });
         }
       } else {
-        const turnoId = dateTurnoMap[selectedDate] || 4;
+        const turnoId = dateTurnoMap[selectedDate];
+        if (!turnoId) {
+          setIsLoading(false);
+          alert(`No se pudo resolver id_turno para ${selectedDate}. Sin ese dato no se guarda para evitar inconsistencias.`);
+          return;
+        }
 
         if (isRotation) {
           let inheritedGroup: number | null = null;
@@ -209,8 +219,8 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
           data.addAssignmentDraft({
             id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
             table: 'menu_semana',
-            action: 'insert',
-              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId },
+            action: 'upsert',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
             payload: {
               id_agente: agentId, id_dispositivo: parseInt(deviceId),
               fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',

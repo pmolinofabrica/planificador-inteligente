@@ -27,6 +27,15 @@ interface StaticCache {
   turnoTypeMap: Record<number, string>;
 }
 
+const DRAFT_AUDIT_ENABLED = true;
+
+const buildMutationKey = (m: PendingMutation) => {
+  const agentId = m.matchParams?.id_agente ?? m.payload?.id_agente ?? 'na';
+  const fecha = m.matchParams?.fecha_asignacion ?? m.payload?.fecha_asignacion ?? 'na';
+  const turno = m.matchParams?.id_turno ?? m.payload?.id_turno ?? 'na';
+  return `${m.table}:${agentId}:${fecha}:${turno}`;
+};
+
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
@@ -63,6 +72,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       // Intentamos encontrar una mutación previa para el mismo "espacio lógico"
       // Para menu/menu_semana el espacio es (tabla, agente, fecha, turno)
       const isAssignment = mutation.table === 'menu' || mutation.table === 'menu_semana';
+      const isRotationMultiDevice =
+        mutation.table === 'menu_semana' &&
+        (
+          String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+          (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999 && mutation.payload?.id_dispositivo !== 999)
+        );
       let existingIndex = -1;
 
       if (isAssignment && mutation.matchParams?.id_agente) {
@@ -70,7 +85,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           m.table === mutation.table && 
           m.matchParams?.id_agente === mutation.matchParams.id_agente &&
           m.matchParams?.fecha_asignacion === mutation.matchParams.fecha_asignacion &&
-          m.matchParams?.id_turno === mutation.matchParams.id_turno
+          m.matchParams?.id_turno === mutation.matchParams.id_turno &&
+          (
+            !isRotationMultiDevice ||
+            m.matchParams?.id_dispositivo === mutation.matchParams?.id_dispositivo
+          )
         );
       } else {
         existingIndex = prev.findIndex(m => m.id === mutation.id);
@@ -84,6 +103,13 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // Si el nuevo es un 'remove' (dispositivo 999) y el anterior era un 'insert', simplemente eliminamos ambos
         if (mutation.payload?.id_dispositivo === 999 && existing.action === 'insert') {
           next.splice(existingIndex, 1);
+          if (DRAFT_AUDIT_ENABLED) {
+            console.info('[DraftAudit] merge-cancel', {
+              key: buildMutationKey(mutation),
+              removedExistingId: existing.id,
+              incomingId: mutation.id,
+            });
+          }
           return next;
         }
 
@@ -92,9 +118,28 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           ...mutation,
           action: existing.action === 'insert' ? 'insert' : mutation.action
         };
+        if (DRAFT_AUDIT_ENABLED) {
+          console.info('[DraftAudit] merge-replace', {
+            key: buildMutationKey(mutation),
+            replacedId: existing.id,
+            incomingId: mutation.id,
+            finalAction: next[existingIndex].action,
+          });
+        }
         return next;
       }
 
+      if (DRAFT_AUDIT_ENABLED) {
+        console.info('[DraftAudit] enqueue', {
+          id: mutation.id,
+          key: buildMutationKey(mutation),
+          table: mutation.table,
+          action: mutation.action,
+          uiDate: mutation.uiDate,
+          matchParams: mutation.matchParams,
+          payload: mutation.payload,
+        });
+      }
       return [...prev, mutation];
     });
 
@@ -105,24 +150,66 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       const uiName = mutation.payload?._ui_name;
 
       if (agentId) {
+        const isRotationMultiDevice =
+          mutation.table === 'menu_semana' &&
+          (
+            String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999 && mutation.payload?.id_dispositivo !== 999)
+          );
         setAssignmentsDb(prev => {
           const next = { ...prev };
           if (!next[uiDate]) next[uiDate] = {};
+          let existingName: string | undefined;
+          let existingScore: number | undefined;
+          let existingGroup: number | null | undefined;
+          let existingAcompana: boolean | undefined;
           
-          // Primero quitamos al agente de cualquier dispositivo en esa fecha
-          Object.keys(next[uiDate]).forEach(dId => {
-            next[uiDate][dId] = next[uiDate][dId].filter(a => a.id !== agentId);
-          });
+          if (!isRotationMultiDevice) {
+            // Apertura/dispositivos fijos: un agente solo puede estar en un dispositivo por fecha.
+            Object.keys(next[uiDate]).forEach(dId => {
+              const found = next[uiDate][dId].find(a => a.id === agentId);
+              if (found) {
+                existingName = found.name;
+                existingScore = found.score;
+                existingGroup = found.numero_grupo ?? null;
+                existingAcompana = found.acompana_grupo;
+              }
+              next[uiDate][dId] = next[uiDate][dId].filter(a => a.id !== agentId);
+            });
+          } else {
+            // Rotación: preservamos ubicaciones previas en otros dispositivos.
+            Object.keys(next[uiDate]).forEach(dId => {
+              const found = next[uiDate][dId].find(a => a.id === agentId);
+              if (found) {
+                existingName = found.name;
+                existingScore = found.score;
+                existingGroup = found.numero_grupo ?? null;
+                existingAcompana = found.acompana_grupo;
+              }
+            });
+          }
 
           // Si el destino no es 999, lo agregamos al nuevo dispositivo
           if (targetDispId && targetDispId !== 999) {
             const dIdStr = String(targetDispId);
             if (!next[uiDate][dIdStr]) next[uiDate][dIdStr] = [];
-            next[uiDate][dIdStr] = [...next[uiDate][dIdStr], { 
-              id: agentId, 
-              name: uiName || "Cargando...",
-              _isDraft: true 
-            }];
+            next[uiDate][dIdStr] = [
+              ...next[uiDate][dIdStr].filter(a => a.id !== agentId),
+              {
+                id: agentId, 
+                name: uiName || existingName || "Cargando...",
+                score: existingScore ?? 0,
+                numero_grupo: mutation.payload?.numero_grupo ?? existingGroup ?? null,
+                acompana_grupo: mutation.payload?.acompana_grupo ?? existingAcompana ?? false,
+                _isDraft: true,
+              }
+            ];
+          } else if (isRotationMultiDevice && mutation.matchParams?.id_dispositivo) {
+            // En rotación, al "quitar" quitamos sólo del dispositivo objetivo, no de todos.
+            const srcId = String(mutation.matchParams.id_dispositivo);
+            if (next[uiDate][srcId]) {
+              next[uiDate][srcId] = next[uiDate][srcId].filter(a => a.id !== agentId);
+            }
           }
           return next;
         });
@@ -149,6 +236,142 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     if (pendingMutations.length === 0) return { success: true };
     setIsLoading(true);
     try {
+      const persistMenuLike = async (
+        table: 'menu' | 'menu_semana',
+        action: MutationAction,
+        cleanPayload: any,
+        cleanMatchParams: any
+      ) => {
+        const resolveConvocatoriaId = async (agentId: number, fecha: string, turnoId?: number) => {
+          const { data: diaData, error: diaErr } = await supabase
+            .from('dias')
+            .select('id_dia')
+            .eq('fecha', fecha)
+            .maybeSingle();
+          if (diaErr || !diaData?.id_dia) return null;
+
+          let q = supabase
+            .from('convocatoria')
+            .select('id_convocatoria, planificacion!inner(id_dia, id_turno)')
+            .eq('id_agente', agentId)
+            .eq('estado', 'vigente')
+            .eq('planificacion.id_dia', diaData.id_dia);
+
+          if (turnoId != null) q = q.eq('planificacion.id_turno', turnoId);
+          const { data: convRows } = await q.limit(1);
+          return convRows?.[0]?.id_convocatoria ?? null;
+        };
+
+        const isMenuSemanaMultiDevice =
+          table === 'menu_semana' &&
+          (
+            String(cleanPayload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+            (cleanMatchParams?.id_dispositivo != null && cleanMatchParams?.id_dispositivo !== 999 && cleanPayload?.id_dispositivo !== 999)
+          );
+
+        const keyFields = table === 'menu_semana'
+          ? (isMenuSemanaMultiDevice
+            ? (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'] as const)
+            : (['id_agente', 'fecha_asignacion', 'id_turno'] as const))
+          : (['id_agente', 'fecha_asignacion'] as const);
+
+        const logicalKey: Record<string, any> = {};
+        keyFields.forEach((k) => {
+          const v = cleanPayload?.[k] ?? cleanMatchParams?.[k];
+          if (v !== undefined && v !== null) logicalKey[k] = v;
+        });
+
+        if (Object.keys(logicalKey).length !== keyFields.length && cleanMatchParams?.id_menu_semana && table === 'menu_semana') {
+          const { data: byId, error: byIdErr } = await supabase
+            .from('menu_semana')
+            .select('id_agente, fecha_asignacion, id_turno')
+            .eq('id_menu_semana', cleanMatchParams.id_menu_semana)
+            .maybeSingle();
+          if (byIdErr) throw new Error(`[${table}] Resolve key failed: ${byIdErr.message}`);
+          if (byId) {
+            logicalKey.id_agente = byId.id_agente;
+            logicalKey.fecha_asignacion = byId.fecha_asignacion;
+            logicalKey.id_turno = byId.id_turno;
+          }
+        }
+
+        if (Object.keys(logicalKey).length !== keyFields.length) {
+          let fallbackQ: any = action === 'delete' ? supabase.from(table).delete() : supabase.from(table).update(cleanPayload);
+          for (const [k, v] of Object.entries(cleanMatchParams || {})) fallbackQ = fallbackQ.eq(k, v);
+          const { error } = await fallbackQ;
+          if (error) throw new Error(`[${table}] Fallback failed: ${error.message}`);
+          return;
+        }
+
+        if (action === 'delete') {
+          let delQ: any = supabase.from(table).delete();
+          for (const [k, v] of Object.entries(logicalKey)) delQ = delQ.eq(k, v);
+          const { error } = await delQ;
+          if (error) throw new Error(`[${table}] Delete failed: ${error.message}`);
+          return;
+        }
+
+        let existingQ: any = supabase.from(table).select('*');
+        for (const [k, v] of Object.entries(logicalKey)) existingQ = existingQ.eq(k, v);
+        const { data: existingRows, error: existingErr } = await existingQ;
+        if (existingErr) throw new Error(`[${table}] Read failed: ${existingErr.message}`);
+
+        const baseRow = (existingRows && existingRows.length > 0) ? existingRows[0] : {};
+        const finalRow = { ...baseRow, ...cleanPayload, ...logicalKey };
+        delete finalRow.id_menu_semana;
+
+        if (table === 'menu_semana' && (finalRow.id_convocatoria == null)) {
+          const resolvedConvId = await resolveConvocatoriaId(
+            Number(finalRow.id_agente),
+            String(finalRow.fecha_asignacion),
+            finalRow.id_turno != null ? Number(finalRow.id_turno) : undefined
+          );
+          if (resolvedConvId != null) finalRow.id_convocatoria = resolvedConvId;
+        }
+        if (table === 'menu' && (finalRow.id_convocatoria == null)) {
+          const resolvedConvId = await resolveConvocatoriaId(
+            Number(finalRow.id_agente),
+            String(finalRow.fecha_asignacion),
+            undefined
+          );
+          if (resolvedConvId != null) finalRow.id_convocatoria = resolvedConvId;
+        }
+
+        let delQ: any = supabase.from(table).delete();
+        for (const [k, v] of Object.entries(logicalKey)) delQ = delQ.eq(k, v);
+        const { error: delErr } = await delQ;
+        if (delErr) throw new Error(`[${table}] Cleanup failed: ${delErr.message}`);
+
+        const { error: insErr } = await supabase.from(table).insert(finalRow);
+        if (insErr) throw new Error(`[${table}] Insert final failed: ${insErr.message}`);
+      };
+
+      if (DRAFT_AUDIT_ENABLED) {
+        console.groupCollapsed(`[DraftAudit] save-start (${pendingMutations.length} mutaciones)`);
+        console.table(
+          pendingMutations.map((m, idx) => ({
+            idx,
+            id: m.id,
+            table: m.table,
+            action: m.action,
+            key: buildMutationKey(m),
+            uiDate: m.uiDate,
+            dispositivo: m.payload?.id_dispositivo ?? null,
+            grupo: m.payload?.numero_grupo ?? null,
+          }))
+        );
+      }
+
+      const duplicates = pendingMutations.reduce((acc, m) => {
+        const key = buildMutationKey(m);
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      const duplicateKeys = Object.entries(duplicates).filter(([, count]) => count > 1);
+      if (DRAFT_AUDIT_ENABLED && duplicateKeys.length > 0) {
+        console.warn('[DraftAudit] duplicate logical keys in queue', duplicateKeys);
+      }
+
       for (const m of pendingMutations) {
         const cleanPayload = m.payload ? Object.fromEntries(
           Object.entries(m.payload).filter(([key]) => !key.startsWith('_'))
@@ -158,37 +381,81 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           Object.entries(m.matchParams).filter(([key]) => !key.startsWith('_'))
         ) : null;
 
+        if (DRAFT_AUDIT_ENABLED) {
+          console.info('[DraftAudit] persist-attempt', {
+            id: m.id,
+            table: m.table,
+            action: m.action,
+            key: buildMutationKey(m),
+            cleanMatchParams,
+            cleanPayload,
+          });
+        }
+
         if (m.action === 'upsert') {
-          // Fallback robusto para Upsert si falla el ON CONFLICT o no se conoce
-          const { data: existing } = await supabase.from(m.table).select('*').match(cleanMatchParams || {}).maybeSingle();
-          if (existing) {
-            const { error } = await supabase.from(m.table).update(cleanPayload).match(cleanMatchParams || {});
-            if (error) throw new Error(`[${m.table}] Update failed: ${error.message}`);
+          if (m.table === 'menu_semana' || m.table === 'menu') {
+            await persistMenuLike(m.table, m.action, cleanPayload, cleanMatchParams);
+          } else if (m.table === 'calendario_dispositivos') {
+            const { error } = await supabase
+              .from('calendario_dispositivos')
+              .upsert(cleanPayload, { onConflict: 'fecha,id_turno,id_dispositivo' });
+            if (error) throw new Error(`[${m.table}] Upsert failed: ${error.message}`);
           } else {
-            const { error } = await supabase.from(m.table).insert(cleanPayload);
-            if (error) throw new Error(`[${m.table}] Insert failed: ${error.message}`);
+            const { data: existing } = await supabase.from(m.table).select('*').match(cleanMatchParams || {}).maybeSingle();
+            if (existing) {
+              const { error } = await supabase.from(m.table).update(cleanPayload).match(cleanMatchParams || {});
+              if (error) throw new Error(`[${m.table}] Update failed: ${error.message}`);
+            } else {
+              const { error } = await supabase.from(m.table).insert(cleanPayload);
+              if (error) throw new Error(`[${m.table}] Insert failed: ${error.message}`);
+            }
           }
         } else if (m.action === 'insert') {
-          const { error } = await supabase.from(m.table).insert(cleanPayload);
-          if (error) throw new Error(`[${m.table}] ${error.message}`);
+          if (m.table === 'menu_semana' || m.table === 'menu') {
+            await persistMenuLike(m.table, m.action, cleanPayload, cleanMatchParams);
+          } else {
+            const { error } = await supabase.from(m.table).insert(cleanPayload);
+            if (error) throw new Error(`[${m.table}] ${error.message}`);
+          }
         } else if (m.action === 'update') {
-          let q = supabase.from(m.table).update(cleanPayload);
-          for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
-          const { error } = await q;
-          if (error) throw new Error(`[${m.table}] ${error.message}`);
+          if (m.table === 'menu_semana' || m.table === 'menu') {
+            await persistMenuLike(m.table, m.action, cleanPayload, cleanMatchParams);
+          } else {
+            let q = supabase.from(m.table).update(cleanPayload);
+            for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
+            const { error } = await q;
+            if (error) throw new Error(`[${m.table}] ${error.message}`);
+          }
         } else if (m.action === 'delete') {
           let q = supabase.from(m.table).delete();
           for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
           const { error } = await q;
           if (error) throw new Error(`[${m.table}] ${error.message}`);
         }
+
+        if (DRAFT_AUDIT_ENABLED) {
+          console.info('[DraftAudit] persist-ok', {
+            id: m.id,
+            table: m.table,
+            action: m.action,
+            key: buildMutationKey(m),
+          });
+        }
       }
       setPendingMutations([]);
       setRefreshCounter(c => c + 1);
       setIsLoading(false);
+      if (DRAFT_AUDIT_ENABLED) {
+        console.info('[DraftAudit] save-success');
+        console.groupEnd();
+      }
       return { success: true };
     } catch (err: any) {
       console.error("Error saving drafts:", err);
+      if (DRAFT_AUDIT_ENABLED) {
+        console.error('[DraftAudit] save-failed', err);
+        console.groupEnd();
+      }
       setIsLoading(false);
       return { success: false, error: err.message };
     }
@@ -375,6 +642,18 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const menuData = menuRes.data || [];
         const menuSemanaData = menuSemanaRes.data || [];
         const configData = configRes.data || [];
+
+        if (DRAFT_AUDIT_ENABLED && menuSemanaData.length > 0) {
+          const dupCounter: Record<string, number> = {};
+          menuSemanaData.forEach((ms: any) => {
+            const key = `ms:${ms.id_agente}:${ms.fecha_asignacion}:${ms.id_turno}`;
+            dupCounter[key] = (dupCounter[key] || 0) + 1;
+          });
+          const duplicates = Object.entries(dupCounter).filter(([, count]) => count > 1);
+          if (duplicates.length > 0) {
+            console.warn('[DraftAudit] menu_semana duplicated keys on load', duplicates.slice(0, 50));
+          }
+        }
 
         // Build numero_grupo map from menu_semana
         const grupoMap: Record<string, number | null> = {};

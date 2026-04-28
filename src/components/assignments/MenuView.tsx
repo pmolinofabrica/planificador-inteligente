@@ -133,19 +133,27 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
     : p === 2 ? 'border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))]'
     : 'border-[hsl(var(--floor-3-border))] bg-[hsl(var(--floor-3-bg))]';
 
-  const isRotacionCompleta = orgType === 'rotacion completa';
+  const isRotacionMode = orgType === 'rotacion completa' || orgType === 'rotacion simple';
 
-  // Get distinct groups for rotacion completa layout
+  // Get distinct groups for rotation layout using visits first, then assignments fallback.
   const distinctGroups = useMemo(() => {
-    if (!isRotacionCompleta) return [];
+    if (!isRotacionMode) return [];
     const groups = new Set<number>();
-    Object.values(dateAssignments).forEach((arr: any) => {
-      arr.forEach((r: any) => {
-        if (r.numero_grupo != null) groups.add(r.numero_grupo);
+    (visitasByDate?.[currentDate] || []).forEach((v: any) => {
+      (v.numero_grupo || []).forEach((g: number) => {
+        if (g >= 1 && g <= 3) groups.add(g);
       });
     });
+    if (groups.size === 0) {
+      Object.values(dateAssignments).forEach((arr: any) => {
+        arr.forEach((r: any) => {
+          if (r.numero_grupo != null) groups.add(r.numero_grupo);
+        });
+      });
+    }
+    if (groups.size === 0) groups.add(1);
     return Array.from(groups).sort();
-  }, [dateAssignments, isRotacionCompleta]);
+  }, [dateAssignments, isRotacionMode, visitasByDate, currentDate]);
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
@@ -225,8 +233,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
           </div>
         )}
 
-        {/* ── Rotacion Completa: Group Legend ── */}
-        {isRotacionCompleta && distinctGroups.length > 1 && (
+        {/* ── Rotación: Group Legend ── */}
+        {isRotacionMode && distinctGroups.length > 0 && (
           <div className="mb-3 flex items-center gap-2 px-1">
             <span className="text-[10px] font-bold text-muted-foreground">Grupos:</span>
             {distinctGroups.map(g => (
@@ -340,11 +348,11 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                         {assignments.length}/{cupo}
                       </span>
                     </div>
-                    {/* Resident list - horizontal columns for rotacion completa, stacked otherwise */}
-                    {isRotacionCompleta && distinctGroups.length > 1 ? (
+                    {/* Resident list - horizontal columns for rotación, stacked otherwise */}
+                    {isRotacionMode && distinctGroups.length > 0 ? (
                       <div className="p-1.5 sm:p-2 flex gap-1">
                         {distinctGroups.map(gNum => {
-                          const groupAssignments = assignments.filter(r => r.numero_grupo === gNum);
+                          const groupAssignments = assignments.filter(r => (r.numero_grupo ?? distinctGroups[0]) === gNum);
                           if (groupAssignments.length === 0) return (
                             <div key={gNum} className="flex-1 min-w-0" />
                           );
