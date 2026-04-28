@@ -107,30 +107,48 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
 
     setIsLoading(true);
     try {
+      const resName = data.allResidentsDb?.find((r:any) => r.id === selectedVacant.id)?.name || 'Borrador';
+
       if (isApertura) {
-        // Modo apertura al público → tabla `menu`
         const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
           .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
         if (fetchErr) throw fetchErr;
 
-        const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
-        if (vacanteRow) {
-          const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
-          if (error) throw error;
-        } else if (existing && existing.length > 0) {
-          const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
-          if (error) throw error;
+        if (existing && existing.length > 0) {
+          const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
+          if (vacanteRow) {
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu',
+              action: 'update',
+              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999 },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedVacant.date
+            });
+          } else {
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu',
+              action: 'update',
+              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedVacant.date
+            });
+          }
         } else {
-          const { error } = await supabase.from('menu').insert([{
-            id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
-            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId
-          }]);
-          if (error) throw error;
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            table: 'menu',
+            action: 'insert',
+            payload: {
+              id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
+              _ui_name: resName
+            },
+            uiDate: selectedVacant.date
+          });
         }
       } else {
-        // Modo turno tarde/mañana → tabla `menu_semana`
         const turnoId = data.dateTurnoMap[selectedVacant.date] || 4;
         const { data: existing, error: fetchErr } = await supabase.from('menu_semana').select('*')
           .eq('id_agente', selectedVacant.id)
@@ -138,34 +156,49 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
           .eq('id_turno', turnoId);
         if (fetchErr) throw fetchErr;
 
-        const vacanteRow = existing?.find((m: any) => m.id_dispositivo === 999);
-        if (vacanteRow) {
-          const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_agente', selectedVacant.id)
-            .eq('fecha_asignacion', fechaDB)
-            .eq('id_dispositivo', 999)
-            .eq('id_turno', turnoId);
-          if (error) throw error;
-        } else if (existing && existing.length > 0) {
-          const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-            .eq('id_menu_semana', existing[0].id_menu_semana);
-          if (error) throw error;
+        if (existing && existing.length > 0) {
+          const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
+          if (vacanteRow) {
+             data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu_semana',
+              action: 'update',
+              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedVacant.date
+            });
+          } else {
+             data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu_semana',
+              action: 'update',
+              matchParams: { id_menu_semana: existing[0].id_menu_semana },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedVacant.date
+            });
+          }
         } else {
           const orgType = data.tipoOrganizacionMap?.[selectedVacant.date] || 'dispositivos fijos';
-          const { error } = await supabase.from('menu_semana').insert([{
-            id_agente: selectedVacant.id,
-            id_dispositivo: parseInt(deviceId),
-            fecha_asignacion: fechaDB,
-            estado_ejecucion: 'planificado',
-            id_convocatoria: convId,
-            id_turno: turnoId,
-            tipo_organizacion: orgType
-          }]);
-          if (error) throw error;
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            table: 'menu_semana',
+            action: 'insert',
+            payload: {
+              id_agente: selectedVacant.id,
+              id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB,
+              estado_ejecucion: 'planificado',
+              id_convocatoria: convId,
+              id_turno: turnoId,
+              tipo_organizacion: orgType,
+              _ui_name: resName
+            },
+            uiDate: selectedVacant.date
+          });
         }
       }
       setSelectedVacant(null);
-      refresh();
+      setIsLoading(false);
     } catch (err: any) {
       console.error('Error asignando:', err);
       alert(`Error al asignar: ${err.message || err}`);

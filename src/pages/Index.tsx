@@ -168,19 +168,37 @@ const Index = () => {
           {/* Actions — desktop only inline, mobile collapsed */}
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => {
-                  if (undoStack.length === 0) { alert("No hay acciones recientes para deshacer."); return; }
-                  handleUndo(data.setIsLoading);
-                }}
-                className={`font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 flex items-center gap-1.5
-                  ${undoStack.length > 0
-                    ? 'bg-card border-primary/30 text-primary hover:bg-accent'
-                    : 'bg-muted border-border text-muted-foreground cursor-not-allowed'
-                  }`}
-              >
-                <Undo2 className="w-4 h-4" /> Deshacer ({undoStack.length})
-              </button>
+              {data.pendingMutations.length > 0 ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      const res = await data.saveDrafts();
+                      if (!res.success) alert(`Error al guardar: ${res.error}`);
+                    }}
+                    className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 flex items-center gap-1.5"
+                  >
+                    💾 Guardar ({data.pendingMutations.length})
+                  </button>
+                  <button
+                    onClick={() => data.discardDrafts()}
+                    className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20 flex items-center gap-1.5"
+                  >
+                    ❌ Descartar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={async () => {
+                   data.setIsLoading(true);
+                   await data.hardRefresh();
+                   data.setIsLoading(false);
+                  }}
+                  className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-card border-border text-foreground hover:bg-accent flex items-center gap-1.5"
+                  title="Recarga inasistencias, dispositivos y personal"
+                >
+                  🔄 Sincronizar
+                </button>
+              )}
               {isNonAperturaFilter && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-xl border border-border">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase">Org:</span>
@@ -244,19 +262,36 @@ const Index = () => {
 
         {/* Row 3: Mobile-only action row */}
         <div className="flex sm:hidden items-center gap-2">
-          <button
-            onClick={() => {
-              if (undoStack.length === 0) { alert("No hay acciones recientes para deshacer."); return; }
-              handleUndo(data.setIsLoading);
-            }}
-            className={`font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1
-              ${undoStack.length > 0
-                ? 'bg-card border-primary/30 text-primary'
-                : 'bg-muted border-border text-muted-foreground cursor-not-allowed'
-              }`}
-          >
-            <Undo2 className="w-3 h-3" /> Deshacer ({undoStack.length})
-          </button>
+          {data.pendingMutations.length > 0 ? (
+            <>
+              <button
+                onClick={async () => {
+                  const res = await data.saveDrafts();
+                  if (!res.success) alert(`Error al guardar: ${res.error}`);
+                }}
+                className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1 bg-primary/10 border-primary/30 text-primary"
+              >
+                💾 Guardar ({data.pendingMutations.length})
+              </button>
+              <button
+                onClick={() => data.discardDrafts()}
+                className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 bg-destructive/10 border-destructive/30 text-destructive"
+              >
+                ❌
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={async () => {
+                data.setIsLoading(true);
+                await data.hardRefresh();
+                data.setIsLoading(false);
+              }}
+              className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1 bg-card border-border text-foreground"
+            >
+              🔄 Sincronizar
+            </button>
+          )}
           {isNonAperturaFilter && (
             <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-lg border border-border">
               Org: {Object.values(data.tipoOrganizacionMap)[0] || '—'}

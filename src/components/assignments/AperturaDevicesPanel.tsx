@@ -91,7 +91,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         return;
       }
       toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
-      refresh();
+      setIsLoading(false);
     } catch (err: any) {
       console.error('Error toggling acompa\u00f1a_grupo:', err);
       toast.error(`Error: ${err.message || err}`);
@@ -121,35 +121,30 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
     setIsLoading(true);
     try {
+      const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
       if (toCupo === 0 || toAssigned >= toCupo) {
-        const newCupo = (toCupo || 0) + 1;
-        const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
-        await supabase.from('calendario_dispositivos')
-          .upsert({
-            fecha: fechaDB, id_turno: turnoId,
-            id_dispositivo: parseInt(toDeviceId), cupo_objetivo: newCupo,
-          }, { onConflict: 'fecha, id_turno, id_dispositivo' });
-        
-        setCalendarDb((prev: any) => {
-          const next = { ...prev };
-          if (!next[execDate]) next[execDate] = {};
-          next[execDate] = { ...next[execDate], [toDeviceId]: newCupo };
-          return next;
+        data.addAssignmentDraft({
+          id: `cupo-${execDate}-${toDeviceId}`,
+          table: 'calendario_dispositivos',
+          action: 'upsert',
+          matchParams: { fecha: fechaDB, id_dispositivo: parseInt(toDeviceId), id_turno: turnoId },
+          payload: { fecha: fechaDB, id_dispositivo: parseInt(toDeviceId), id_turno: turnoId, cupo_objetivo: (toCupo || 0) + 1 },
+          uiDate: execDate
         });
       }
 
-      const { error } = await supabase.from('menu')
-        .update({ id_dispositivo: parseInt(toDeviceId) })
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(fromDeviceId));
+      data.addAssignmentDraft({
+        id: `op-${resId}-${execDate}-${data.turnoFilter}`,
+        table: isAperturaMode ? 'menu' : 'menu_semana',
+        action: 'update',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(fromDeviceId), ...(isAperturaMode ? {} : { id_turno: turnoId }) },
+        payload: { id_dispositivo: parseInt(toDeviceId), _ui_name: resName },
+        uiDate: execDate
+      });
 
-      if (error) throw error;
-
-      pushUndo({ snapshot: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(fromDeviceId) } });
-      toast.success(`${resName} trasladado a ${toDev?.name}`);
+      toast.success(`${resName} trasladado localmente`);
       setSelectedOpenDevice(null);
-      refresh();
+      setIsLoading(false);
     } catch (err: any) {
       console.error('Error trasladando:', err);
       toast.error(`Error: ${err.message || err}`);
@@ -178,83 +173,46 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     try {
       const newCupo = toCupo + 1;
       const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
-      await supabase.from('calendario_dispositivos')
-        .upsert({
-          fecha: fechaDB, id_turno: turnoId,
-          id_dispositivo: parseInt(targetDeviceId), cupo_objetivo: newCupo,
-        }, { onConflict: 'fecha, id_turno, id_dispositivo' });
-
-      setCalendarDb((prev: any) => {
-        const next = { ...prev };
-        if (!next[execDate]) next[execDate] = {};
-        next[execDate] = { ...next[execDate], [targetDeviceId]: newCupo };
-        return next;
+      
+      data.addAssignmentDraft({
+        id: `cupo-${execDate}-${targetDeviceId}`,
+        table: 'calendario_dispositivos',
+        action: 'upsert',
+        matchParams: { fecha: fechaDB, id_dispositivo: parseInt(targetDeviceId), id_turno: turnoId },
+        payload: { fecha: fechaDB, id_dispositivo: parseInt(targetDeviceId), id_turno: turnoId, cupo_objetivo: newCupo },
+        uiDate: execDate
       });
 
-      if (currentOccupancy) {
-        const { error } = await supabase.from('menu')
-          .update({ id_dispositivo: parseInt(targetDeviceId) })
-          .eq('id_agente', resId)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(currentOccupancy.deviceId));
-        if (error) throw error;
-        pushUndo({ snapshot: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(currentOccupancy.deviceId) } });
-      } else {
-        let convId = agentConvocatoriaMap[execDate]?.[resId];
-        if (!convId) {
-          console.log(`[AperturaDevicesPanel] Convocatoria not in map for agent ${resId} on ${execDate}. Trying fallback...`);
-          try {
-            const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
-            if (diaData) {
-              const turnoId = data.dateTurnoMap[execDate] || (data.turnoFilter === 'apertura' ? 45 : 4);
-              const { data: convRows } = await supabase
-                .from('convocatoria')
-                .select(`
-                  id_convocatoria,
-                  planificacion!inner(id_turno, id_dia)
-                `)
-                .eq('id_agente', resId)
-                .eq('estado', 'vigente')
-                .eq('planificacion.id_turno', turnoId)
-                .eq('planificacion.id_dia', diaData.id_dia)
-                .limit(1);
-
-              if (convRows?.[0]) {
-                convId = convRows[0].id_convocatoria;
-                console.log(`[AperturaDevicesPanel] Fallback found conv ${convId}`);
-              }
-            }
-          } catch (err) {
-            console.error("Error in fallback conv lookup:", err);
+      let convId = agentConvocatoriaMap[execDate]?.[resId];
+      if (!convId) {
+        try {
+          const { data: diaData } = await supabase.from('dias').select('id_dia').eq('fecha', fechaDB).single();
+          if (diaData) {
+            const { data: convRows } = await supabase.from('convocatoria').select(`id_convocatoria, planificacion!inner(id_turno, id_dia)`)
+              .eq('id_agente', resId).eq('estado', 'vigente').eq('planificacion.id_turno', turnoId).eq('planificacion.id_dia', diaData.id_dia).limit(1);
+            if (convRows?.[0]) convId = convRows[0].id_convocatoria;
           }
-        }
-        if (!convId) {
-          toast.error('No se encontró convocatoria vigente para este residente.');
-          setIsLoading(false);
-          return;
-        }
-
-        const { data: existing } = await supabase.from('menu').select('*')
-          .eq('id_agente', resId).eq('fecha_asignacion', fechaDB);
-
-        if (existing && existing.length > 0) {
-          const { error } = await supabase.from('menu')
-            .update({ id_dispositivo: parseInt(targetDeviceId) })
-            .eq('id_agente', resId).eq('fecha_asignacion', fechaDB);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from('menu').insert([{
-            id_agente: resId, id_dispositivo: parseInt(targetDeviceId),
-            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
-          }]);
-          if (error) throw error;
-        }
-        pushUndo({ snapshot: { id_agente: resId, fecha_asignacion: fechaDB, _isInsert: true } });
+        } catch (err) {}
+      }
+      
+      if (!convId) {
+        toast.error('No se encontró convocatoria vigente para este residente.');
+        setIsLoading(false);
+        return;
       }
 
-      toast.success(`${resName} asignado a ${toDev?.name}`);
+      data.addAssignmentDraft({
+        id: `op-${resId}-${execDate}-${data.turnoFilter}`,
+        table: isAperturaMode ? 'menu' : 'menu_semana',
+        action: 'upsert',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, ...(isAperturaMode ? {} : { id_turno: turnoId }) },
+        payload: { id_agente: resId, id_dispositivo: parseInt(targetDeviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId, _ui_name: resName },
+        uiDate: execDate
+      });
+
+      toast.success(`${resName} asignado localmente`);
       setSelectedClosedDevice(null);
-      refresh();
+      setIsLoading(false);
     } catch (err: any) {
       console.error('Error asignando:', err);
       toast.error(`Error: ${err.message || err}`);

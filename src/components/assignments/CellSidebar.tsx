@@ -90,10 +90,15 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         `⚠️ El dispositivo "${selectedDevice.name}" ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
       );
       if (!confirmed) return;
-      const newCalendar = { ...data.calendarDb };
-      if (!newCalendar[selectedDate]) newCalendar[selectedDate] = {};
-      newCalendar[selectedDate][deviceId] = cupoLimit + 1;
-      data.setCalendarDb(newCalendar);
+      const turnoIdForCupo = data.dateTurnoMap[selectedDate] || (isApertura ? 45 : 4);
+      data.addAssignmentDraft({
+        id: `cupo-${selectedDate}-${deviceId}`,
+        table: 'calendario_dispositivos',
+        action: 'upsert',
+        matchParams: { fecha: fechaDB, id_dispositivo: parseInt(deviceId), id_turno: turnoIdForCupo },
+        payload: { fecha: fechaDB, id_dispositivo: parseInt(deviceId), id_turno: turnoIdForCupo, cupo_objetivo: cupoLimit + 1 },
+        uiDate: selectedDate
+      });
     }
 
     // Resolve convocatoria ID — required by both menu and menu_semana
@@ -140,40 +145,53 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
 
     setIsLoading(true);
     try {
+      const resName = data.allResidentsDb?.find((r:any) => r.id === agentId)?.name || "Borrador";
+
       if (isApertura) {
         const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
           .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB);
         if (fetchErr) throw fetchErr;
 
         if (existing && existing.length > 0) {
-          // Update existing menu row(s): move to new device
           const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
           const firstRow = existing[0];
           if (vacantRow) {
-            const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999);
-            if (error) throw error;
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu',
+              action: 'update',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999 },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedDate
+            });
           } else {
-            // Transfer from current device to new device
-            const { error } = await supabase.from('menu').update({ id_dispositivo: parseInt(deviceId) })
-              .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', firstRow.id_dispositivo);
-            if (error) throw error;
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu',
+              action: 'update',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
+              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              uiDate: selectedDate
+            });
           }
-          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo } });
         } else {
-          const { error } = await supabase.from('menu').insert([{
-            id_agente: agentId, id_dispositivo: parseInt(deviceId),
-            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId
-          }]);
-          if (error) throw error;
-          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true } });
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            table: 'menu',
+            action: 'insert',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB },
+            payload: {
+              id_agente: agentId, id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
+              _ui_name: resName
+            },
+            uiDate: selectedDate
+          });
         }
       } else {
         const turnoId = dateTurnoMap[selectedDate] || 4;
 
         if (isRotation) {
-          // Rotación simple/completa: always INSERT new row.
-          // Inherit numero_grupo from any existing assignment for this agent/date/turno.
           let inheritedGroup: number | null = null;
           try {
             const { data: existingRows } = await supabase.from('menu_semana')
@@ -186,22 +204,25 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
             if (existingRows && existingRows.length > 0 && existingRows[0].numero_grupo != null) {
               inheritedGroup = existingRows[0].numero_grupo;
             }
-          } catch (e) {
-            console.warn('[CellSidebar] Could not fetch existing group for inheritance:', e);
-          }
+          } catch (e) {}
 
-          const { error } = await supabase.from('menu_semana').insert([{
-            id_agente: agentId, id_dispositivo: parseInt(deviceId),
-            fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
-            id_convocatoria: convId, id_turno: turnoId,
-            tipo_organizacion: orgType,
-            ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {}),
-          }]);
-          if (error) throw error;
-          pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' } });
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            table: 'menu_semana',
+            action: 'insert',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId },
+            payload: {
+              id_agente: agentId, id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+              id_convocatoria: convId, id_turno: turnoId,
+              tipo_organizacion: orgType,
+              _ui_name: resName,
+              ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {}),
+            },
+            uiDate: selectedDate
+          });
 
         } else {
-          // Dispositivos fijos: update existing or insert new
           const { data: existing, error: fetchErr } = await supabase.from('menu_semana').select('*')
             .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
           if (fetchErr) throw fetchErr;
@@ -209,29 +230,44 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
           if (existing && existing.length > 0) {
             const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
             if (vacantRow) {
-              const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-                .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_dispositivo', 999).eq('id_turno', turnoId);
-              if (error) throw error;
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu_semana',
+                action: 'update',
+                matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedDate
+              });
             } else {
-              const { error } = await supabase.from('menu_semana').update({ id_dispositivo: parseInt(deviceId) })
-                .eq('id_menu_semana', existing[0].id_menu_semana);
-              if (error) throw error;
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu_semana',
+                action: 'update',
+                matchParams: { id_menu_semana: existing[0].id_menu_semana },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedDate
+              });
             }
-            pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: existing[0].id_dispositivo, _table: 'menu_semana', id_turno: turnoId } });
           } else {
-            const { error } = await supabase.from('menu_semana').insert([{
-              id_agente: agentId, id_dispositivo: parseInt(deviceId),
-              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
-              id_convocatoria: convId, id_turno: turnoId,
-              tipo_organizacion: orgType,
-            }]);
-            if (error) throw error;
-            pushUndo({ snapshot: { id_agente: agentId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana' } });
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu_semana',
+              action: 'insert',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId },
+              payload: {
+                id_agente: agentId, id_dispositivo: parseInt(deviceId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+                id_convocatoria: convId, id_turno: turnoId,
+                tipo_organizacion: orgType,
+                _ui_name: resName
+              },
+              uiDate: selectedDate
+            });
           }
         }
       }
       closeSidebar();
-      refresh();
+      setIsLoading(false);
     } catch (err: any) {
       console.error('Error asignando:', err);
       alert(`Error al asignar: ${err.message || err}`);

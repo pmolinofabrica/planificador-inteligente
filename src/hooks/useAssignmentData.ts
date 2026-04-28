@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { buildResidentCaps } from '@/lib/caps-builder';
@@ -7,11 +7,24 @@ import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
   VisitaInfo, VisitasByDateMap, AnnualMetricsMap, AgentAnnualMetrics,
+  PendingMutation,
 } from '@/types/assignments';
 
 interface UseAssignmentDataProps {
   selectedMonth: string;
   turnoFilter?: string;
+}
+
+interface StaticCache {
+  resiData: any[] | null;
+  capData: any[];
+  partsData: any[];
+  dispoCapData: any[];
+  convocadosMatriz: any[];
+  planisData: any[];
+  diasData: any[];
+  inasistenciasRaw: any[];
+  turnoTypeMap: Record<number, string>;
 }
 
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
@@ -34,6 +47,163 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
   const [aperturaMetricsDb, setAperturaMetricsDb] = useState<AnnualMetricsMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
+
+  const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>([]);
+  const hasLoadedStatic = useRef(false);
+  const staticCache = useRef<StaticCache | null>(null);
+
+  const addAssignmentDraft = useCallback((mutation: PendingMutation) => {
+    const uiDate = mutation.uiDate;
+    if (!uiDate) {
+      console.warn("addAssignmentDraft: uiDate is missing in mutation", mutation);
+      return;
+    }
+    
+    setPendingMutations(prev => {
+      // Intentamos encontrar una mutación previa para el mismo "espacio lógico"
+      // Para menu/menu_semana el espacio es (tabla, agente, fecha, turno)
+      const isAssignment = mutation.table === 'menu' || mutation.table === 'menu_semana';
+      let existingIndex = -1;
+
+      if (isAssignment && mutation.matchParams?.id_agente) {
+        existingIndex = prev.findIndex(m => 
+          m.table === mutation.table && 
+          m.matchParams?.id_agente === mutation.matchParams.id_agente &&
+          m.matchParams?.fecha_asignacion === mutation.matchParams.fecha_asignacion &&
+          m.matchParams?.id_turno === mutation.matchParams.id_turno
+        );
+      } else {
+        existingIndex = prev.findIndex(m => m.id === mutation.id);
+      }
+
+      if (existingIndex !== -1) {
+        const existing = prev[existingIndex];
+        const next = [...prev];
+
+        // Lógica de mezcla simplificada:
+        // Si el nuevo es un 'remove' (dispositivo 999) y el anterior era un 'insert', simplemente eliminamos ambos
+        if (mutation.payload?.id_dispositivo === 999 && existing.action === 'insert') {
+          next.splice(existingIndex, 1);
+          return next;
+        }
+
+        // De lo contrario, el nuevo sobreescribe al viejo (manteniendo la acción original si era insert)
+        next[existingIndex] = {
+          ...mutation,
+          action: existing.action === 'insert' ? 'insert' : mutation.action
+        };
+        return next;
+      }
+
+      return [...prev, mutation];
+    });
+
+    // Actualización inmediata del estado local para la UI
+    if (mutation.table === 'menu' || mutation.table === 'menu_semana') {
+      const agentId = mutation.matchParams?.id_agente || mutation.payload?.id_agente;
+      const targetDispId = mutation.payload?.id_dispositivo;
+      const uiName = mutation.payload?._ui_name;
+
+      if (agentId) {
+        setAssignmentsDb(prev => {
+          const next = { ...prev };
+          if (!next[uiDate]) next[uiDate] = {};
+          
+          // Primero quitamos al agente de cualquier dispositivo en esa fecha
+          Object.keys(next[uiDate]).forEach(dId => {
+            next[uiDate][dId] = next[uiDate][dId].filter(a => a.id !== agentId);
+          });
+
+          // Si el destino no es 999, lo agregamos al nuevo dispositivo
+          if (targetDispId && targetDispId !== 999) {
+            const dIdStr = String(targetDispId);
+            if (!next[uiDate][dIdStr]) next[uiDate][dIdStr] = [];
+            next[uiDate][dIdStr] = [...next[uiDate][dIdStr], { 
+              id: agentId, 
+              name: uiName || "Cargando...",
+              _isDraft: true 
+            }];
+          }
+          return next;
+        });
+      }
+    } else if (mutation.table === 'calendario_dispositivos') {
+      const { id_dispositivo, cupo_objetivo } = mutation.payload;
+      if (id_dispositivo != null && cupo_objetivo != null) {
+        setCalendarDb(prev => ({
+          ...prev,
+          [uiDate]: {
+            ...(prev[uiDate] || {}),
+            [String(id_dispositivo)]: cupo_objetivo
+          }
+        }));
+      }
+    }
+  }, []);
+
+  const removeAssignmentDraft = useCallback((mutation: PendingMutation) => {
+     addAssignmentDraft(mutation);
+  }, [addAssignmentDraft]);
+
+  const saveDrafts = async () => {
+    if (pendingMutations.length === 0) return { success: true };
+    setIsLoading(true);
+    try {
+      for (const m of pendingMutations) {
+        const cleanPayload = m.payload ? Object.fromEntries(
+          Object.entries(m.payload).filter(([key]) => !key.startsWith('_'))
+        ) : null;
+        
+        const cleanMatchParams = m.matchParams ? Object.fromEntries(
+          Object.entries(m.matchParams).filter(([key]) => !key.startsWith('_'))
+        ) : null;
+
+        if (m.action === 'upsert') {
+          // Fallback robusto para Upsert si falla el ON CONFLICT o no se conoce
+          const { data: existing } = await supabase.from(m.table).select('*').match(cleanMatchParams || {}).maybeSingle();
+          if (existing) {
+            const { error } = await supabase.from(m.table).update(cleanPayload).match(cleanMatchParams || {});
+            if (error) throw new Error(`[${m.table}] Update failed: ${error.message}`);
+          } else {
+            const { error } = await supabase.from(m.table).insert(cleanPayload);
+            if (error) throw new Error(`[${m.table}] Insert failed: ${error.message}`);
+          }
+        } else if (m.action === 'insert') {
+          const { error } = await supabase.from(m.table).insert(cleanPayload);
+          if (error) throw new Error(`[${m.table}] ${error.message}`);
+        } else if (m.action === 'update') {
+          let q = supabase.from(m.table).update(cleanPayload);
+          for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
+          const { error } = await q;
+          if (error) throw new Error(`[${m.table}] ${error.message}`);
+        } else if (m.action === 'delete') {
+          let q = supabase.from(m.table).delete();
+          for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
+          const { error } = await q;
+          if (error) throw new Error(`[${m.table}] ${error.message}`);
+        }
+      }
+      setPendingMutations([]);
+      setRefreshCounter(c => c + 1);
+      setIsLoading(false);
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error saving drafts:", err);
+      setIsLoading(false);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const discardDrafts = useCallback(() => {
+    setPendingMutations([]);
+    setRefreshCounter(c => c + 1); // Forzamos recarga para limpiar cambios locales no guardados
+  }, []);
+
+  const hardRefresh = async () => {
+    hasLoadedStatic.current = false;
+    setRefreshCounter(c => c + 1);
+  };
+
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
 
@@ -70,6 +240,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       };
 
       try {
+        let resiData: any[] | null, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap: Record<number, string>;
+        let capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes;
+        
+        if (!hasLoadedStatic.current) {
         // ═══════════════════════════════════════════════════════════
         // 1. DISPOSITIVOS
         // ═══════════════════════════════════════════════════════════
@@ -93,12 +267,13 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 2. RESIDENTES
         // ═══════════════════════════════════════════════════════════
         const activeCohorte = getActiveCohorteSync();
-        const { data: resiData } = await supabase
+        const { data: rd } = await supabase
           .from('datos_personales')
           .select('id_agente, nombre, apellido, cohorte')
           .eq('activo', true)
           .eq('cohorte', activeCohorte);
-
+        
+        resiData = rd;
         if (resiData) setDbResidents(resiData);
 
         // ═══════════════════════════════════════════════════════════
@@ -108,7 +283,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        const [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
+        [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
           supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
           supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
           supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
@@ -118,13 +293,13 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').limit(5000),
         ]);
 
-        const capData = capsRep.data || [];
-        const partsData = partsRes.data || [];
-        const dispoCapData = dispoCapsRes.data || [];
-        const convocadosMatriz = convocadosMatrizRes.data || [];
-        const planisData = allPlanisRes.data || [];
-        const diasData = allDiasRes.data || [];
-        const inasistenciasRaw = inasRes.data || [];
+        capData = capsRep.data || [];
+        partsData = partsRes.data || [];
+        dispoCapData = dispoCapsRes.data || [];
+        convocadosMatriz = convocadosMatrizRes.data || [];
+        planisData = allPlanisRes.data || [];
+        diasData = allDiasRes.data || [];
+        inasistenciasRaw = inasRes.data || [];
 
         // Pre-build inasistencias map for UI usage later
         const inasMap: InasistenciasMap = {};
@@ -168,9 +343,15 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 4. TURNOS LOOKUP
         // ═══════════════════════════════════════════════════════════
         const turnosLookupRes = await supabase.from('turnos').select('id_turno, tipo_turno');
-        const turnoTypeMap: Record<number, string> = {};
+        turnoTypeMap = {};
         if (turnosLookupRes.data) {
           turnosLookupRes.data.forEach(t => { turnoTypeMap[t.id_turno] = t.tipo_turno; });
+        }
+
+          staticCache.current = { resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap };
+          hasLoadedStatic.current = true;
+        } else {
+          ({ resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap } = staticCache.current);
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -467,6 +648,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 10. METRICAS ANUALES DE ROTACION
         // ═══════════════════════════════════════════════════════════
         try {
+          if (!hasLoadedStatic.current) {
           const currentPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
             p_year: parseInt(yFilt),
             p_turno: turnoFilter === 'apertura' ? 'apertura' : (turnoFilter === 'tarde' ? 'tarde' : 'manana')
@@ -512,6 +694,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               aperturaMap[id_agente].deviceReps[devStr] = repCount;
             });
             setAperturaMetricsDb(aperturaMap);
+          }
+          hasLoadedStatic.current = true;
           }
         } catch (e) {
           console.error('Error metrics:', e);
@@ -603,5 +787,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     aperturaMetricsDb, // export apertura metrics
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
+    pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,
   };
 }

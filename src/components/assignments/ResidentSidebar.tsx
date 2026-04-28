@@ -47,38 +47,6 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const [dayStr, monthStr] = date.split("/");
   const fechaDB = `${year}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
 
-  const vacateMenuRowSafely = async (
-    table: 'menu' | 'menu_semana',
-    rowId: number,
-    agentId: number,
-    turnoId?: number
-  ) => {
-    const baseQuery = supabase
-      .from(table)
-      .select(table === 'menu' ? 'id_menu,id_dispositivo' : 'id_menu_semana,id_dispositivo')
-      .eq('id_agente', agentId)
-      .eq('fecha_asignacion', fechaDB);
-
-    const maybeVacantQuery = turnoId != null ? baseQuery.eq('id_turno', turnoId) : baseQuery;
-    const { data: vacantRow, error: vacantErr } = await maybeVacantQuery.eq('id_dispositivo', 999).limit(1).maybeSingle();
-
-    if (vacantErr) throw vacantErr;
-
-    if (vacantRow) {
-      const { error: deleteErr } = await supabase.from(table)
-        .delete()
-        .eq(table === 'menu' ? 'id_menu' : 'id_menu_semana', rowId);
-      if (deleteErr) throw deleteErr;
-      return 'deleted' as const;
-    }
-
-    const { error: updateErr } = await supabase.from(table)
-      .update({ id_dispositivo: 999 })
-      .eq(table === 'menu' ? 'id_menu' : 'id_menu_semana', rowId);
-    if (updateErr) throw updateErr;
-    return 'updated' as const;
-  };
-
   const occupancies: Record<number, string> = {};
   Object.entries(assignmentsDb[date] || {}).forEach(([devIdStr, arr]: [string, any]) => {
     const devObj = dbDevices.find((d: any) => d.id === devIdStr);
@@ -108,251 +76,92 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     if (isLoading) return;
     setIsLoading(true);
 
-    const convId = (agentConvocatoriaMap && agentConvocatoriaMap[date] && agentConvocatoriaMap[date][newResId]) || null;
+    try {
+      const convId = (agentConvocatoriaMap && agentConvocatoriaMap[date] && agentConvocatoriaMap[date][newResId]) || null;
+      const resName = allResidentsDb.find(r => r.id === selectedResident.id)?.name || "Residente";
+      const newResName = allResidentsDb.find(r => r.id === newResId)?.name || "Borrador";
 
-    if (isApertura) {
-      // ---------------- APERTURA ----------------
-      const { data: snapOriginal } = await supabase.from('menu')
-        .select('id_menu, id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion')
-        .eq('id_agente', selectedResident.id)
-        .eq('id_dispositivo', Number(disp?.id))
-        .eq('fecha_asignacion', fechaDB)
-        .limit(1)
-        .maybeSingle();
+      if (isApertura) {
+        // Quitar original
+        data.addAssignmentDraft({
+          id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
+          table: 'menu',
+          action: 'update',
+          matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB },
+          payload: { id_dispositivo: 999, _ui_name: resName },
+          uiDate: date
+        });
 
-      if (!snapOriginal) { 
-        alert("No se encontró la asignación original para quitar."); 
-        setIsLoading(false); 
-        return; 
-      }
-
-      try {
-        await vacateMenuRowSafely('menu', snapOriginal.id_menu, selectedResident.id);
-      } catch (err: any) {
-        alert("Error al quitar original: " + (err.message || err));
-        setIsLoading(false);
-        return;
-      }
-
-      const { data: filaNew } = await supabase.from('menu')
-        .select('id_menu')
-        .eq('id_agente', newResId)
-        .eq('fecha_asignacion', fechaDB)
-        .limit(1)
-        .maybeSingle();
-
-      if (filaNew) {
-        const { error: err2 } = await supabase.from('menu')
-          .update({ id_dispositivo: Number(disp?.id) })
-          .eq('id_menu', filaNew.id_menu);
-        if (err2) { alert("Error al asignar nuevo: " + err2.message); }
+        // Poner nuevo
+        data.addAssignmentDraft({
+          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}`,
+          table: 'menu',
+          action: 'upsert',
+          matchParams: { id_agente: newResId, fecha_asignacion: fechaDB },
+          payload: { id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId, _ui_name: newResName },
+          uiDate: date
+        });
       } else {
-        const payload: any = { 
-          id_agente: newResId, 
-          id_dispositivo: Number(disp?.id), 
-          fecha_asignacion: fechaDB, 
-          estado_ejecucion: 'planificado' 
-        };
-        if (convId) payload.id_convocatoria = convId;
-        
-        const { error: err3 } = await supabase.from('menu').insert([payload]);
-        if (err3) { alert("Error al insertar nuevo: " + err3.message); }
+        const turnoId = dateTurnoMap[date] || 4;
+        const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa';
+
+        // Quitar original
+        data.addAssignmentDraft({
+          id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
+          table: 'menu_semana',
+          action: 'update',
+          matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, id_turno: turnoId },
+          payload: { id_dispositivo: 999, _ui_name: resName },
+          uiDate: date
+        });
+
+        // Poner nuevo
+        data.addAssignmentDraft({
+          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}`,
+          table: 'menu_semana',
+          action: 'upsert',
+          matchParams: { id_agente: newResId, fecha_asignacion: fechaDB, id_turno: turnoId },
+          payload: { 
+            id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, 
+            estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
+            tipo_organizacion: orgType, _ui_name: newResName
+          },
+          uiDate: date
+        });
       }
-      pushUndo({ snapshots: [snapOriginal, filaNew || { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu' }] });
-      
-    } else {
-      // ---------------- NON-APERTURA ----------------
-      const { data: snapOriginal, error: fetchErr } = await supabase.from('menu_semana')
-        .select('id_menu_semana, id_agente, id_dispositivo, estado_ejecucion, fecha_asignacion, id_turno, numero_grupo')
-        .eq('id_agente', selectedResident.id)
-        .eq('id_dispositivo', Number(disp?.id))
-        .eq('fecha_asignacion', fechaDB)
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchErr || !snapOriginal) { 
-        alert("No se encontró la asignación original para quitar."); 
-        setIsLoading(false); 
-        return; 
-      }
-
-      try {
-        await vacateMenuRowSafely('menu_semana', snapOriginal.id_menu_semana, selectedResident.id, snapOriginal.id_turno);
-      } catch (err: any) {
-        alert("Error al quitar original: " + (err.message || err));
-        setIsLoading(false);
-        return;
-      }
-
-      const inheritedGroup = snapOriginal.numero_grupo;
-
-      const { data: filaNew } = await supabase.from('menu_semana')
-        .select('id_menu_semana')
-        .eq('id_agente', newResId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', snapOriginal.id_turno) // use exact turno of original
-        .limit(1)
-        .maybeSingle();
-
-      if (filaNew) {
-        const { error: err2 } = await supabase.from('menu_semana')
-          .update({ 
-            id_dispositivo: Number(disp?.id),
-            ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {})
-          })
-          .eq('id_menu_semana', filaNew.id_menu_semana);
-        if (err2) { alert("Error al asignar nuevo: " + err2.message); }
-      } else {
-        const payload: any = {
-          id_agente: newResId, 
-          id_dispositivo: Number(disp?.id), 
-          fecha_asignacion: fechaDB,
-          estado_ejecucion: 'planificado', 
-          id_turno: snapOriginal.id_turno
-        };
-        if (convId) payload.id_convocatoria = convId;
-        if (inheritedGroup != null) payload.numero_grupo = inheritedGroup;
-        const orgType = tipoOrganizacionMap && tipoOrganizacionMap[date] ? tipoOrganizacionMap[date] : 'rotacion_completa';
-        payload.tipo_organizacion = orgType;
-        
-        const { error: err3 } = await supabase.from('menu_semana').insert([payload]);
-        if (err3) { alert("Error al insertar nuevo: " + err3.message); }
-      }
-      pushUndo({ snapshots: [snapOriginal, filaNew || { id_agente: newResId, fecha_asignacion: fechaDB, _isInsert: true, _table: 'menu_semana', id_turno: snapOriginal.id_turno }] });
+      setSelectedResident(null);
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error(err);
+      setIsLoading(false);
     }
-    setSelectedResident(null);
-    refresh();
   };
 
   const handleRemove = async () => {
-    const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'dispositivos fijos';
-    const isRotation = orgType.toLowerCase().includes('rotación') || orgType.toLowerCase().includes('rotacion');
-    const turnoId = dateTurnoMap[date] || 4;
-
-    if (!isApertura && isRotation) {
-      // Check if assigned to multiple devices
-      const { data: allDevs } = await supabase.from('menu_semana')
-        .select('id_menu_semana,id_dispositivo')
-        .eq('id_agente', selectedResident.id)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_turno', turnoId);
-      
-      const activeRows = (allDevs || []).filter((row: any) => row.id_dispositivo !== 999);
-      const vacantRows = (allDevs || []).filter((row: any) => row.id_dispositivo === 999);
-      const deviceCount = activeRows.length;
-      if (deviceCount > 1) {
-        const confirmed = confirm(`⚠️ ${selectedResident.name} está asignado a ${deviceCount} dispositivos.\n\n¿Desea quitarlo de TODOS los dispositivos?`);
-        if (!confirmed) return;
-        
-        setIsLoading(true);
-        try {
-          if (vacantRows.length > 0) {
-            const { error } = await supabase.from('menu_semana')
-              .delete()
-              .eq('id_agente', selectedResident.id)
-              .eq('fecha_asignacion', fechaDB)
-              .eq('id_turno', turnoId)
-              .not('id_dispositivo', 'eq', 999);
-            if (error) throw error;
-          } else {
-            const [keepRow, ...rowsToDelete] = activeRows;
-            if (keepRow) {
-              const { error: keepErr } = await supabase.from('menu_semana')
-                .update({ id_dispositivo: 999 })
-                .eq('id_menu_semana', keepRow.id_menu_semana);
-              if (keepErr) throw keepErr;
-            }
-            for (const row of rowsToDelete) {
-              const { error: deleteErr } = await supabase.from('menu_semana')
-                .delete()
-                .eq('id_menu_semana', row.id_menu_semana);
-              if (deleteErr) throw deleteErr;
-            }
-          }
-
-          pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: 999, estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: turnoId } });
-          setSelectedResident(null);
-          refresh();
-        } catch (error: any) {
-          alert("Error: " + error.message);
-        }
-        setIsLoading(false);
-        return;
-      }
-    }
-
     if (!confirm(`¿Quitar a ${selectedResident.name}?`)) return;
     setIsLoading(true);
-
-    if (isApertura) {
-      const { data: targetRow, error: fetchErr } = await supabase.from('menu')
-        .select('id_menu, id_dispositivo')
-        .eq('id_agente', selectedResident.id)
-        .eq('id_dispositivo', Number(disp?.id))
-        .eq('fecha_asignacion', fechaDB)
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchErr) {
-        alert('Error al buscar la asignación: ' + fetchErr.message);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!targetRow) {
-        alert('No se encontró la asignación para quitar. ¿Ya fue removida?');
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        await vacateMenuRowSafely('menu', targetRow.id_menu, selectedResident.id);
-      } catch (err: any) {
-        alert('Error al quitar: ' + (err.message || err));
-        setIsLoading(false);
-        return;
-      }
-
-      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado' } });
-    } else {
-      console.log(`[handleRemove] menu_semana: agente=${selectedResident.id} dispositivo=${Number(disp?.id)} fecha=${fechaDB} turno=${turnoId}`);
-
-      // Fetch the specific row first to get its PK
-      const { data: targetRow, error: fetchErr } = await supabase.from('menu_semana')
-        .select('id_menu_semana, id_turno, id_dispositivo')
-        .eq('id_agente', selectedResident.id)
-        .eq('id_dispositivo', Number(disp?.id))
-        .eq('fecha_asignacion', fechaDB)
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchErr) {
-        console.error('[handleRemove] Error fetching row:', fetchErr);
-        alert('Error al buscar la asignación: ' + fetchErr.message);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!targetRow) {
-        console.warn('[handleRemove] No row found for:', { agente: selectedResident.id, dispositivo: Number(disp?.id), fecha: fechaDB });
-        alert('No se encontró la asignación para quitar. ¿Ya fue removida?');
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        await vacateMenuRowSafely('menu_semana', targetRow.id_menu_semana, selectedResident.id, targetRow.id_turno);
-      } catch (err: any) {
-        alert('Error al quitar: ' + (err.message || err));
-        setIsLoading(false);
-        return;
-      }
-
-      pushUndo({ snapshot: { id_agente: selectedResident.id, fecha_asignacion: fechaDB, id_dispositivo: Number(disp?.id), estado_ejecucion: 'planificado', _table: 'menu_semana', id_turno: targetRow.id_turno } });
+    
+    try {
+      const turnoId = dateTurnoMap[date] || 4;
+      data.addAssignmentDraft({
+        id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
+        table: isApertura ? 'menu' : 'menu_semana',
+        action: 'update',
+        matchParams: { 
+          id_agente: selectedResident.id, 
+          fecha_asignacion: fechaDB,
+          ...(isApertura ? {} : { id_turno: turnoId }) 
+        },
+        payload: { id_dispositivo: 999, _ui_name: selectedResident.name },
+        uiDate: date
+      });
+      
+      setSelectedResident(null);
+      setIsLoading(false);
+    } catch (err) {
+      console.error(err);
+      setIsLoading(false);
     }
-
-    setSelectedResident(null);
-    refresh();
   };
 
   const renderTier = (title: string, items: any[], colorClass: string, Icon: any) => (

@@ -99,6 +99,17 @@ export interface AgentAnnualMetrics {
 
 export type AnnualMetricsMap = Record<number, AgentAnnualMetrics>;
 
+export type MutationAction = 'insert' | 'update' | 'delete' | 'upsert';
+
+export interface PendingMutation {
+  id: string; // Unique uuid
+  table: 'menu' | 'menu_semana' | 'calendario_dispositivos';
+  action: MutationAction;
+  payload: any;
+  matchParams?: any;
+  uiDate: string;
+}
+
 /**
  * Contrato del objeto `data` que `useAssignmentData` provee
  * y los componentes del módulo de asignaciones consumen.
@@ -133,4 +144,12 @@ export interface AssignmentDataContext {
   annualMetricsDb: AnnualMetricsMap;
   aperturaMetricsDb: AnnualMetricsMap;
   agentGroups: Record<string, string>;
+
+  // Pending Drafts Mutaciones
+  pendingMutations: PendingMutation[];
+  addAssignmentDraft: (mutation: PendingMutation) => void;
+  removeAssignmentDraft: (mutation: PendingMutation) => void;
+  saveDrafts: () => Promise<{ success: boolean; error?: string }>;
+  discardDrafts: () => void;
+  hardRefresh: () => Promise<void>;
 }
