@@ -154,12 +154,13 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         return;
       }
       data.addAssignmentDraft({
-        id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
+        id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
         table: isApertura ? 'menu' : 'menu_semana',
         action: 'update',
         matchParams: { 
           id_agente: selectedResident.id, 
           fecha_asignacion: fechaDB,
+          id_dispositivo: Number(disp?.id),
           ...(isApertura ? {} : { id_turno: turnoId }) 
         },
         payload: { id_dispositivo: 999, _ui_name: selectedResident.name },

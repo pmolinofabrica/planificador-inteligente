@@ -76,7 +76,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         mutation.table === 'menu_semana' &&
         (
           String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-          (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999 && mutation.payload?.id_dispositivo !== 999)
+          // Si matchParams tiene un id_dispositivo real (!=999), la operación es específica de ese
+          // dispositivo — esto aplica tanto a asignaciones como a quitadas en modo rotación.
+          (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
         );
       let existingIndex = -1;
 
@@ -154,7 +156,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           mutation.table === 'menu_semana' &&
           (
             String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999 && mutation.payload?.id_dispositivo !== 999)
+            // Si matchParams tiene un id_dispositivo real (!=999), la operación es específica de ese
+            // dispositivo — esto aplica tanto a asignaciones como a quitadas en modo rotación.
+            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
           );
         setAssignmentsDb(prev => {
           const next = { ...prev };
@@ -927,7 +931,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 10. METRICAS ANUALES DE ROTACION
         // ═══════════════════════════════════════════════════════════
         try {
-          if (!hasLoadedStatic.current) {
           const currentPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
             p_year: parseInt(yFilt),
             p_turno: turnoFilter === 'apertura' ? 'apertura' : (turnoFilter === 'tarde' ? 'tarde' : 'manana')
@@ -973,8 +976,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               aperturaMap[id_agente].deviceReps[devStr] = repCount;
             });
             setAperturaMetricsDb(aperturaMap);
-          }
-          hasLoadedStatic.current = true;
           }
         } catch (e) {
           console.error('Error metrics:', e);
