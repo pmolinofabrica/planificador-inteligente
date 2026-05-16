@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2, LogOut, Lock, Unlock } from 'lucide-react';
+import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
@@ -29,6 +30,7 @@ type TurnoFilter = typeof TURNO_FILTERS[number]['key'];
 const UNLOCK_CODE = '2350';
 
 const Index = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentSchoolYearMonth);
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
@@ -178,6 +180,13 @@ const Index = () => {
             >
               {MONTHS_LIST.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+              title="Abrir Dashboard de Rotación"
+            >
+              <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
             <button
               onClick={handleLockToggle}
               className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
