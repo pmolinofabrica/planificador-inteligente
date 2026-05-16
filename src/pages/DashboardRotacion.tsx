@@ -432,9 +432,8 @@ export default function DashboardRotacion() {
 
                     <div className="mt-auto border-t pt-4">
                       <h4 className="font-semibold text-red-700 text-sm mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-red-500"></span> Oportunidades Perdidas por Piso
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span> Dispositivos capacitados sin coordinar
                       </h4>
-                      <p className="text-xs text-red-600/80 mb-3">Está capacitado en estos dispositivos pero nunca coordinó un FDS:</p>
                       
                       {Object.keys(residenteStats.capNoCoordPorPiso).length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -566,9 +565,8 @@ export default function DashboardRotacion() {
                   <div className="border rounded-xl p-5 bg-orange-50/50 shadow-sm border-orange-100 flex flex-col h-[500px]">
                     <h3 className="font-semibold text-orange-800 mb-2 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                      Residentes Ausentes (FDS)
+                      Residentes capacitados sin coordinar
                     </h3>
-                    <p className="text-sm text-orange-700 mb-4">Fueron capacitados para este dispositivo pero <strong>nunca</strong> lo coordinaron un fin de semana:</p>
                     
                     <ScrollArea className="flex-1 pr-4">
                       <div className="flex flex-col gap-3">
