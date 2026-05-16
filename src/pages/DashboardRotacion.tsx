@@ -286,7 +286,7 @@ export default function DashboardRotacion() {
           </Button>
           <div className="border-l-2 border-border pl-0 sm:pl-6">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-              Dashboard de Rotación Inteligente
+              Rotaciones dispositivos
             </h1>
             <p className="text-muted-foreground mt-1">
               Cohorte 2026 - Asignaciones de Fin de Semana
