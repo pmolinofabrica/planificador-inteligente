@@ -143,6 +143,7 @@ export interface AssignmentDataContext {
   visitasByDate: VisitasByDateMap;
   annualMetricsDb: AnnualMetricsMap;
   aperturaMetricsDb: AnnualMetricsMap;
+  tardeMananaMetricsDb: AnnualMetricsMap;
   agentGroups: Record<string, string>;
 
   // Pending Drafts Mutaciones

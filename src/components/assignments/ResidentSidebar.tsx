@@ -72,6 +72,24 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
     else tier4.push(alt);
   });
 
+  const sortTiers = (arr: any[]) => {
+    return arr.sort((a, b) => {
+      if (!deviceId) return 0;
+      const repsA = isApertura
+        ? (data.aperturaMetricsDb?.[a.id]?.deviceReps?.[deviceId] || 0)
+        : (data.tardeMananaMetricsDb?.[a.id]?.deviceReps?.[deviceId] || 0);
+      const repsB = isApertura
+        ? (data.aperturaMetricsDb?.[b.id]?.deviceReps?.[deviceId] || 0)
+        : (data.tardeMananaMetricsDb?.[b.id]?.deviceReps?.[deviceId] || 0);
+      return repsA - repsB;
+    });
+  };
+
+  sortTiers(tier1);
+  sortTiers(tier2);
+  sortTiers(tier3);
+  sortTiers(tier4);
+
   const handleSwap = async (newResId: number) => {
     if (isLoading) return;
     setIsLoading(true);
@@ -116,7 +134,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           table: 'menu_semana',
           action: 'update',
           matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, id_turno: turnoId },
-          payload: { id_dispositivo: 999, _ui_name: resName },
+          payload: { id_dispositivo: 999, tipo_organizacion: orgType, _ui_name: resName },
           uiDate: date
         });
 
@@ -125,7 +143,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}`,
           table: 'menu_semana',
           action: 'upsert',
-          matchParams: { id_agente: newResId, fecha_asignacion: fechaDB, id_turno: turnoId },
+          matchParams: { id_agente: newResId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: Number(disp?.id) },
           payload: { 
             id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, 
             estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
@@ -153,6 +171,9 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         setIsLoading(false);
         return;
       }
+      const orgType = !isApertura
+        ? ((tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa')
+        : null;
       data.addAssignmentDraft({
         id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
         table: isApertura ? 'menu' : 'menu_semana',
@@ -163,7 +184,11 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           id_dispositivo: Number(disp?.id),
           ...(isApertura ? {} : { id_turno: turnoId }) 
         },
-        payload: { id_dispositivo: 999, _ui_name: selectedResident.name },
+        payload: {
+          id_dispositivo: 999,
+          ...(isApertura ? {} : { tipo_organizacion: orgType }),
+          _ui_name: selectedResident.name
+        },
         uiDate: date
       });
       
@@ -189,11 +214,16 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
                 <div className="font-bold text-sm">{alt.name}</div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {deviceId && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary whitespace-nowrap">
-                    Coord: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[deviceId] || 0}
-                  </span>
+                  <>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 whitespace-nowrap" title="Coordinaciones en Apertura al público">
+                      Ap: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[deviceId] || 0}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
+                      T/M: {data.tardeMananaMetricsDb?.[alt.id]?.deviceReps?.[deviceId] || 0}
+                    </span>
+                  </>
                 )}
                 {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20 whitespace-nowrap">🔒</span>}
               </div>

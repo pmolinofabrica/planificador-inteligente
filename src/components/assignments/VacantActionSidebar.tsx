@@ -23,6 +23,8 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
   const cuposDelDia = calendarDb[selectedVacant.date] || {};
   const isApertura = data.turnoFilter === 'apertura';
   const agentId = selectedVacant.id;
+  const orgType = data.tipoOrganizacionMap?.[selectedVacant.date] || 'dispositivos fijos';
+  const isRotation = orgType.includes('rotacion');
 
   const devCapacitados = dbDevices.filter((dev: any) => {
     const capDate = res.caps[dev.id];
@@ -127,6 +129,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
 
         if (existing && existing.length > 0) {
           const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
+          const firstRow = existing[0];
           if (vacanteRow) {
             data.addAssignmentDraft({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
@@ -141,7 +144,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
               table: 'menu',
               action: 'update',
-              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB },
+              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
               payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
               uiDate: selectedVacant.date
             });
@@ -172,15 +175,39 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
           .eq('id_turno', turnoId);
         if (fetchErr) throw fetchErr;
 
-        if (existing && existing.length > 0) {
+        if (isRotation) {
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            table: 'menu_semana',
+            action: 'upsert',
+            matchParams: {
+              id_agente: selectedVacant.id,
+              fecha_asignacion: fechaDB,
+              id_turno: turnoId,
+              id_dispositivo: parseInt(deviceId),
+            },
+            payload: {
+              id_agente: selectedVacant.id,
+              id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB,
+              estado_ejecucion: 'planificado',
+              id_convocatoria: convId,
+              id_turno: turnoId,
+              tipo_organizacion: orgType,
+              _ui_name: resName
+            },
+            uiDate: selectedVacant.date
+          });
+        } else if (existing && existing.length > 0) {
           const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
+          const firstRow = existing[0];
           if (vacanteRow) {
              data.addAssignmentDraft({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
               table: 'menu_semana',
               action: 'update',
               matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
               uiDate: selectedVacant.date
             });
           } else {
@@ -188,17 +215,22 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
               table: 'menu_semana',
               action: 'update',
-              matchParams: { id_menu_semana: existing[0].id_menu_semana },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              matchParams: {
+                id_agente: selectedVacant.id,
+                fecha_asignacion: fechaDB,
+                id_turno: turnoId,
+                id_dispositivo: firstRow.id_dispositivo,
+              },
+              payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
               uiDate: selectedVacant.date
             });
           }
         } else {
-          const orgType = data.tipoOrganizacionMap?.[selectedVacant.date] || 'dispositivos fijos';
           data.addAssignmentDraft({
             id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
             table: 'menu_semana',
             action: 'insert',
+            matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_turno: turnoId },
             payload: {
               id_agente: selectedVacant.id,
               id_dispositivo: parseInt(deviceId),
@@ -249,9 +281,14 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                   <div className="font-bold text-sm">{dev.name}</div>
                   <div className="text-[10px] font-medium mt-1 opacity-80 flex items-center justify-between gap-2">
                     Ocupación: {assignmentsOfDate[dev.id]?.length || 0} de {cuposDelDia[dev.id] || 0}
-                    <span className="px-1.5 py-0.5 rounded border border-primary/25 bg-primary/10 text-primary">
-                      Coord: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
-                    </span>
+                    <div className="flex gap-1">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 whitespace-nowrap" title="Coordinaciones en Apertura al público">
+                        Ap: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                      </span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
+                        T/M: {data.tardeMananaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                      </span>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -269,9 +306,14 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                 <div className="font-medium text-xs text-muted-foreground">{dev.name}</div>
                 <div className="text-[9px] text-muted-foreground/70 mt-0.5 flex items-center justify-between gap-2">
                   Ocupación: {assignmentsOfDate[dev.id]?.length || 0} de {cuposDelDia[dev.id] || 0}
-                  <span className="px-1.5 py-0.5 rounded border border-border bg-background text-foreground/80">
-                    Coord: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
-                  </span>
+                  <div className="flex gap-1">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 whitespace-nowrap" title="Coordinaciones en Apertura al público">
+                      Ap: {data.aperturaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
+                      T/M: {data.tardeMananaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                    </span>
+                  </div>
                 </div>
               </button>
             ))}

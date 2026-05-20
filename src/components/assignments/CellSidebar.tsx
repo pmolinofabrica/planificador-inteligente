@@ -75,6 +75,23 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     else tier4.push(alt);
   });
 
+  const sortTiers = (arr: AltItem[]) => {
+    return arr.sort((a, b) => {
+      const repsA = isApertura
+        ? (data.aperturaMetricsDb?.[a.id]?.deviceReps?.[selectedDevice.id] || 0)
+        : (data.tardeMananaMetricsDb?.[a.id]?.deviceReps?.[selectedDevice.id] || 0);
+      const repsB = isApertura
+        ? (data.aperturaMetricsDb?.[b.id]?.deviceReps?.[selectedDevice.id] || 0)
+        : (data.tardeMananaMetricsDb?.[b.id]?.deviceReps?.[selectedDevice.id] || 0);
+      return repsA - repsB;
+    });
+  };
+
+  sortTiers(tier1);
+  sortTiers(tier2);
+  sortTiers(tier3);
+  sortTiers(tier4);
+
   const disp = dbDevices.find((dd: any) => dd.id === deviceId);
 
   // Check cupo
@@ -240,24 +257,29 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
           if (existing && existing.length > 0) {
             const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
             if (vacantRow) {
-              data.addAssignmentDraft({
-                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-                table: 'menu_semana',
-                action: 'update',
-                matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
-                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
-                uiDate: selectedDate
-              });
-            } else {
-              data.addAssignmentDraft({
-                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-                table: 'menu_semana',
-                action: 'update',
-                matchParams: { id_menu_semana: existing[0].id_menu_semana },
-                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
-                uiDate: selectedDate
-              });
-            }
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu_semana',
+              action: 'update',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
+              payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
+              uiDate: selectedDate
+            });
+          } else {
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu_semana',
+              action: 'update',
+              matchParams: {
+                id_agente: agentId,
+                fecha_asignacion: fechaDB,
+                id_turno: turnoId,
+                id_dispositivo: existing[0].id_dispositivo,
+              },
+              payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
+              uiDate: selectedDate
+            });
+          }
           } else {
             data.addAssignmentDraft({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
@@ -309,9 +331,12 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                 <div className={`font-bold text-sm ${alt.isAbsent || alt.isCanceled ? 'line-through text-stone-400' : ''}`}>{alt.name}</div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] px-1.5 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary whitespace-nowrap">
-                  Coord: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[selectedDevice.id] || 0}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 whitespace-nowrap" title="Coordinaciones en Apertura al público">
+                  Ap: {data.aperturaMetricsDb?.[alt.id]?.deviceReps?.[selectedDevice.id] || 0}
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
+                  T/M: {data.tardeMananaMetricsDb?.[alt.id]?.deviceReps?.[selectedDevice.id] || 0}
                 </span>
                 {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20 whitespace-nowrap">
                   {alt.isAbsent ? '🚫' : alt.isCanceled ? '❌' : '🔒'}

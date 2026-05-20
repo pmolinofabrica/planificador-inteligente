@@ -55,6 +55,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
   const [aperturaMetricsDb, setAperturaMetricsDb] = useState<AnnualMetricsMap>({});
+  const [tardeMananaMetricsDb, setTardeMananaMetricsDb] = useState<AnnualMetricsMap>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>([]);
@@ -931,39 +932,21 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // 10. METRICAS ANUALES DE ROTACION
         // ═══════════════════════════════════════════════════════════
         try {
-          const currentPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
-            p_year: parseInt(yFilt),
-            p_turno: turnoFilter === 'apertura' ? 'apertura' : (turnoFilter === 'tarde' ? 'tarde' : 'manana')
-          });
           const aperturaPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
             p_year: parseInt(yFilt),
             p_turno: 'apertura'
           });
+          const tardeMananaPromise = supabase.rpc('rpc_metricas_rotacion_anual', {
+            p_year: parseInt(yFilt),
+            p_turno: 'turno'
+          });
 
-          const [metricsRes, aperturaRes] = await Promise.all([currentPromise, aperturaPromise]);
+          const [aperturaRes, tardeMananaRes] = await Promise.all([aperturaPromise, tardeMananaPromise]);
 
-          if (metricsRes.error) {
-            console.error("Error fetching annual metrics:", metricsRes.error);
-          } else if (metricsRes.data) {
-            const metricsMap: AnnualMetricsMap = {};
-            metricsRes.data.forEach(row => {
-              const { id_agente, id_dispositivo, repeticiones } = row;
-              if (!metricsMap[id_agente]) {
-                metricsMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
-              }
-              const repCount = parseInt(repeticiones);
-              const devStr = String(id_dispositivo);
-              metricsMap[id_agente].totalAssignments += repCount;
-              metricsMap[id_agente].uniqueDevices.add(devStr);
-              metricsMap[id_agente].deviceReps[devStr] = repCount;
-            });
-            setAnnualMetricsDb(metricsMap);
-          }
-
+          let aperturaMap: AnnualMetricsMap = {};
           if (aperturaRes.error) {
             console.error("Error fetching apertura metrics:", aperturaRes.error);
           } else if (aperturaRes.data) {
-            const aperturaMap: AnnualMetricsMap = {};
             aperturaRes.data.forEach(row => {
               const { id_agente, id_dispositivo, repeticiones } = row;
               if (!aperturaMap[id_agente]) {
@@ -976,6 +959,30 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               aperturaMap[id_agente].deviceReps[devStr] = repCount;
             });
             setAperturaMetricsDb(aperturaMap);
+          }
+
+          let tardeMananaMap: AnnualMetricsMap = {};
+          if (tardeMananaRes.error) {
+            console.error("Error fetching tarde/manana metrics:", tardeMananaRes.error);
+          } else if (tardeMananaRes.data) {
+            tardeMananaRes.data.forEach(row => {
+              const { id_agente, id_dispositivo, repeticiones } = row;
+              if (!tardeMananaMap[id_agente]) {
+                tardeMananaMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
+              }
+              const repCount = parseInt(repeticiones);
+              const devStr = String(id_dispositivo);
+              tardeMananaMap[id_agente].totalAssignments += repCount;
+              tardeMananaMap[id_agente].uniqueDevices.add(devStr);
+              tardeMananaMap[id_agente].deviceReps[devStr] = repCount;
+            });
+            setTardeMananaMetricsDb(tardeMananaMap);
+          }
+
+          if (turnoFilter === 'apertura') {
+            setAnnualMetricsDb(aperturaMap);
+          } else {
+            setAnnualMetricsDb(tardeMananaMap);
           }
         } catch (e) {
           console.error('Error metrics:', e);
@@ -1065,6 +1072,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     visitasByDate,
     annualMetricsDb, // export anual metrics
     aperturaMetricsDb, // export apertura metrics
+    tardeMananaMetricsDb, // export tarde/manana metrics
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
     pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,
