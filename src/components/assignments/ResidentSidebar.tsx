@@ -223,6 +223,9 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
                     <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
                       T/M: {data.tardeMananaMetricsDb?.[alt.id]?.deviceReps?.[deviceId] || 0}
                     </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-700 whitespace-nowrap" title="Veces que acompañó al grupo">
+                      🏫 {data.acompanaMetricsDb?.[alt.id] || 0}
+                    </span>
                   </>
                 )}
                 {alt.isBusy && <span className="text-xs bg-destructive/10 text-destructive p-1 px-2 rounded-md border border-destructive/20 whitespace-nowrap">🔒</span>}

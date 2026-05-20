@@ -56,6 +56,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
   const [aperturaMetricsDb, setAperturaMetricsDb] = useState<AnnualMetricsMap>({});
   const [tardeMananaMetricsDb, setTardeMananaMetricsDb] = useState<AnnualMetricsMap>({});
+  const [acompanaMetricsDb, setAcompanaMetricsDb] = useState<Record<number, number>>({});
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>([]);
@@ -940,8 +941,15 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             p_year: parseInt(yFilt),
             p_turno: 'turno'
           });
+          const acompanaPromise = supabase.rpc('rpc_metricas_acompana_anual', {
+            p_year: parseInt(yFilt)
+          });
 
-          const [aperturaRes, tardeMananaRes] = await Promise.all([aperturaPromise, tardeMananaPromise]);
+          const [aperturaRes, tardeMananaRes, acompanaRes] = await Promise.all([
+            aperturaPromise,
+            tardeMananaPromise,
+            acompanaPromise
+          ]);
 
           let aperturaMap: AnnualMetricsMap = {};
           if (aperturaRes.error) {
@@ -977,6 +985,17 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               tardeMananaMap[id_agente].deviceReps[devStr] = repCount;
             });
             setTardeMananaMetricsDb(tardeMananaMap);
+          }
+
+          let acompanaMap: Record<number, number> = {};
+          if (acompanaRes.error) {
+            console.error("Error fetching acompana metrics:", acompanaRes.error);
+          } else if (acompanaRes.data) {
+            acompanaRes.data.forEach(row => {
+              const { id_agente, repeticiones } = row;
+              acompanaMap[id_agente] = parseInt(repeticiones);
+            });
+            setAcompanaMetricsDb(acompanaMap);
           }
 
           if (turnoFilter === 'apertura') {
@@ -1073,6 +1092,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     annualMetricsDb, // export anual metrics
     aperturaMetricsDb, // export apertura metrics
     tardeMananaMetricsDb, // export tarde/manana metrics
+    acompanaMetricsDb, // export acompana metrics
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
     pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,

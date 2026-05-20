@@ -288,6 +288,9 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                       <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
                         T/M: {data.tardeMananaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
                       </span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-700 whitespace-nowrap" title="Veces que acompañó al grupo">
+                        🏫 {data.acompanaMetricsDb?.[selectedVacant.id] || 0}
+                      </span>
                     </div>
                   </div>
                 </button>
@@ -312,6 +315,9 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                     </span>
                     <span className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap" title="Coordinaciones en Turno Tarde/Mañana">
                       T/M: {data.tardeMananaMetricsDb?.[selectedVacant.id]?.deviceReps?.[dev.id] || 0}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-700 whitespace-nowrap" title="Veces que acompañó al grupo">
+                      🏫 {data.acompanaMetricsDb?.[selectedVacant.id] || 0}
                     </span>
                   </div>
                 </div>

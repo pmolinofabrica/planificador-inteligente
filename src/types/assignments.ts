@@ -144,6 +144,7 @@ export interface AssignmentDataContext {
   annualMetricsDb: AnnualMetricsMap;
   aperturaMetricsDb: AnnualMetricsMap;
   tardeMananaMetricsDb: AnnualMetricsMap;
+  acompanaMetricsDb: Record<number, number>;
   agentGroups: Record<string, string>;
 
   // Pending Drafts Mutaciones

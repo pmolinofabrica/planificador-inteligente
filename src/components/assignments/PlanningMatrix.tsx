@@ -113,17 +113,19 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       alert(`No se pudo resolver id_turno para ${date}. Sin ese dato no se guarda para evitar inconsistencias.`);
       return;
     }
+    const orgType = tipoOrganizacionMap?.[date] || 'rotacion completa';
     data.addAssignmentDraft({
-      id: `group-${resId}-${fechaDB}-${turnoId}`,
+      id: `group-${resId}-${fechaDB}-${turnoId}-${deviceId}`,
       table: 'menu_semana',
       action: 'upsert',
-      matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId },
+      matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
       payload: {
         id_agente: resId,
         fecha_asignacion: fechaDB,
         id_turno: turnoId,
         id_dispositivo: parseInt(deviceId),
         numero_grupo: newGroup,
+        tipo_organizacion: orgType,
       },
       uiDate: date,
     });
