@@ -7,7 +7,7 @@ import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
   VisitaInfo, VisitasByDateMap, AnnualMetricsMap, AgentAnnualMetrics,
-  PendingMutation,
+  PendingMutation, MutationAction,
 } from '@/types/assignments';
 
 interface UseAssignmentDataProps {
@@ -33,7 +33,15 @@ const buildMutationKey = (m: PendingMutation) => {
   const agentId = m.matchParams?.id_agente ?? m.payload?.id_agente ?? 'na';
   const fecha = m.matchParams?.fecha_asignacion ?? m.payload?.fecha_asignacion ?? 'na';
   const turno = m.matchParams?.id_turno ?? m.payload?.id_turno ?? 'na';
-  return `${m.table}:${agentId}:${fecha}:${turno}`;
+  const dispositivo = m.matchParams?.id_dispositivo ?? m.payload?.id_dispositivo ?? 'na';
+  const grupo = m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? 'na';
+  const includeDevice = m.table === 'menu_semana' && (
+    String(m.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+    (m.matchParams?.id_dispositivo != null && m.matchParams?.id_dispositivo !== 999)
+  );
+  return includeDevice
+    ? [m.table, agentId, fecha, turno, dispositivo, grupo].join(':')
+    : [m.table, agentId, fecha, turno].join(':');
 };
 
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
@@ -92,7 +100,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           m.matchParams?.id_turno === mutation.matchParams.id_turno &&
           (
             !isRotationMultiDevice ||
-            m.matchParams?.id_dispositivo === mutation.matchParams?.id_dispositivo
+            (
+              m.matchParams?.id_dispositivo === mutation.matchParams?.id_dispositivo &&
+              (m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? null) ===
+                (mutation.matchParams?.numero_grupo ?? mutation.payload?.numero_grupo ?? null)
+            )
           )
         );
       } else {
@@ -179,6 +191,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 existingScore = found.score;
                 existingGroup = found.numero_grupo ?? null;
                 existingAcompana = found.acompana_grupo;
+                if (Array.isArray(found.numero_grupos) && existingGroup == null) {
+                  existingGroup = found.numero_grupos[0] ?? null;
+                }
               }
               next[uiDate][dId] = next[uiDate][dId].filter(a => a.id !== agentId);
             });
@@ -191,6 +206,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 existingScore = found.score;
                 existingGroup = found.numero_grupo ?? null;
                 existingAcompana = found.acompana_grupo;
+                if (Array.isArray(found.numero_grupos) && existingGroup == null) {
+                  existingGroup = found.numero_grupos[0] ?? null;
+                }
               }
             });
           }
@@ -199,22 +217,46 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           if (targetDispId && targetDispId !== 999) {
             const dIdStr = String(targetDispId);
             if (!next[uiDate][dIdStr]) next[uiDate][dIdStr] = [];
+            const incomingGroup = mutation.payload?.numero_grupo ?? null;
+            const previous = next[uiDate][dIdStr].find(a => a.id === agentId);
+            const previousGroups = previous
+              ? (Array.isArray(previous.numero_grupos)
+                ? previous.numero_grupos
+                : (previous.numero_grupo != null ? [previous.numero_grupo] : []))
+              : [];
+            const numeroGrupos = incomingGroup == null
+              ? previousGroups
+              : Array.from(new Set([...previousGroups, incomingGroup])).sort((a, b) => a - b);
             next[uiDate][dIdStr] = [
               ...next[uiDate][dIdStr].filter(a => a.id !== agentId),
               {
                 id: agentId, 
                 name: uiName || existingName || "Cargando...",
                 score: existingScore ?? 0,
-                numero_grupo: mutation.payload?.numero_grupo ?? existingGroup ?? null,
+                numero_grupo: incomingGroup ?? existingGroup ?? null,
+                numero_grupos: numeroGrupos,
                 acompana_grupo: mutation.payload?.acompana_grupo ?? existingAcompana ?? false,
                 _isDraft: true,
               }
             ];
           } else if (isRotationMultiDevice && mutation.matchParams?.id_dispositivo) {
-            // En rotación, al "quitar" quitamos sólo del dispositivo objetivo, no de todos.
+            // En rotación, al quitar una fila física con grupo preservamos la tarjeta si quedan otros grupos.
             const srcId = String(mutation.matchParams.id_dispositivo);
+            const groupToRemove = mutation.matchParams?.numero_grupo ?? null;
             if (next[uiDate][srcId]) {
-              next[uiDate][srcId] = next[uiDate][srcId].filter(a => a.id !== agentId);
+              if (groupToRemove != null) {
+                next[uiDate][srcId] = next[uiDate][srcId].flatMap(a => {
+                  if (a.id !== agentId) return [a];
+                  const groups = Array.isArray(a.numero_grupos)
+                    ? a.numero_grupos
+                    : (a.numero_grupo != null ? [a.numero_grupo] : []);
+                  const remainingGroups = groups.filter(g => g !== groupToRemove);
+                  if (remainingGroups.length === 0) return [];
+                  return [{ ...a, numero_grupo: remainingGroups[0] ?? null, numero_grupos: remainingGroups }];
+                });
+              } else {
+                next[uiDate][srcId] = next[uiDate][srcId].filter(a => a.id !== agentId);
+              }
             }
           }
           return next;
@@ -272,18 +314,24 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           table === 'menu_semana' &&
           (
             String(cleanPayload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-            (cleanMatchParams?.id_dispositivo != null && cleanMatchParams?.id_dispositivo !== 999 && cleanPayload?.id_dispositivo !== 999)
+            (cleanMatchParams?.id_dispositivo != null && cleanMatchParams?.id_dispositivo !== 999)
           );
+        const hasPhysicalGroup =
+          table === 'menu_semana' &&
+          isMenuSemanaMultiDevice &&
+          (cleanMatchParams?.numero_grupo != null || cleanPayload?.numero_grupo != null);
 
         const keyFields = table === 'menu_semana'
           ? (isMenuSemanaMultiDevice
-            ? (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'] as const)
+            ? (hasPhysicalGroup
+              ? (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo', 'numero_grupo'] as const)
+              : (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'] as const))
             : (['id_agente', 'fecha_asignacion', 'id_turno'] as const))
           : (['id_agente', 'fecha_asignacion'] as const);
 
         const logicalKey: Record<string, any> = {};
         keyFields.forEach((k) => {
-          const v = cleanPayload?.[k] ?? cleanMatchParams?.[k];
+          const v = cleanMatchParams?.[k] ?? cleanPayload?.[k];
           if (v !== undefined && v !== null) logicalKey[k] = v;
         });
 
@@ -310,6 +358,14 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         }
 
         if (action === 'delete') {
+          if (DRAFT_AUDIT_ENABLED) {
+            console.info('[DraftAudit] sql-plan', {
+              table,
+              action,
+              logicalKey,
+              statement: 'delete matching logicalKey',
+            });
+          }
           let delQ: any = supabase.from(table).delete();
           for (const [k, v] of Object.entries(logicalKey)) delQ = delQ.eq(k, v);
           const { error } = await delQ;
@@ -323,7 +379,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         if (existingErr) throw new Error(`[${table}] Read failed: ${existingErr.message}`);
 
         const baseRow = (existingRows && existingRows.length > 0) ? existingRows[0] : {};
-        const finalRow = { ...baseRow, ...cleanPayload, ...logicalKey };
+        const finalRow = { ...baseRow, ...logicalKey, ...cleanPayload };
         delete finalRow.id_menu_semana;
 
         if (table === 'menu_semana' && (finalRow.id_convocatoria == null)) {
@@ -343,10 +399,24 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           if (resolvedConvId != null) finalRow.id_convocatoria = resolvedConvId;
         }
 
-        let delQ: any = supabase.from(table).delete();
-        for (const [k, v] of Object.entries(logicalKey)) delQ = delQ.eq(k, v);
-        const { error: delErr } = await delQ;
-        if (delErr) throw new Error(`[${table}] Cleanup failed: ${delErr.message}`);
+        if (DRAFT_AUDIT_ENABLED) {
+          console.info('[DraftAudit] sql-plan', {
+            table,
+            action,
+            logicalKey,
+            existingRows: existingRows?.length || 0,
+            statement: existingRows && existingRows.length > 0 ? 'update matching logicalKey' : 'insert finalRow',
+            finalRow,
+          });
+        }
+
+        if (existingRows && existingRows.length > 0) {
+          let updQ: any = supabase.from(table).update(finalRow);
+          for (const [k, v] of Object.entries(logicalKey)) updQ = updQ.eq(k, v);
+          const { error: updErr } = await updQ;
+          if (updErr) throw new Error(`[${table}] Update final failed: ${updErr.message}`);
+          return;
+        }
 
         const { error: insErr } = await supabase.from(table).insert(finalRow);
         if (insErr) throw new Error(`[${table}] Insert final failed: ${insErr.message}`);
@@ -379,11 +449,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       }
 
       for (const m of pendingMutations) {
-        const cleanPayload = m.payload ? Object.fromEntries(
+        const cleanPayload: any = m.payload ? Object.fromEntries(
           Object.entries(m.payload).filter(([key]) => !key.startsWith('_'))
         ) : null;
         
-        const cleanMatchParams = m.matchParams ? Object.fromEntries(
+        const cleanMatchParams: any = m.matchParams ? Object.fromEntries(
           Object.entries(m.matchParams).filter(([key]) => !key.startsWith('_'))
         ) : null;
 
@@ -407,12 +477,13 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               .upsert(cleanPayload, { onConflict: 'fecha,id_turno,id_dispositivo' });
             if (error) throw new Error(`[${m.table}] Upsert failed: ${error.message}`);
           } else {
-            const { data: existing } = await supabase.from(m.table).select('*').match(cleanMatchParams || {}).maybeSingle();
+            const tableClient: any = supabase.from(m.table as any);
+            const { data: existing } = await tableClient.select('*').match(cleanMatchParams || {}).maybeSingle();
             if (existing) {
-              const { error } = await supabase.from(m.table).update(cleanPayload).match(cleanMatchParams || {});
+              const { error } = await tableClient.update(cleanPayload).match(cleanMatchParams || {});
               if (error) throw new Error(`[${m.table}] Update failed: ${error.message}`);
             } else {
-              const { error } = await supabase.from(m.table).insert(cleanPayload);
+              const { error } = await tableClient.insert(cleanPayload);
               if (error) throw new Error(`[${m.table}] Insert failed: ${error.message}`);
             }
           }
@@ -420,20 +491,20 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           if (m.table === 'menu_semana' || m.table === 'menu') {
             await persistMenuLike(m.table, m.action, cleanPayload, cleanMatchParams);
           } else {
-            const { error } = await supabase.from(m.table).insert(cleanPayload);
+            const { error } = await (supabase.from(m.table as any) as any).insert(cleanPayload);
             if (error) throw new Error(`[${m.table}] ${error.message}`);
           }
         } else if (m.action === 'update') {
           if (m.table === 'menu_semana' || m.table === 'menu') {
             await persistMenuLike(m.table, m.action, cleanPayload, cleanMatchParams);
           } else {
-            let q = supabase.from(m.table).update(cleanPayload);
+            let q: any = (supabase.from(m.table as any) as any).update(cleanPayload);
             for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
             const { error } = await q;
             if (error) throw new Error(`[${m.table}] ${error.message}`);
           }
         } else if (m.action === 'delete') {
-          let q = supabase.from(m.table).delete();
+          let q: any = (supabase.from(m.table as any) as any).delete();
           for (const [k, v] of Object.entries(cleanMatchParams || {})) q = q.eq(k, v);
           const { error } = await q;
           if (error) throw new Error(`[${m.table}] ${error.message}`);
@@ -652,7 +723,14 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         if (DRAFT_AUDIT_ENABLED && menuSemanaData.length > 0) {
           const dupCounter: Record<string, number> = {};
           menuSemanaData.forEach((ms: any) => {
-            const key = `ms:${ms.id_agente}:${ms.fecha_asignacion}:${ms.id_turno}`;
+            const key = [
+              'ms',
+              ms.id_agente,
+              ms.fecha_asignacion,
+              ms.id_turno,
+              ms.id_dispositivo,
+              ms.numero_grupo ?? 'na',
+            ].join(':');
             dupCounter[key] = (dupCounter[key] || 0) + 1;
           });
           const duplicates = Object.entries(dupCounter).filter(([, count]) => count > 1);
@@ -759,13 +837,27 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 const dId = String(ms.id_dispositivo);
                 if (!matrix[uiDate]) matrix[uiDate] = {};
                 if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
-                matrix[uiDate][dId].push({
-                  id: ms.id_agente,
-                  name: nameDict[ms.id_agente] || "Desconocido",
-                  score: ms.orden || 1000,
-                  numero_grupo: ms.numero_grupo ?? null,
-                  acompana_grupo: !!(ms as any)['acompa\u00f1a_grupo'],
-                });
+                const existingResident = matrix[uiDate][dId].find((r: any) => r.id === ms.id_agente);
+                if (existingResident) {
+                  const incomingGroup = ms.numero_grupo ?? null;
+                  const groupSet = new Set<number>();
+                  if (existingResident.numero_grupo != null) groupSet.add(existingResident.numero_grupo);
+                  (existingResident.numero_grupos || []).forEach((g: number) => groupSet.add(g));
+                  if (incomingGroup != null) groupSet.add(incomingGroup);
+                  existingResident.numero_grupos = Array.from(groupSet).sort((a, b) => a - b);
+                  if (existingResident.numero_grupo == null && incomingGroup != null) existingResident.numero_grupo = incomingGroup;
+                  existingResident.acompana_grupo = existingResident.acompana_grupo || !!(ms as any)['acompa\u00f1a_grupo'];
+                } else {
+                  const primaryGroup = ms.numero_grupo ?? null;
+                  matrix[uiDate][dId].push({
+                    id: ms.id_agente,
+                    name: nameDict[ms.id_agente] || "Desconocido",
+                    score: ms.orden || 1000,
+                    numero_grupo: primaryGroup,
+                    numero_grupos: primaryGroup != null ? [primaryGroup] : [],
+                    acompana_grupo: !!(ms as any)['acompa\u00f1a_grupo'],
+                  });
+                }
               }
             });
           }

@@ -21,7 +21,9 @@ export interface AssignmentEntry {
   name: string;
   score: number;
   numero_grupo?: number | null;
+  numero_grupos?: number[];
   acompana_grupo?: boolean;
+  _isDraft?: boolean;
 }
 
 export interface SelectedResident {
@@ -30,6 +32,8 @@ export interface SelectedResident {
   score: number;
   device: string;
   date: string;
+  numero_grupo?: number | null;
+  numero_grupos?: number[];
 }
 
 export interface SelectedDevice {

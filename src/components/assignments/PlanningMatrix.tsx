@@ -114,19 +114,60 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       return;
     }
     const orgType = tipoOrganizacionMap?.[date] || 'rotacion completa';
+    const currentRows = data.assignmentsDb?.[date]?.[deviceId] || [];
+    const currentResident = currentRows.find((r: any) => r.id === resId);
+    const existingGroups = currentResident
+      ? (Array.isArray((currentResident as any).numero_grupos)
+        ? (currentResident as any).numero_grupos
+        : ((currentResident as any).numero_grupo != null ? [(currentResident as any).numero_grupo] : []))
+      : [];
+    const isToggleOff = newGroup != null && existingGroups.includes(newGroup);
+    const groupToDelete = newGroup ?? (existingGroups.length === 1 ? existingGroups[0] : null);
+
+    if (newGroup == null && existingGroups.length > 1) {
+      alert('La tarjeta tiene varios grupos. Usá el grupo específico para quitar una sola fila física.');
+      return;
+    }
+    if ((isToggleOff || newGroup == null) && groupToDelete == null) {
+      return;
+    }
+
+    const action = isToggleOff || newGroup == null ? 'delete' : 'upsert';
+    const physicalGroup = action === 'delete' ? groupToDelete : newGroup;
+
+    console.info('[GroupToggle] draft', {
+      action,
+      resId,
+      fechaDB,
+      turnoId,
+      deviceId: parseInt(deviceId),
+      numero_grupo: physicalGroup,
+      existingGroups,
+      orgType,
+    });
+
     data.addAssignmentDraft({
-      id: `group-${resId}-${fechaDB}-${turnoId}-${deviceId}`,
+      id: `group-${resId}-${fechaDB}-${turnoId}-${deviceId}-${physicalGroup ?? 'null'}-${action}`,
       table: 'menu_semana',
-      action: 'upsert',
-      matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
-      payload: {
+      action,
+      matchParams: {
         id_agente: resId,
         fecha_asignacion: fechaDB,
         id_turno: turnoId,
         id_dispositivo: parseInt(deviceId),
-        numero_grupo: newGroup,
-        tipo_organizacion: orgType,
+        ...(physicalGroup != null ? { numero_grupo: physicalGroup } : {}),
       },
+      payload: action === 'delete'
+        ? { tipo_organizacion: orgType, _ui_name: currentResident?.name }
+        : {
+          id_agente: resId,
+          fecha_asignacion: fechaDB,
+          id_turno: turnoId,
+          id_dispositivo: parseInt(deviceId),
+          numero_grupo: physicalGroup,
+          tipo_organizacion: orgType,
+          _ui_name: currentResident?.name,
+        },
       uiDate: date,
     });
 
@@ -134,9 +175,15 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       const next = { ...prev };
       const day = next[date] || {};
       const deviceResidents = day[deviceId] || [];
-      day[deviceId] = deviceResidents.map((r: any) =>
-        r.id === resId ? { ...r, numero_grupo: newGroup } : r
-      );
+      day[deviceId] = deviceResidents.flatMap((r: any) => {
+        if (r.id !== resId) return [r];
+        const existing = Array.isArray(r.numero_grupos) ? r.numero_grupos : (r.numero_grupo != null ? [r.numero_grupo] : []);
+        const nextGroups = action === 'delete'
+          ? existing.filter(g => g !== physicalGroup)
+          : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
+        if (nextGroups.length === 0) return [];
+        return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
+      });
       next[date] = day;
       return next;
     });
@@ -166,13 +213,19 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           setIsLoading(false);
           return;
         }
+        console.info('[AcompañaGrupo] sql-plan', {
+          table: 'menu_semana',
+          statement: 'update matching agent/date/turno/device',
+          match: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
+          payload: updateObj,
+        });
         query = supabase.from('menu_semana')
           .update(updateObj)
           .eq('id_agente', resId)
           .eq('fecha_asignacion', fechaDB)
           .eq('id_dispositivo', parseInt(deviceId))
           .eq('id_turno', turnoId)
-          .select();
+          .select('id_menu_semana, id_agente, fecha_asignacion, id_turno, id_dispositivo, numero_grupo, acompa\u00f1a_grupo');
       }
       const { error, data: updated } = await query;
       if (error) throw error;
@@ -182,7 +235,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
         setIsLoading(false);
         return;
       }
-      console.log('[AcompañaGrupo] Updated:', updated.length, 'rows, new value:', updated[0]?.['acompa\u00f1a_grupo']);
+      console.log('[AcompañaGrupo] Updated rows:', updated);
       refresh();
     } catch (err: any) {
       console.error('Error toggling acompa\u00f1a_grupo:', err);
@@ -360,14 +413,23 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                 {assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
                                 const metrics = computeRotationMetrics(res.id, String(device.id), totalDeviceCount, data.annualMetricsDb);
-                                const groupNum = (res.numero_grupo && res.numero_grupo >= 1 && res.numero_grupo <= 3) ? res.numero_grupo : (groupCols[0] || 1);
+                                const firstGroup = Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0 ? res.numero_grupos[0] : res.numero_grupo;
+                                const groupNum = (firstGroup && firstGroup >= 1 && firstGroup <= 3) ? firstGroup : (groupCols[0] || 1);
                                 const colIndex = Math.max(0, groupCols.indexOf(groupNum));
                                 return (
                                   <div
                                     key={idx}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedResident({ id: res.id, name: res.name, score: res.score, device: device.name, date });
+                                      setSelectedResident({
+                                        id: res.id,
+                                        name: res.name,
+                                        score: res.score,
+                                        device: device.name,
+                                        date,
+                                        numero_grupo: res.numero_grupo ?? null,
+                                        numero_grupos: res.numero_grupos,
+                                      });
                                       setSelectedDevice(null);
                                     }}
                                     className={`text-left px-2 py-1.5 rounded border text-sm flex justify-between items-center transition-all cursor-pointer
@@ -435,7 +497,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                               {[null, 1, 2, 3].map(g => (
                                                 <button key={g ?? 'x'} onClick={() => handleGroupChange(res.id, date, device.id, g)}
                                                   className={`text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all hover:scale-110 ${
-                                                    g === res.numero_grupo ? 'ring-2 ring-primary font-bold' : ''
+                                                    (Array.isArray(res.numero_grupos) ? res.numero_grupos.includes(g as number) : g === res.numero_grupo) ? 'ring-2 ring-primary font-bold' : ''
                                                   } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
                                                   {g != null ? `G${g}` : '✕'}
                                                 </button>
@@ -444,7 +506,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                           );
                                         }
 
-                                        if (res.numero_grupo != null) {
+                                        if (res.numero_grupo != null || (Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0)) {
+                                          const badgeGroups = Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0 ? res.numero_grupos : [res.numero_grupo];
                                           return (
                                             <span
                                               onClick={isNonApertura ? (e) => {
@@ -454,7 +517,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                               className={`text-[9px] px-1 py-0.5 rounded font-mono border ${getGroupColor(res.numero_grupo)} ${
                                                 isNonApertura ? 'cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all' : ''
                                               }`}>
-                                              G{res.numero_grupo}
+                                              G{badgeGroups.join('/')}
                                             </span>
                                           );
                                         }
