@@ -43,6 +43,9 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   }, [assignmentsDb, dbDevices.length, data.annualMetricsDb]);
   const convocados = new Set(convocadosDb[date] || []);
   const isApertura = turnoFilter === 'apertura';
+  const selectedGroups = Array.isArray(selectedResident.numero_grupos) && selectedResident.numero_grupos.length > 0
+    ? selectedResident.numero_grupos
+    : (selectedResident.numero_grupo != null ? [selectedResident.numero_grupo] : []);
 
   const [dayStr, monthStr] = date.split("/");
   const fechaDB = `${year}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
@@ -102,7 +105,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       if (isApertura) {
         // Quitar original
         data.addAssignmentDraft({
-          id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
+          id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}-${disp?.id ?? 'na'}`,
           table: 'menu',
           action: 'update',
           matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB },
@@ -112,7 +115,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
 
         // Poner nuevo
         data.addAssignmentDraft({
-          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}`,
+          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}-${disp?.id ?? 'na'}`,
           table: 'menu',
           action: 'upsert',
           matchParams: { id_agente: newResId, fecha_asignacion: fechaDB },
@@ -128,28 +131,44 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         }
         const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa';
 
-        // Quitar original
-        data.addAssignmentDraft({
-          id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}`,
-          table: 'menu_semana',
-          action: 'update',
-          matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, id_turno: turnoId },
-          payload: { id_dispositivo: 999, tipo_organizacion: orgType, _ui_name: resName },
-          uiDate: date
-        });
+        const groupsToMove = selectedGroups.length > 0 ? selectedGroups : [null];
+        groupsToMove.forEach((groupNum) => {
+          // Quitar original
+          data.addAssignmentDraft({
+            id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}-${groupNum ?? 'null'}`,
+            table: 'menu_semana',
+            action: 'delete',
+            matchParams: {
+              id_agente: selectedResident.id,
+              id_dispositivo: Number(disp?.id),
+              fecha_asignacion: fechaDB,
+              id_turno: turnoId,
+              ...(groupNum != null ? { numero_grupo: groupNum } : {}),
+            },
+            payload: { tipo_organizacion: orgType, _ui_name: resName },
+            uiDate: date
+          });
 
-        // Poner nuevo
-        data.addAssignmentDraft({
-          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}`,
-          table: 'menu_semana',
-          action: 'upsert',
-          matchParams: { id_agente: newResId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: Number(disp?.id) },
-          payload: { 
-            id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB, 
-            estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
-            tipo_organizacion: orgType, _ui_name: newResName
-          },
-          uiDate: date
+          // Poner nuevo
+          data.addAssignmentDraft({
+            id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}-${groupNum ?? 'null'}`,
+            table: 'menu_semana',
+            action: 'upsert',
+            matchParams: {
+              id_agente: newResId,
+              fecha_asignacion: fechaDB,
+              id_turno: turnoId,
+              id_dispositivo: Number(disp?.id),
+              ...(groupNum != null ? { numero_grupo: groupNum } : {}),
+            },
+            payload: {
+              id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB,
+              estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
+              tipo_organizacion: orgType, _ui_name: newResName,
+              ...(groupNum != null ? { numero_grupo: groupNum } : {}),
+            },
+            uiDate: date
+          });
         });
       }
       setSelectedResident(null);
@@ -163,7 +182,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
   const handleRemove = async () => {
     if (!confirm(`¿Quitar a ${selectedResident.name}?`)) return;
     setIsLoading(true);
-    
+
     try {
       const turnoId = isApertura ? null : dateTurnoMap[date];
       if (!isApertura && !turnoId) {
@@ -174,24 +193,56 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       const orgType = !isApertura
         ? ((tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa')
         : null;
-      data.addAssignmentDraft({
-        id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
-        table: isApertura ? 'menu' : 'menu_semana',
-        action: 'update',
-        matchParams: { 
-          id_agente: selectedResident.id, 
-          fecha_asignacion: fechaDB,
-          id_dispositivo: Number(disp?.id),
-          ...(isApertura ? {} : { id_turno: turnoId }) 
-        },
-        payload: {
-          id_dispositivo: 999,
-          ...(isApertura ? {} : { tipo_organizacion: orgType }),
-          _ui_name: selectedResident.name
-        },
-        uiDate: date
+      const groupsToRemove = !isApertura && selectedGroups.length > 0 ? selectedGroups : [null];
+      groupsToRemove.forEach((groupNum) => {
+        data.addAssignmentDraft({
+          id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}-${groupNum ?? 'null'}`,
+          table: isApertura ? 'menu' : 'menu_semana',
+          action: isApertura ? 'update' : 'delete',
+          matchParams: {
+            id_agente: selectedResident.id,
+            fecha_asignacion: fechaDB,
+            id_dispositivo: Number(disp?.id),
+            ...(isApertura ? {} : { id_turno: turnoId }),
+            ...(!isApertura && groupNum != null ? { numero_grupo: groupNum } : {}),
+          },
+          payload: isApertura ? {
+            id_dispositivo: 999,
+            _ui_name: selectedResident.name
+          } : {
+            tipo_organizacion: orgType,
+            _ui_name: selectedResident.name
+          },
+          uiDate: date
+        });
       });
-      
+
+      if (!isApertura) {
+        console.info('[ResidentRemove] full-device draft', {
+          resId: selectedResident.id,
+          fechaDB,
+          turnoId,
+          deviceId: Number(disp?.id),
+          groupsToRemove,
+        });
+        data.addAssignmentDraft({
+          id: `remove-device-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
+          table: 'menu_semana',
+          action: 'delete',
+          matchParams: {
+            id_agente: selectedResident.id,
+            fecha_asignacion: fechaDB,
+            id_turno: turnoId,
+            id_dispositivo: Number(disp?.id),
+          },
+          payload: {
+            tipo_organizacion: orgType,
+            _ui_name: selectedResident.name,
+          },
+          uiDate: date,
+        });
+      }
+
       setSelectedResident(null);
       setIsLoading(false);
     } catch (err) {

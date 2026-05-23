@@ -147,6 +147,11 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
     if (groups.size === 0) {
       Object.values(dateAssignments).forEach((arr: any) => {
         arr.forEach((r: any) => {
+          if (Array.isArray(r.numero_grupos)) {
+            r.numero_grupos.forEach((g: number) => {
+              if (g >= 1 && g <= 3) groups.add(g);
+            });
+          }
           if (r.numero_grupo != null) groups.add(r.numero_grupo);
         });
       });
@@ -352,7 +357,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                     {isRotacionMode && distinctGroups.length > 0 ? (
                       <div className="p-1.5 sm:p-2 flex gap-1">
                         {distinctGroups.map(gNum => {
-                          const groupAssignments = assignments.filter(r => (r.numero_grupo ?? distinctGroups[0]) === gNum);
+                          const groupAssignments = assignments.filter(r => {
+                            if (Array.isArray((r as any).numero_grupos) && (r as any).numero_grupos.length > 0) {
+                              return (r as any).numero_grupos.includes(gNum);
+                            }
+                            return (r.numero_grupo ?? distinctGroups[0]) === gNum;
+                          });
                           if (groupAssignments.length === 0) return (
                             <div key={gNum} className="flex-1 min-w-0" />
                           );
