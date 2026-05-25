@@ -189,7 +189,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
         const nextGroups = action === 'delete'
           ? existing.filter(g => g !== physicalGroup)
           : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
-        if (nextGroups.length === 0) return [];
+        if (nextGroups.length === 0) return [{ ...r, numero_grupo: null, numero_grupos: [] }];
         return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
       });
       next[date] = day;

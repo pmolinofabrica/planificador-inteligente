@@ -128,6 +128,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         return;
       }
       toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
+      refresh();
       setIsLoading(false);
     } catch (err: any) {
       console.error('Error toggling acompa\u00f1a_grupo:', err);
@@ -201,7 +202,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         const nextGroups = action === 'delete'
           ? existing.filter((g: number) => g !== physicalGroup)
           : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
-        if (nextGroups.length === 0) return [];
+        if (nextGroups.length === 0) return [{ ...r, numero_grupo: null, numero_grupos: [] }];
         return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
       });
       next[execDate] = day;
@@ -457,7 +458,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
   // Build resident list for closed device sidebar
   const buildResidentList = (targetDeviceId: string) => {
-    type ListItem = { id: number; name: string; category: string; isBusy: boolean; isAbsent: boolean; busyDevice?: string };
+    type ListItem = { id: number; name: string; category: string; isBusy: boolean; isAbsent: boolean; busyDevice?: string; apCount: number; tmCount: number };
     const tier1: ListItem[] = [];
     const tier2: ListItem[] = [];
     const tier3: ListItem[] = [];
@@ -472,11 +473,15 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
       if (isAbsent) return;
 
+      const apCount = aperturaMetricsDb?.[res.id]?.deviceReps?.[targetDeviceId] || 0;
+      const tmCount = tardeMananaMetricsDb?.[res.id]?.deviceReps?.[targetDeviceId] || 0;
+
       const item: ListItem = {
         id: res.id, name: res.name,
         category: isConvocado ? (isCapacitado ? 'conv+cap' : 'conv+nocap') : (isCapacitado ? 'desc+cap' : 'desc+nocap'),
         isBusy: !!occ, isAbsent,
         busyDevice: occ?.deviceName,
+        apCount, tmCount,
       };
 
       if (isConvocado && isCapacitado) tier1.push(item);
@@ -624,8 +629,20 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                           <button key={item.id}
                             onClick={() => handleAssignToClosedDevice(item.id, device.id)}
                             className="w-full text-left p-2.5 rounded-lg border text-sm transition-all flex justify-between items-center border-border bg-card hover:border-primary/40 cursor-pointer hover:shadow-sm">
-                            <div>
+                            <div className="flex items-center gap-1.5">
                               <span className="font-bold">{item.name}</span>
+                              <div className="flex items-center gap-0.5">
+                                {item.apCount > 0 && (
+                                  <span className="text-[9px] font-bold bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] px-1 py-0.5 rounded border border-[hsl(var(--floor-1-border))]">
+                                    AP: {item.apCount}
+                                  </span>
+                                )}
+                                {item.tmCount > 0 && (
+                                  <span className="text-[9px] font-bold bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] px-1 py-0.5 rounded border border-[hsl(var(--floor-2-border))]">
+                                    T/M: {item.tmCount}
+                                  </span>
+                                )}
+                              </div>
                               {item.isBusy && (
                                 <span className="ml-1.5 text-[11px] text-[hsl(var(--score-mid-text))] font-mono">← {item.busyDevice}</span>
                               )}
