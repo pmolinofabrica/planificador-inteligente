@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Monitor, ArrowRightLeft, Plus, Check, AlertCircle, Moon, Lock } from 'lucide-react';
-import { getFloorColor } from '@/lib/floor-utils';
+import React, { useState, useMemo } from 'react';
+import { Monitor, Plus, Check, AlertCircle, Moon, Lock } from 'lucide-react';
+import { getFloorColor, getGroupColor, getPisoFromDeviceName, getFloorPisoStyle } from '@/lib/floor-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { VisitBlock } from './VisitBadge';
@@ -11,22 +11,27 @@ interface AperturaDevicesPanelProps {
   execDate: string;
   pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
+  setSelectedDevice: (d: { id: string; name: string; date: string } | null) => void;
+  setSelectedDateFilter: (d: string | null) => void;
+  visibleGroups?: Record<number, boolean>;
 }
 
 export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
-  data, execDate, pushUndo, year,
+  data, execDate, pushUndo, year, setSelectedDevice, setSelectedDateFilter, visibleGroups,
 }) => {
   const {
     dbDevices, assignmentsDb, calendarDb, setCalendarDb,
     convocadosDb, allResidentsDb, isAgentAbsent,
     agentConvocatoriaMap, isLoading, setIsLoading, refresh,
     visitasByDate, turnoFilter, dateTurnoMap,
+    aperturaMetricsDb, tardeMananaMetricsDb,
+    tipoOrganizacionMap, addAssignmentDraft, setAssignmentsDb,
   } = data;
 
   const isAperturaMode = turnoFilter === 'apertura';
 
-  const [selectedOpenDevice, setSelectedOpenDevice] = useState<string | null>(null);
   const [selectedClosedDevice, setSelectedClosedDevice] = useState<string | null>(null);
+  const [editingGroup, setEditingGroup] = useState<string | null>(null);
 
   const [d, mStr] = execDate.split('/');
   const fechaDB = `${year}-${mStr?.padStart(2, '0')}-${d?.padStart(2, '0')}`;
@@ -56,6 +61,38 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
   const convocadoIds = new Set(convocadosDb[execDate] || []);
   const visitas = visitasByDate?.[execDate] || [];
+
+  const isRotation = tipoOrganizacionMap?.[execDate] === 'rotacion simple' || tipoOrganizacionMap?.[execDate] === 'rotacion completa';
+  const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
+
+  // Active groups for this date (rotation only)
+  const activeGroups = useMemo(() => {
+    const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
+    const isRot = orgType === 'rotacion simple' || orgType === 'rotacion completa';
+    if (!isRot) return [];
+    const groups = new Set<number>();
+    (visitasByDate?.[execDate] || []).forEach((v: any) => {
+      (v.numero_grupo || []).forEach((g: number) => {
+        if (g >= 1 && g <= 3) groups.add(g);
+      });
+    });
+    return Array.from(groups).sort((a, b) => a - b);
+  }, [tipoOrganizacionMap, execDate, visitasByDate]);
+
+  // Pre-compute floor device counts per resident across ALL devices
+  const residentFloorCounts = useMemo(() => {
+    const map: Record<number, Record<string, number>> = {};
+    Object.entries(assignmentsDb[execDate] || {}).forEach(([devId, residents]: [string, any]) => {
+      const dev = dbDevices.find((d: any) => d.id === devId);
+      if (!dev) return;
+      const piso = getPisoFromDeviceName(dev.name);
+      residents.forEach((r: any) => {
+        if (!map[r.id]) map[r.id] = { '1': 0, '2': 0, '3': 0, '4': 0 };
+        map[r.id][piso] = (map[r.id][piso] || 0) + 1;
+      });
+    });
+    return map;
+  }, [assignmentsDb, execDate, dbDevices]);
 
   // Toggle acompaña_grupo for a resident in apertura (menu table)
   const handleToggleAcompana = async (resId: number, deviceId: string, current: boolean) => {
@@ -99,63 +136,121 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     }
   };
 
-  // Transfer resident from one device to another
-  const handleTransfer = async (resId: number, fromDeviceId: string, toDeviceId: string) => {
-    if (isLoading) return;
-
-    const fromDev = dbDevices.find((d: any) => d.id === fromDeviceId);
-    const toDev = dbDevices.find((d: any) => d.id === toDeviceId);
-    const toCupo = calendarDb[execDate]?.[toDeviceId] || 0;
-    const toAssigned = assignmentsDb[execDate]?.[toDeviceId]?.length || 0;
-    const resName = allResidentsDb.find((r: any) => r.id === resId)?.name || `ID ${resId}`;
-
-    let message = `¿Trasladar a ${resName}?\n\n`;
-    message += `• Se quita de: ${fromDev?.name}\n`;
-
-    if (toCupo === 0 || toAssigned >= toCupo) {
-      message += `• Se abre cupo en: ${toDev?.name} (cupo actual: ${toCupo} → ${toCupo + 1})\n`;
+  // Toggle group assignment for rotation modes (mirrors PlanningMatrix.handleGroupChange)
+  const handleGroupChange = async (resId: number, deviceId: string, newGroup: number | null) => {
+    setEditingGroup(null);
+    const turnoId = dateTurnoMap[execDate];
+    if (!turnoId) {
+      alert(`No se pudo resolver id_turno para ${execDate}.`);
+      return;
     }
-    message += `• Se asigna a: ${toDev?.name}`;
+    const orgType = tipoOrganizacionMap?.[execDate] || 'rotacion completa';
+    const currentRows = assignmentsDb[execDate]?.[deviceId] || [];
+    const currentResident = currentRows.find((r: any) => r.id === resId);
+    const existingGroups = currentResident
+      ? (Array.isArray(currentResident.numero_grupos)
+        ? currentResident.numero_grupos
+        : (currentResident.numero_grupo != null ? [currentResident.numero_grupo] : []))
+      : [];
+    const isToggleOff = newGroup != null && existingGroups.includes(newGroup);
+    const groupToDelete = newGroup ?? (existingGroups.length === 1 ? existingGroups[0] : null);
 
-    if (!confirm(message)) return;
+    if (newGroup == null && existingGroups.length > 1) {
+      alert('La tarjeta tiene varios grupos. Usá el grupo específico para quitar una sola fila física.');
+      return;
+    }
+    if ((isToggleOff || newGroup == null) && groupToDelete == null) return;
 
-    setIsLoading(true);
-    try {
-      const turnoId = dateTurnoMap[execDate] || (isAperturaMode ? 45 : 4);
-      if (toCupo === 0 || toAssigned >= toCupo) {
-        data.addAssignmentDraft({
-          id: `cupo-${execDate}-${toDeviceId}`,
-          table: 'calendario_dispositivos',
-          action: 'upsert',
-          matchParams: { fecha: fechaDB, id_dispositivo: parseInt(toDeviceId), id_turno: turnoId },
-          payload: { fecha: fechaDB, id_dispositivo: parseInt(toDeviceId), id_turno: turnoId, cupo_objetivo: (toCupo || 0) + 1 },
-          uiDate: execDate
-        });
-      }
+    const action = isToggleOff || newGroup == null ? 'delete' : 'upsert';
+    const physicalGroup = action === 'delete' ? groupToDelete : newGroup;
 
-      data.addAssignmentDraft({
-        id: `op-${resId}-${execDate}-${data.turnoFilter}`,
-        table: isAperturaMode ? 'menu' : 'menu_semana',
+    addAssignmentDraft({
+      id: `group-${resId}-${fechaDB}-${turnoId}-${deviceId}-${physicalGroup ?? 'null'}-${action}`,
+      table: 'menu_semana',
+      action,
+      matchParams: {
+        id_agente: resId,
+        fecha_asignacion: fechaDB,
+        id_turno: turnoId,
+        id_dispositivo: parseInt(deviceId),
+        ...(physicalGroup != null ? { numero_grupo: physicalGroup } : {}),
+      },
+      payload: action === 'delete'
+        ? { tipo_organizacion: orgType, _ui_name: currentResident?.name }
+        : {
+            id_agente: resId,
+            fecha_asignacion: fechaDB,
+            id_turno: turnoId,
+            id_dispositivo: parseInt(deviceId),
+            numero_grupo: physicalGroup,
+            tipo_organizacion: orgType,
+            _ui_name: currentResident?.name,
+          },
+      uiDate: execDate,
+    });
+
+    setAssignmentsDb((prev: any) => {
+      const next = { ...prev };
+      const day = next[execDate] ? { ...next[execDate] } : {};
+      const deviceResidents = day[deviceId] || [];
+      day[deviceId] = deviceResidents.flatMap((r: any) => {
+        if (r.id !== resId) return [r];
+        const existing = Array.isArray(r.numero_grupos)
+          ? r.numero_grupos
+          : (r.numero_grupo != null ? [r.numero_grupo] : []);
+        const nextGroups = action === 'delete'
+          ? existing.filter((g: number) => g !== physicalGroup)
+          : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
+        if (nextGroups.length === 0) return [];
+        return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
+      });
+      next[execDate] = day;
+      return next;
+    });
+  };
+
+  // Remove resident from device
+  const handleQuitar = (resId: number, deviceId: string) => {
+    if (isLoading) return;
+    const resName = allResidentsDb.find((r: any) => r.id === resId)?.name || "Residente";
+    const turnoId = dateTurnoMap[execDate];
+
+    if (isAperturaMode) {
+      if (!confirm(`¿Quitar a ${resName} de este dispositivo (irá al baúl)?`)) return;
+      addAssignmentDraft({
+        id: `remove-${resId}-${fechaDB}-${turnoFilter}-${deviceId}`,
+        table: 'menu',
         action: 'update',
-        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(fromDeviceId), ...(isAperturaMode ? {} : { id_turno: turnoId }) },
-        payload: { id_dispositivo: parseInt(toDeviceId), _ui_name: resName },
+        matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB },
+        payload: { id_dispositivo: 999, _ui_name: resName },
         uiDate: execDate
       });
-
-      toast.success(`${resName} trasladado localmente`);
-      setSelectedOpenDevice(null);
-      setIsLoading(false);
-    } catch (err: any) {
-      console.error('Error trasladando:', err);
-      toast.error(`Error: ${err.message || err}`);
-      setIsLoading(false);
+    } else {
+      if (!turnoId) {
+        alert(`No se pudo resolver id_turno para ${execDate}.`);
+        return;
+      }
+      const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
+      if (!confirm(`¿Quitar a ${resName} de este dispositivo?`)) return;
+      addAssignmentDraft({
+        id: `remove-${resId}-${fechaDB}-${turnoFilter}-${turnoId}-${deviceId}`,
+        table: 'menu_semana',
+        action: 'delete',
+        matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, id_turno: turnoId },
+        payload: { tipo_organizacion: orgType, _ui_name: resName },
+        uiDate: execDate
+      });
     }
+    pushUndo({
+      snapshot: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(deviceId), estado_ejecucion: 'planificado' }
+    });
   };
 
   // Assign a resident to a closed device (opens cupo)
   const handleAssignToClosedDevice = async (resId: number, targetDeviceId: string) => {
     if (isLoading) return;
 
+    const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
     const toDev = dbDevices.find((d: any) => d.id === targetDeviceId);
     const resName = allResidentsDb.find((r: any) => r.id === resId)?.name || `ID ${resId}`;
     const currentOccupancy = occupancies[resId];
@@ -163,7 +258,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
     let message = `¿Asignar a ${resName} en ${toDev?.name}?\n\n`;
     message += `• Se agrega cupo en ${toDev?.name} (${toCupo} → ${toCupo + 1})\n`;
-    if (currentOccupancy) {
+    if (currentOccupancy && !isRotation) {
       message += `• Se quita de: ${currentOccupancy.deviceName}\n`;
     }
 
@@ -206,7 +301,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         table: isAperturaMode ? 'menu' : 'menu_semana',
         action: 'upsert',
         matchParams: { id_agente: resId, fecha_asignacion: fechaDB, ...(isAperturaMode ? {} : { id_turno: turnoId }) },
-        payload: { id_agente: resId, id_dispositivo: parseInt(targetDeviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId, _ui_name: resName },
+        payload: { id_agente: resId, id_dispositivo: parseInt(targetDeviceId), fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId, tipo_organizacion: orgType, _ui_name: resName },
         uiDate: execDate
       });
 
@@ -218,6 +313,146 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       toast.error(`Error: ${err.message || err}`);
       setIsLoading(false);
     }
+  };
+
+  /* ── ResidentCard sub-component ── */
+
+  const floorNames: Record<string, { label: string; bgClass: string; borderClass: string }> = {
+    '1': { label: 'P1', bgClass: 'bg-[hsl(var(--floor-1-accent))]', borderClass: 'border-[hsl(var(--floor-1-accent))]' },
+    '2': { label: 'P2', bgClass: 'bg-[hsl(var(--floor-2-accent))]', borderClass: 'border-[hsl(var(--floor-2-accent))]' },
+    '3': { label: 'P3', bgClass: 'bg-[hsl(var(--floor-3-accent))]', borderClass: 'border-[hsl(var(--floor-3-accent))]' },
+    '4': { label: 'P4', bgClass: 'bg-muted-foreground', borderClass: 'border-muted-foreground' },
+  };
+
+  const ResidentCard = ({
+    res, device, isAbsent, isAcompanante, isEditing,
+    visitas, residentFloorCounts,
+    aperturaMetricsDb, tardeMananaMetricsDb,
+    onToggleAcompana, onQuitar, onGroupEdit, onGroupChange,
+    isNonApertura, isRotation,
+  }: {
+    res: any; device: any;
+    isAbsent: boolean; isAcompanante: boolean; isEditing: boolean;
+    visitas: any[];
+    residentFloorCounts: Record<number, Record<string, number>>;
+    aperturaMetricsDb: any; tardeMananaMetricsDb: any;
+    onToggleAcompana: (id: number, devId: string, cur: boolean) => void;
+    onQuitar: (id: number, devId: string) => void;
+    onGroupEdit: () => void;
+    onGroupChange: (id: number, devId: string, g: number | null) => void;
+    isNonApertura: boolean; isRotation: boolean;
+  }) => {
+    const floorCounts = residentFloorCounts[res.id] || {};
+    const apCount = aperturaMetricsDb?.[res.id]?.deviceReps?.[device.id] || 0;
+    const tmCount = tardeMananaMetricsDb?.[res.id]?.deviceReps?.[device.id] || 0;
+
+    return (
+      <div className={`p-3 rounded-lg border text-sm ${
+        isAbsent ? 'border-dashed border-muted-foreground/30 bg-muted/30' : 'border-border bg-muted/30'
+      }`}>
+        {/* Row 1: name + controls */}
+        <div className="flex items-center justify-between gap-1.5">
+          <span className={`font-bold truncate ${isAbsent ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+            {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{res.name}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Group badge/editing (rotation modes only) */}
+            {!isAbsent && isNonApertura && isRotation && (() => {
+              if (isEditing) {
+                return (
+                    <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                    {[null, 1, 2, 3].map(g => (
+                      <button key={g ?? 'x'} onClick={() => onGroupChange(res.id, device.id, g)}
+                        className={`text-[11px] px-1.5 py-1 rounded font-mono border transition-all hover:scale-110 ${
+                          (Array.isArray(res.numero_grupos) ? res.numero_grupos.includes(g as number) : g === res.numero_grupo)
+                            ? 'ring-2 ring-primary font-bold' : ''
+                        } ${g != null ? getGroupColor(g) : 'bg-muted text-muted-foreground border-border'}`}>
+                        {g != null ? `G${g}` : '✕'}
+                      </button>
+                    ))}
+                  </div>
+                );
+              }
+              if (res.numero_grupo != null || (Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0)) {
+                const badgeGroups = Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0
+                  ? res.numero_grupos : [res.numero_grupo];
+                return (
+                  <span
+                    onClick={e => { e.stopPropagation(); onGroupEdit(); }}
+                    className={`text-[11px] px-1.5 py-1 rounded font-mono border cursor-pointer hover:ring-2 hover:ring-primary/40 hover:scale-110 transition-all ${getGroupColor(res.numero_grupo)}`}>
+                    G{badgeGroups.join('/')}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  onClick={e => { e.stopPropagation(); onGroupEdit(); }}
+                  className="text-[11px] px-1.5 py-1 rounded font-mono border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-all">
+                  +G
+                </button>
+              );
+            })()}
+
+            {/* Acompañar grupo toggle */}
+            {!isAbsent && visitas.length > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleAcompana(res.id, device.id, isAcompanante); }}
+                className={`text-[11px] px-2 py-1 rounded border font-bold transition-all hover:scale-105 ${
+                  isAcompanante
+                    ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                    : 'bg-muted text-muted-foreground border-border hover:border-primary'
+                }`}
+                title={isAcompanante ? 'Quitar acompañante de grupo' : 'Marcar como acompañante de grupo'}
+              >
+                🏫
+              </button>
+            )}
+
+            {/* Quitar button */}
+            {!isAbsent && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onQuitar(res.id, device.id); }}
+                className="text-[11px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-all font-bold"
+                title="Quitar de este dispositivo"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: floor device counts + AP/TM badges */}
+        {!isAbsent && (
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40">
+            <div className="flex items-center gap-1.5">
+              {Object.entries(floorNames).map(([piso, info]) => (
+                <div key={piso}
+                  className={`w-[22px] h-[22px] rounded flex items-center justify-center text-[11px] font-bold text-white ${info.bgClass}`}
+                  title={`${info.label}: ${floorCounts[piso] || 0} dispositivos`}
+                >
+                  {floorCounts[piso] || 0}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {apCount > 0 && (
+                <span className="text-[10px] font-bold bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] px-2 py-1 rounded border border-[hsl(var(--floor-1-border))]">
+                  AP: {apCount}
+                </span>
+              )}
+              {tmCount > 0 && (
+                <span className="text-[10px] font-bold bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] px-2 py-1 rounded border border-[hsl(var(--floor-2-border))]">
+                  T/M: {tmCount}
+                </span>
+              )}
+              {apCount === 0 && tmCount === 0 && (
+                <span className="text-[10px] text-muted-foreground/50 italic">sin datos</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Build resident list for closed device sidebar
@@ -268,89 +503,94 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
           <Monitor className="w-4 h-4 text-[hsl(var(--score-high-text))]" /> Dispositivos Abiertos ({openDevices.length})
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {openDevices.map(({ device, assignments }) => (
-            <div key={device.id} className={`rounded-xl border overflow-hidden transition-all ${
-              selectedOpenDevice === device.id ? 'ring-2 ring-primary shadow-md' : 'shadow-sm hover:shadow'
-            }`}>
-              <div className={`px-3 py-2 border-b flex items-center justify-between cursor-pointer ${getFloorColor(device.name)}`}
-                onClick={() => setSelectedOpenDevice(selectedOpenDevice === device.id ? null : device.id)}>
-                <h4 className="font-bold text-xs truncate">{device.name}</h4>
-                <span className="text-[9px] font-mono bg-card/50 px-1.5 py-0.5 rounded border border-border/50">{assignments.length} res.</span>
-              </div>
-              <div className="p-2 bg-card space-y-1.5">
-                {assignments.map((res: any, i: number) => {
-                  const isAbsent = isAgentAbsent(res.id, execDate);
-                  const isAcompanante = !!res.acompana_grupo;
-                  return (
-                    <div key={`${res.id}-${i}`} className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
-                      isAbsent ? 'border-dashed border-muted-foreground/30 bg-muted/30' : 'border-border bg-muted/30'
-                    }`}>
-                      <span className={`font-bold ${isAbsent ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                        {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{res.name}
-                      </span>
-                      {/* Acompañar grupo toggle */}
-                      {!isAbsent && visitas.length > 0 && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggleAcompana(res.id, device.id, isAcompanante); }}
-                          className={`text-[9px] px-1.5 py-0.5 rounded border font-bold transition-all hover:scale-105 ${
-                            isAcompanante
-                              ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
-                              : 'bg-muted text-muted-foreground border-border hover:border-primary'
-                          }`}
-                          title={isAcompanante ? 'Quitar acompañante de grupo' : 'Marcar como acompañante de grupo'}
-                        >
-                          🏫
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+          {openDevices.map(({ device, assignments }) => {
+            // Filter by visibleGroups in rotation mode
+            let filteredAssignments = assignments;
+            if (visibleGroups && Object.keys(visibleGroups).length > 0 && isRotation) {
+              filteredAssignments = assignments.filter((res: any) => {
+                const groups = Array.isArray(res.numero_grupos)
+                  ? res.numero_grupos
+                  : (res.numero_grupo != null ? [res.numero_grupo] : []);
+                return groups.length === 0 || groups.some((g: number) => visibleGroups[g]);
+              });
+            }
 
-              {/* Transfer panel */}
-              {selectedOpenDevice === device.id && (
-                <div className="p-3 border-t border-border bg-accent/30">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">
-                    <ArrowRightLeft className="w-3 h-3 inline mr-1" /> Trasladar a otro dispositivo
-                  </span>
-                  {assignments.map((res: any) => {
-                    if (isAgentAbsent(res.id, execDate)) return null;
-                    return (
-                      <div key={res.id} className="mb-3">
-                        <span className="text-xs font-bold text-foreground block mb-1.5">{res.name}:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {dbDevices
-                            .filter((d: any) => d.id !== device.id)
-                            .map((targetDev: any) => {
-                              const tCupo = calendarDb[execDate]?.[targetDev.id] || 0;
-                              const tAssigned = assignmentsDb[execDate]?.[targetDev.id]?.length || 0;
-                              const isClosed = tCupo === 0;
-                              const isFull = tAssigned >= tCupo && tCupo > 0;
-                              return (
-                                <button key={targetDev.id}
-                                  onClick={() => handleTransfer(res.id, device.id, targetDev.id)}
-                                  className={`text-[9px] px-2 py-1 rounded-md border font-bold transition-all hover:scale-105 ${
-                                    isClosed
-                                      ? 'border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'
-                                      : isFull
-                                        ? 'border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] hover:border-primary'
-                                        : 'border-[hsl(var(--score-high-border))] bg-[hsl(var(--score-high-bg))] text-[hsl(var(--score-high-text))] hover:border-primary'
-                                  }`}
-                                  title={isClosed ? 'Sin cupo — se abrirá' : isFull ? 'Lleno — se agregará cupo' : `${tAssigned}/${tCupo}`}
-                                >
-                                  {targetDev.name.length > 20 ? targetDev.name.substring(0, 18) + '…' : targetDev.name}
-                                  {isClosed && ' 🔒'}
-                                </button>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    );
-                  })}
+            // In rotation mode, group residents by group number
+            const grouped: Record<string, any[]> = {};
+            if (isRotation && filteredAssignments.length > 0) {
+              filteredAssignments.forEach((res: any) => {
+                const groups = Array.isArray(res.numero_grupos)
+                  ? res.numero_grupos
+                  : (res.numero_grupo != null ? [res.numero_grupo] : [0]);
+                const key = groups.join(',') || '0';
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(res);
+              });
+            }
+
+            const hasGrouping = Object.keys(grouped).length > 0;
+
+            return (
+              <div key={device.id} className="rounded-xl border overflow-hidden transition-all shadow-sm hover:shadow">
+                <div className={`px-3 py-2 border-b flex items-center justify-between cursor-pointer ${getFloorColor(device.name)}`}
+                  onClick={() => { setSelectedDevice({ id: device.id, name: device.name }); setSelectedDateFilter(execDate); }}>
+                  <h4 className="font-bold text-sm truncate">{device.name}</h4>
+                  <span className="text-[11px] font-mono bg-card/50 px-2 py-1 rounded border border-border/50">{filteredAssignments.length} res.</span>
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="p-3 bg-card space-y-2">
+                  {!hasGrouping
+                    ? filteredAssignments.map((res: any, i: number) => (
+                        <ResidentCard
+                          key={`${res.id}-${i}`}
+                          res={res} device={device}
+                          isAbsent={isAgentAbsent(res.id, execDate)}
+                          isAcompanante={!!res.acompana_grupo}
+                          isEditing={editingGroup === `${device.id}-${res.id}`}
+                          visitas={visitas}
+                          residentFloorCounts={residentFloorCounts}
+                          aperturaMetricsDb={aperturaMetricsDb}
+                          tardeMananaMetricsDb={tardeMananaMetricsDb}
+                          onToggleAcompana={handleToggleAcompana}
+                          onQuitar={handleQuitar}
+                          onGroupEdit={() => setEditingGroup(editingGroup === `${device.id}-${res.id}` ? null : `${device.id}-${res.id}`)}
+                          onGroupChange={handleGroupChange}
+                          isNonApertura={isNonApertura}
+                          isRotation={isRotation}
+                        />
+                      ))
+                    : Object.entries(grouped)
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([groupKey, groupResidents]) => (
+                          <div key={groupKey}>
+                            <div className="text-[11px] font-bold py-1.5 px-1.5 text-muted-foreground uppercase tracking-wider">
+                              Grupo {groupKey}
+                            </div>
+                            {groupResidents.map((res: any, i: number) => (
+                              <ResidentCard
+                                key={`${res.id}-${i}`}
+                                res={res} device={device}
+                                isAbsent={isAgentAbsent(res.id, execDate)}
+                                isAcompanante={!!res.acompana_grupo}
+                                isEditing={editingGroup === `${device.id}-${res.id}`}
+                                visitas={visitas}
+                                residentFloorCounts={residentFloorCounts}
+                                aperturaMetricsDb={aperturaMetricsDb}
+                                tardeMananaMetricsDb={tardeMananaMetricsDb}
+                                onToggleAcompana={handleToggleAcompana}
+                                onQuitar={handleQuitar}
+                                onGroupEdit={() => setEditingGroup(editingGroup === `${device.id}-${res.id}` ? null : `${device.id}-${res.id}`)}
+                                onGroupChange={handleGroupChange}
+                                isNonApertura={isNonApertura}
+                                isRotation={isRotation}
+                              />
+                            ))}
+                          </div>
+                        ))
+                  }
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -366,8 +606,8 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
             }`}>
               <div className={`px-3 py-2 border-b flex items-center justify-between cursor-pointer opacity-70 hover:opacity-100 transition-opacity ${getFloorColor(device.name)}`}
                 onClick={() => setSelectedClosedDevice(selectedClosedDevice === device.id ? null : device.id)}>
-                <h4 className="font-bold text-xs truncate">{device.name}</h4>
-                <span className="text-[9px] font-mono text-muted-foreground">Sin cupo</span>
+                <h4 className="font-bold text-sm truncate">{device.name}</h4>
+                <span className="text-[11px] font-mono text-muted-foreground">Sin cupo</span>
               </div>
 
               {selectedClosedDevice === device.id && (() => {
@@ -375,25 +615,25 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
                 const renderTier = (title: string, items: typeof tier1, colorClass: string, Icon: any) => (
                   items.length > 0 && (
-                    <div className="mb-3">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1 ${colorClass}`}>
-                        <Icon className="w-3 h-3" /> {title} ({items.length})
+                        <div className="mb-3">
+                      <span className={`text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1 ${colorClass}`}>
+                        <Icon className="w-3.5 h-3.5" /> {title} ({items.length})
                       </span>
                       <div className="space-y-1">
                         {items.map(item => (
                           <button key={item.id}
                             onClick={() => handleAssignToClosedDevice(item.id, device.id)}
-                            className="w-full text-left p-2 rounded-lg border text-xs transition-all flex justify-between items-center border-border bg-card hover:border-primary/40 cursor-pointer hover:shadow-sm">
+                            className="w-full text-left p-2.5 rounded-lg border text-sm transition-all flex justify-between items-center border-border bg-card hover:border-primary/40 cursor-pointer hover:shadow-sm">
                             <div>
                               <span className="font-bold">{item.name}</span>
                               {item.isBusy && (
-                                <span className="ml-1.5 text-[9px] text-[hsl(var(--score-mid-text))] font-mono">← {item.busyDevice}</span>
+                                <span className="ml-1.5 text-[11px] text-[hsl(var(--score-mid-text))] font-mono">← {item.busyDevice}</span>
                               )}
                             </div>
                             {item.isBusy ? (
-                              <span className="text-[9px] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] px-1.5 py-0.5 rounded border border-[hsl(var(--score-mid-border))] font-bold">Traslado</span>
+                              <span className="text-[11px] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] px-2 py-1 rounded border border-[hsl(var(--score-mid-border))] font-bold">Traslado</span>
                             ) : (
-                              <Plus className="w-3 h-3 text-primary" />
+                              <Plus className="w-3.5 h-3.5 text-primary" />
                             )}
                           </button>
                         ))}
@@ -409,7 +649,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                     {renderTier("Descanso + Capacitado", tier3, "text-primary", Moon)}
                     {renderTier("Descanso + No Capacitado", tier4, "text-muted-foreground", AlertCircle)}
                     {tier1.length + tier2.length + tier3.length + tier4.length === 0 && (
-                      <div className="text-xs text-muted-foreground italic py-4 text-center">No hay residentes disponibles</div>
+                      <div className="text-sm text-muted-foreground italic py-4 text-center">No hay residentes disponibles</div>
                     )}
                   </div>
                 );

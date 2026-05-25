@@ -380,6 +380,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
         const baseRow = (existingRows && existingRows.length > 0) ? existingRows[0] : {};
         const finalRow = { ...baseRow, ...logicalKey, ...cleanPayload };
+        delete finalRow.id_menu;
         delete finalRow.id_menu_semana;
 
         if (table === 'menu_semana' && (finalRow.id_convocatoria == null)) {

@@ -43,37 +43,20 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
           `⚠️ El dispositivo ya tiene ${currentCount}/${cupoLimit} asignados (cupo completo).\n\n¿Desea agregar un cupo adicional y asignar igualmente?`
         )) return;
         
-        data.setIsLoading(true);
-        try {
-          // Persist the new cupo to the database
-          const turnoId = data.dateTurnoMap[selectedVacant.date] || (isApertura ? 45 : null);
-          if (!turnoId) {
-            data.setIsLoading(false);
-            alert(`No se pudo resolver id_turno para ${selectedVacant.date}.`);
-            return;
-          }
-          const { error: calErr } = await supabase.from('calendario_dispositivos')
-            .upsert({
-              fecha: fechaDB,
-              id_turno: turnoId,
-              id_dispositivo: Number(deviceId),
-              cupo_objetivo: cupoLimit + 1
-            }, { onConflict: 'fecha, id_turno, id_dispositivo' });
-          if (calErr) throw calErr;
-          
-          // Optimistically update calendarDb
-          data.setCalendarDb((prev: any) => {
-            const newCalendar = { ...prev };
-            if (!newCalendar[selectedVacant.date]) newCalendar[selectedVacant.date] = {};
-            newCalendar[selectedVacant.date][deviceId] = cupoLimit + 1;
-            return newCalendar;
-          });
-        } catch (e: any) {
-          console.error("Error al extender cupo:", e);
-          data.setIsLoading(false);
-          alert("Error interno al ampliar el cupo: " + e.message);
+        const turnoId = data.dateTurnoMap[selectedVacant.date] || (isApertura ? 45 : null);
+        if (!turnoId) {
+          alert(`No se pudo resolver id_turno para ${selectedVacant.date}.`);
           return;
         }
+        
+        data.addAssignmentDraft({
+          id: `cupo-${selectedVacant.date}-${deviceId}`,
+          table: 'calendario_dispositivos',
+          action: 'upsert',
+          matchParams: { fecha: fechaDB, id_dispositivo: Number(deviceId), id_turno: turnoId },
+          payload: { fecha: fechaDB, id_dispositivo: Number(deviceId), id_turno: turnoId, cupo_objetivo: cupoLimit + 1 },
+          uiDate: selectedVacant.date
+        });
       }
     const { agentConvocatoriaMap } = data;
     let convId = agentConvocatoriaMap[selectedVacant.date]?.[selectedVacant.id];
