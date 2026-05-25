@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Users, UserPlus, AlertCircle, ArrowRightLeft, UserMinus, AlertTriangle } from 'lucide-react';
-import { getFloorColor, getScoreColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Users, AlertCircle, X as XIcon } from 'lucide-react';
+import { getPisoFromDeviceName, getGroupColor } from '@/lib/floor-utils';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
 import { AperturaDevicesPanel } from './AperturaDevicesPanel';
 
@@ -16,96 +15,91 @@ interface ExecutionTabProps {
   setShowVacantsSidebar: (v: boolean) => void;
   pushUndo: (entry: any) => void;
   year: string;
+  setSelectedDevice: (d: { id: string; name: string; date: string } | null) => void;
+  setSelectedDateFilter: (d: string | null) => void;
 }
+
+const floorNames: Record<string, { label: string; bgClass: string; borderClass: string }> = {
+  '1': { label: 'P1', bgClass: 'bg-[hsl(var(--floor-1-accent))]', borderClass: 'border-[hsl(var(--floor-1-accent))]' },
+  '2': { label: 'P2', bgClass: 'bg-[hsl(var(--floor-2-accent))]', borderClass: 'border-[hsl(var(--floor-2-accent))]' },
+  '3': { label: 'P3', bgClass: 'bg-[hsl(var(--floor-3-accent))]', borderClass: 'border-[hsl(var(--floor-3-accent))]' },
+  '4': { label: 'P4', bgClass: 'bg-muted-foreground', borderClass: 'border-muted-foreground' },
+};
 
 export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   data, execDate, setExecDate,
   selectedResident, setSelectedResident,
   selectedVacant, setSelectedVacant,
   setShowVacantsSidebar, pushUndo, year,
+  setSelectedDevice, setSelectedDateFilter,
 }) => {
-  const {
-    dbDevices, activeDates, assignmentsDb, convocadosDb,
-    allResidentsDb, isAgentAbsent, getAbsenceMotivo,
-    dateTurnoMap, isLoading, setIsLoading, refresh, agentGroups
-  } = data;
+  const { activeDates, allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, tipoOrganizacionMap, turnoFilter } = data;
+  const [showConvocados, setShowConvocados] = useState(false);
+  const [visibleGroups, setVisibleGroups] = useState<Record<number, boolean>>({});
 
-  // Pre-build caps lookup for no-cap indicator
-  const capsMap = useMemo(() => {
-    const m: Record<string, Record<string, string>> = {};
-    (allResidentsDb || []).forEach((r: any) => { m[String(r.id)] = r.caps || {}; });
-    return m;
-  }, [allResidentsDb]);
-
-  const [subTab, setSubTab] = useState<'kanban' | 'devices'>('kanban');
-
-  const handleQuitar = async (resId: number, deviceId: string) => {
-    if (isLoading) return;
-    if (!confirm("??Quitar residente de este dispositivo?")) return;
-    setIsLoading(true);
-    const [d, mStr] = execDate.split("/");
-    const fechaDB = `${year}-${mStr}-${d}`;
-
-    try {
-      const { data: targetRow, error: fetchErr } = await supabase.from('menu')
-        .select('id_menu, id_dispositivo')
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', parseInt(deviceId))
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchErr) throw fetchErr;
-      if (!targetRow) throw new Error('No se encontr? la asignaci?n para quitar.');
-
-      const { data: vacantRow, error: vacantErr } = await supabase.from('menu')
-        .select('id_menu')
-        .eq('id_agente', resId)
-        .eq('fecha_asignacion', fechaDB)
-        .eq('id_dispositivo', 999)
-        .limit(1)
-        .maybeSingle();
-
-      if (vacantErr) throw vacantErr;
-
-      if (vacantRow) {
-        const { error: deleteErr } = await supabase.from('menu')
-          .delete()
-          .eq('id_menu', targetRow.id_menu);
-        if (deleteErr) throw deleteErr;
-      } else {
-        const { error } = await supabase.from('menu')
-          .update({ id_dispositivo: 999, estado_ejecucion: 'planificado' })
-          .eq('id_menu', targetRow.id_menu);
-        if (error) throw error;
-      }
-
-      pushUndo({
-        snapshot: {
-          id_agente: resId,
-          fecha_asignacion: fechaDB,
-          id_dispositivo: Number(deviceId),
-          estado_ejecucion: 'planificado'
-        }
+  // Active groups for current date (from visitas + actual assignments)
+  const activeGroups = useMemo(() => {
+    const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
+    const isRotation = orgType.includes('rotacion');
+    if (turnoFilter === 'apertura' || !isRotation) return [];
+    const groups = new Set<number>();
+    (visitasByDate?.[execDate] || []).forEach((v: any) => {
+      (v.numero_grupo || []).forEach((g: number) => {
+        if (g >= 1 && g <= 3) groups.add(g);
       });
-      refresh();
-    } catch (err: any) {
-      alert("Error: " + (err.message || err));
-      setIsLoading(false);
-    }
-  };
+    });
+    // Also collect groups from actual resident assignments
+    Object.values(assignmentsDb[execDate] || {}).forEach((residents: any) => {
+      (residents || []).forEach((r: any) => {
+        const gs = Array.isArray(r.numero_grupos) ? r.numero_grupos : (r.numero_grupo != null ? [r.numero_grupo] : []);
+        gs.forEach((g: number) => { if (g >= 1 && g <= 3) groups.add(g); });
+      });
+    });
+    const sorted = Array.from(groups).sort((a, b) => a - b);
+    return sorted.length > 0 ? sorted : [1];
+  }, [tipoOrganizacionMap, execDate, visitasByDate, turnoFilter, assignmentsDb]);
 
-  // Compute free residents (convocados sin dispositivo asignado, excluding absent)
-  const assignedIds = new Set<number>();
-  Object.values(assignmentsDb[execDate] || {}).forEach((arr: any) => {
-    arr.forEach((r: any) => assignedIds.add(r.id));
-  });
-  const convocados = convocadosDb[execDate] || [];
-  const unassignedResidents = allResidentsDb.filter((r: any) =>
-    convocados.includes(r.id) && !assignedIds.has(r.id)
-  );
-  const freeResidents = unassignedResidents.filter((r: any) => !isAgentAbsent(r.id, execDate));
-  const absentUnassigned = unassignedResidents.filter((r: any) => isAgentAbsent(r.id, execDate));
+  // Initialize visibleGroups when activeGroups change
+  useEffect(() => {
+    setVisibleGroups(prev => {
+      const next = { ...prev };
+      activeGroups.forEach(g => { if (next[g] === undefined) next[g] = true; });
+      return next;
+    });
+  }, [activeGroups]);
+
+  const convocadoIds = new Set(convocadosDb[execDate] || []);
+
+  const isRotation = turnoFilter !== 'apertura' && (tipoOrganizacionMap?.[execDate] || '').includes('rotacion');
+
+  // Floor counts per convocado + group info
+  const convocadosWithFloors = useMemo(() => {
+    const floorCounts: Record<number, Record<string, number>> = {};
+    const groupMap: Record<number, number[]> = {};
+    Object.entries(assignmentsDb[execDate] || {}).forEach(([devId, residents]: [string, any]) => {
+      const dev = dbDevices.find((d: any) => d.id === devId);
+      if (!dev) return;
+      const piso = getPisoFromDeviceName(dev.name);
+      residents.forEach((r: any) => {
+        if (!floorCounts[r.id]) floorCounts[r.id] = { '1': 0, '2': 0, '3': 0, '4': 0 };
+        floorCounts[r.id][piso] = (floorCounts[r.id][piso] || 0) + 1;
+        const gs = Array.isArray(r.numero_grupos) ? r.numero_grupos : (r.numero_grupo != null ? [r.numero_grupo] : []);
+        if (!groupMap[r.id]) groupMap[r.id] = [];
+        gs.forEach((g: number) => { if (g >= 1 && g <= 3 && !groupMap[r.id].includes(g)) groupMap[r.id].push(g); });
+      });
+    });
+
+    return (allResidentsDb || [])
+      .filter((r: any) => convocadoIds.has(r.id))
+      .map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        counts: floorCounts[r.id] || { '1': 0, '2': 0, '3': 0, '4': 0 },
+        groups: (groupMap[r.id] || []).sort((a, b) => a - b),
+        isAbsent: isAgentAbsent ? isAgentAbsent(r.id, execDate) : false,
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [allResidentsDb, convocadoIds, assignmentsDb, execDate, dbDevices, isAgentAbsent]);
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6">
@@ -115,24 +109,44 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
           <div>
             <h2 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-3">
               <Users className="w-8 h-8 text-destructive" />
-              Apertura
+              Esquema
             </h2>
           </div>
           <div className="flex items-center gap-3">
-            {/* Sub-tab toggle */}
-            <div className="flex bg-muted p-0.5 rounded-lg border border-border">
-              {[
-                { key: 'kanban' as const, label: 'Asignados' },
-                { key: 'devices' as const, label: 'Dispositivos' },
-              ].map(st => (
-                <button key={st.key} onClick={() => setSubTab(st.key)}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
-                    subTab === st.key ? 'bg-card shadow-sm text-primary border border-border/50' : 'text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {st.label}
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => setShowConvocados(!showConvocados)}
+              className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                showConvocados
+                  ? 'bg-primary/10 text-primary border-primary/30'
+                  : 'bg-card text-foreground border-border hover:border-primary/40 hover:text-primary'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Convocados
+            </button>
+            {activeGroups.length > 0 && (
+              <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg border border-border">
+                {activeGroups.map(g => (
+                  <button key={g}
+                    onClick={() => setVisibleGroups(prev => ({ ...prev, [g]: !prev[g] }))}
+                    className={`text-[10px] font-mono font-bold px-2 py-1 rounded-md border transition-all ${
+                      visibleGroups[g] !== false
+                        ? `${getGroupColor(g)} shadow-sm`
+                        : 'bg-card text-muted-foreground/40 border-border/50 opacity-50'
+                    }`}
+                  >
+                    G{g}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowVacantsSidebar(true)}
+              className="flex items-center gap-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[11px] font-bold px-3 py-1.5 rounded-lg border border-destructive/20 hover:border-destructive/40 transition-all"
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              Ver Vacantes / Sin Asignar
+            </button>
             <select
               className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
               value={execDate}
@@ -143,137 +157,90 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
           </div>
         </div>
 
-        {subTab === 'devices' ? (
-          <AperturaDevicesPanel data={data} execDate={execDate} pushUndo={pushUndo} year={year} />
-        ) : (
-        <>
-        {/* Kanban Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* P0: Sin Asignar */}
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl shadow-sm overflow-hidden flex flex-col md:col-span-2 lg:col-span-1">
-            <div className="px-4 py-3 bg-amber-100 border-b border-amber-200 flex items-center justify-between">
-              <h4 className="font-bold text-sm text-amber-900 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" /> Sin Asignar
-              </h4>
-              <div className="flex gap-1">
-                {absentUnassigned.length > 0 && (
-                  <span className="bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full text-xs font-bold">🚫 {absentUnassigned.length}</span>
-                )}
-                <span className="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-xs font-bold">
-                  {freeResidents.length}
-                </span>
-              </div>
+        {/* Convocados overlay */}
+        {showConvocados && (
+          <div className="mb-6 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Convocados ({convocadosWithFloors.length})
+              </span>
+              <button onClick={() => setShowConvocados(false)}
+                className="p-1 rounded-md hover:bg-muted transition-colors">
+                <XIcon className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
             </div>
-            <div className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[500px]">
-              {freeResidents.length === 0 && absentUnassigned.length === 0 ? (
-                <div className="text-center text-amber-600/60 text-sm py-8 italic">
-                  Todos los convocados tienen dispositivo asignado ✓
-                </div>
-              ) : (
-                <>
-                  {freeResidents.map((res: any) => (
-                    <div
-                      key={res.id}
-                      onClick={() => { setSelectedVacant({ id: res.id, name: res.name, date: execDate }); setShowVacantsSidebar(true); }}
-                      className="flex flex-col gap-2 p-3 rounded-xl border bg-card border-amber-300 shadow-sm hover:shadow transition-all cursor-pointer hover:border-primary/50"
-                    >
-                      <span className="font-bold text-sm text-foreground">{res.name}</span>
-                      <button className="w-full flex items-center justify-center gap-1.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg">
-                        Asignar
-                      </button>
-                    </div>
-                  ))}
-                  {absentUnassigned.length > 0 && (
-                    <div className="border-t border-stone-200 pt-3 mt-1">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2 block">🚫 Ausentes ({absentUnassigned.length})</span>
-                      {absentUnassigned.map((res: any) => (
-                        <div key={res.id} className="p-2.5 rounded-xl border border-dashed border-stone-300 bg-stone-50 mb-1.5">
-                          <span className="font-bold text-sm text-stone-400 line-through">{res.name}</span>
-                          <span className="text-[9px] ml-2 bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded font-bold">AUSENTE</span>
-                        </div>
-                      ))}
-                    </div>
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[400px] overflow-y-auto">
+              {convocadosWithFloors.map((res: any) => (
+                <button key={res.id}
+                  onClick={() => {
+                    if (res.isAbsent) return;
+                    setSelectedVacant({ id: res.id, name: res.name, date: execDate });
+                    setShowConvocados(false);
+                  }}
+                  className={`flex items-center justify-between p-2.5 rounded-lg border transition-all text-left ${
+                    res.isAbsent
+                      ? 'border-dashed border-stone-300 bg-stone-50 cursor-not-allowed opacity-70'
+                      : 'border-border bg-muted/20 hover:border-primary/40 hover:bg-accent/50 cursor-pointer'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className={`font-bold text-xs truncate ${res.isAbsent ? 'line-through text-stone-400' : ''}`}>
+                      {res.isAbsent ? '🚫 ' : ''}{res.name}
+                    </span>
+                    {isRotation && res.groups.length > 0 && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {res.groups.map((g: number) => (
+                          <span key={g}
+                            className={`text-[9px] px-1 py-0.5 rounded font-mono border ${
+                              visibleGroups[g] !== false
+                                ? getGroupColor(g)
+                                : 'bg-muted text-muted-foreground/40 border-border/40'
+                            }`}>
+                            G{g}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {res.isAbsent && (
+                    <span className="text-[9px] bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded border border-stone-300 font-bold whitespace-nowrap shrink-0">AUSENTE</span>
                   )}
-                </>
-              )}
-
-              <div className="mt-auto pt-4 border-t border-amber-200/50">
-                <button className="w-full flex items-center justify-center gap-2 bg-card border-2 border-border text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-primary text-xs font-bold py-2 rounded-xl transition-colors shadow-sm">
-                  <UserPlus className="w-4 h-4" /> Buscar en "Descansos"
+                  <div className="flex items-center gap-1 shrink-0">
+                    {Object.entries(floorNames).map(([piso, info]) => {
+                      const count = res.counts[piso] || 0;
+                      const isZero = count === 0;
+                      const isP4 = piso === '4';
+                      return (
+                        <div key={piso}
+                          className={`w-[18px] h-[18px] rounded flex items-center justify-center text-[8px] font-bold transition-all ${
+                            isZero && !isP4
+                              ? 'bg-muted text-muted-foreground/40 border border-dashed border-muted-foreground/30 line-through'
+                              : isZero && isP4
+                                ? `${info.bgClass} text-white opacity-50`
+                                : `${info.bgClass} text-white`
+                          }`}
+                          title={`${info.label}: ${count} dispositivos`}
+                        >
+                          {count}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </button>
-              </div>
+              ))}
             </div>
           </div>
-
-          {/* Device Cards */}
-          {dbDevices.map((device: any) => {
-            const assignments = assignmentsDb[execDate]?.[device.id] || [];
-            if (assignments.length === 0) return null;
-
-            return (
-              <div key={device.id} className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-                <div className={`px-4 py-3 border-b border-border flex items-center justify-between ${getFloorColor(device.name)}`}>
-                  <h4 className="font-bold text-sm truncate flex-1 leading-snug">{device.name}</h4>
-                </div>
-                <div className="p-4 flex-1 flex flex-col gap-3">
-                  {assignments.map((res: any, i: number) => {
-                    const isAbsent = isAgentAbsent(res.id, execDate);
-                    return (
-                      <div key={`${res.id}-${i}`} className={`flex flex-col gap-2 p-3 rounded-xl border transition-colors ${
-                        isAbsent ? 'bg-stone-50 border-stone-300 border-dashed' : 'bg-muted/30 border-border'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col">
-                            <span className={`font-bold text-sm ${
-                              isAbsent ? 'text-stone-500 line-through opacity-70'
-                              : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                              : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                              : 'text-foreground'
-                            }`}>
-                              {res.name}
-                            </span>
-                             {/* No-cap indicator */}
-                             {!isAbsent && (() => {
-                               const [dd, mm] = execDate.split('/');
-                               const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
-                               const resInfo = allResidentsDb.find((r: any) => r.id === res.id);
-                               const notCapStyle = getNotCapacitadoStyle(resInfo?.caps, String(device.id), fechaDB);
-                               
-                               if (notCapStyle) {
-                                 return (
-                                   <span className="text-[10px] text-red-600 font-bold flex items-center gap-1 mt-0.5 animate-pulse">
-                                     <AlertTriangle className="w-3 h-3" /> NO CAPACITADO
-                                   </span>
-                                 );
-                               }
-                               return null;
-                             })()}
-                          </div>
-                          <button
-                            onClick={() => handleQuitar(res.id, device.id)}
-                            className="text-[10px] px-2 py-1 rounded-md font-bold transition-colors border bg-card text-muted-foreground border-border hover:text-destructive hover:border-destructive/50 shadow-sm"
-                          >
-                            Quitar
-                          </button>
-                        </div>
-                        {!isAbsent && (
-                          <button
-                            onClick={() => setSelectedResident({ id: res.id, name: res.name, score: res.score, device: device.name, date: execDate })}
-                            className="mt-1 w-full flex items-center justify-center gap-1.5 bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-accent text-[10px] uppercase tracking-wider font-bold py-1.5 rounded-lg transition-colors shadow-sm"
-                          >
-                            <ArrowRightLeft className="w-3 h-3" /> Cambiar Residente
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        </>
         )}
+
+        <AperturaDevicesPanel
+          data={data}
+          execDate={execDate}
+          pushUndo={pushUndo}
+          year={year}
+          setSelectedDevice={setSelectedDevice}
+          setSelectedDateFilter={setSelectedDateFilter}
+          visibleGroups={visibleGroups}
+        />
       </div>
     </main>
   );

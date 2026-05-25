@@ -252,7 +252,7 @@ const Index = () => {
             {[
               { key: 'plan' as ActiveTab, label: 'Plan', labelFull: 'Planificación', color: 'text-primary' },
               { key: 'menu' as ActiveTab, label: 'Menú', labelFull: 'Menú', color: 'text-primary' },
-              { key: 'exec' as ActiveTab, label: 'Apert.', labelFull: 'Apertura', color: 'text-destructive' },
+              { key: 'exec' as ActiveTab, label: 'Esq.', labelFull: 'Esquema', color: 'text-destructive' },
               { key: 'devices' as ActiveTab, label: 'Disp.', labelFull: 'Dispositivos', color: 'text-primary' },
             ].map(tab => (
               <button
@@ -421,6 +421,8 @@ const Index = () => {
             selectedVacant={selectedVacant}
             setSelectedVacant={setSelectedVacant}
             setShowVacantsSidebar={setShowVacantsSidebar}
+            setSelectedDevice={setSelectedDevice}
+            setSelectedDateFilter={setSelectedDateFilter}
             pushUndo={pushUndo}
             year={year}
           />

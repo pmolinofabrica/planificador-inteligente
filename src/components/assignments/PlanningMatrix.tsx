@@ -42,6 +42,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
 
   const [editingGroup, setEditingGroup] = useState<{ resId: number; date: string; deviceId: string; current: number | null } | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
+  const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({});
 
   const dateGroupColumns = useMemo(() => {
     const map: Record<string, number[]> = {};
@@ -56,12 +57,19 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
           if (g >= 1 && g <= 3) groups.add(g);
         });
       });
+      // Also collect groups from actual resident assignments
+      Object.values(assignmentsDb[date] || {}).forEach((residents: any) => {
+        (residents || []).forEach((r: any) => {
+          const gs = Array.isArray(r.numero_grupos) ? r.numero_grupos : (r.numero_grupo != null ? [r.numero_grupo] : []);
+          gs.forEach((g: number) => { if (g >= 1 && g <= 3) groups.add(g); });
+        });
+      });
 
       const sorted = Array.from(groups).sort((a, b) => a - b);
       map[date] = sorted.length > 0 ? sorted : [1];
     });
     return map;
-  }, [activeDates, tipoOrganizacionMap, visitasByDate]);
+  }, [activeDates, tipoOrganizacionMap, visitasByDate, assignmentsDb]);
 
 
   const handleRunEngine = async () => {
@@ -305,7 +313,9 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       <th
                         key={d}
                         onClick={() => setSelectedDateFilter(selectedDateFilter === d ? null : d)}
-                        className={`sticky top-0 p-3 border-b border-r border-border font-bold text-xs text-center min-w-[130px] cursor-pointer transition-colors backdrop-blur-md z-20 ${
+                        className={`sticky top-0 p-3 border-b border-r border-border font-bold text-xs text-center cursor-pointer transition-colors backdrop-blur-md z-20 ${
+                          expandedColumns[d] ? 'min-w-[640px]' : 'min-w-[130px]'
+                        } ${
                           selectedDateFilter === d ? 'bg-primary/20 ring-2 ring-primary/30' : 'bg-muted/95 hover:bg-accent'
                         }`}
                       >
@@ -354,6 +364,17 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                 c/ grupos
                               </span>
                             )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setExpandedColumns(prev => ({ ...prev, [date]: !prev[date] })); }}
+                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-all ${
+                                expandedColumns[date]
+                                  ? 'bg-primary/10 text-primary border-primary/30'
+                                  : 'bg-muted text-muted-foreground border-border hover:border-primary/40 hover:text-primary'
+                              }`}
+                              title={expandedColumns[date] ? 'Contraer columna' : 'Expandir columna'}
+                            >
+                              {expandedColumns[date] ? '▬' : '◫'}
+                            </button>
                           </div>
                         </td>
                       );
@@ -413,9 +434,17 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                 {assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
                                 const metrics = computeRotationMetrics(res.id, String(device.id), totalDeviceCount, data.annualMetricsDb);
-                                const firstGroup = Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0 ? res.numero_grupos[0] : res.numero_grupo;
-                                const groupNum = (firstGroup && firstGroup >= 1 && firstGroup <= 3) ? firstGroup : (groupCols[0] || 1);
-                                const colIndex = Math.max(0, groupCols.indexOf(groupNum));
+                                const resGroups = Array.isArray(res.numero_grupos) && res.numero_grupos.length > 0
+                                  ? res.numero_grupos
+                                  : (res.numero_grupo != null ? [res.numero_grupo] : []);
+                                const matchedCols = resGroups
+                                  .filter((g: number) => groupCols.includes(g))
+                                  .sort((a: number, b: number) => groupCols.indexOf(a) - groupCols.indexOf(b));
+                                const firstGroup = matchedCols.length > 0 ? matchedCols[0] : (groupCols[0] || 1);
+                                const groupColMin = Math.max(0, groupCols.indexOf(matchedCols.length > 0 ? matchedCols[0] : firstGroup));
+                                const groupColMax = matchedCols.length > 1
+                                  ? Math.max(0, groupCols.indexOf(matchedCols[matchedCols.length - 1]))
+                                  : groupColMin;
                                 return (
                                   <div
                                     key={idx}
@@ -436,10 +465,10 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                       ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getRepsColor(metrics.localReps)}
                                       ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
                                     }
-                                    style={isRotation ? { gridColumn: `${colIndex + 1} / ${colIndex + 2}` } : undefined}
+                                    style={isRotation ? { gridColumn: `${groupColMin + 1} / ${groupColMax + 2}` } : undefined}
                                   >
                                     <span className="flex items-center gap-1 min-w-0">
-                                      <span className={`font-bold truncate max-w-[80px] text-xs ${
+                                      <span className={`font-bold truncate ${expandedColumns[date] ? 'max-w-[300px]' : 'max-w-[80px]'} text-xs ${
                                         absent ? 'line-through text-stone-500 opacity-60'
                                         : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
                                         : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
