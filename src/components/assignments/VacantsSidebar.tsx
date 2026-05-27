@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRightLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, ArrowRightLeft, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { getPisoBadgeColor } from '@/lib/floor-utils';
+import { normalizeStr } from '@/lib/utils';
 import type { SelectedVacant, SelectedDevice, SelectedResident, AssignmentDataContext } from '@/types/assignments';
 
 interface VacantsSidebarProps {
@@ -16,7 +17,7 @@ interface VacantsSidebarProps {
 export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
   data, selectedVacant, setSelectedVacant, setSelectedDevice, setSelectedResident, setShowVacantsSidebar, year,
 }) => {
-  const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices, isAgentAbsent, isAgentCanceled } = data;
+  const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices, isAgentAbsent, isAgentCanceled, agentTipoTurnoMap } = data;
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
   const toggleDate = (date: string) => {
@@ -46,6 +47,8 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
 
       <div className="p-4 flex-1 overflow-y-auto bg-card space-y-4">
         {activeDates.map((date: string, idx: number) => {
+          const agentTipos = agentTipoTurnoMap[date] || {};
+          const isAperturaB = (id: number) => normalizeStr(agentTipos[id] || '') === 'apertura al publico b';
           const assignedIds = new Set<number>();
           Object.values(assignmentsDb[date] || {}).forEach((arr: any) => arr.forEach((r: any) => assignedIds.add(r.id)));
           const convocados = convocadosDb[date] || [];
@@ -112,8 +115,10 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                             : 'border-border bg-card hover:border-primary/40 hover:shadow-md'
                       }`}>
                       <div className="font-bold text-sm text-foreground mb-1.5 flex items-center justify-between">
-                        <span className={isUnavailable ? 'line-through text-stone-500' : ''}>
-                          {absent ? <span className="mr-1">🚫</span> : canceled ? <span className="mr-1">❌</span> : ''}{res.name}
+                        <span className={`${isUnavailable ? 'line-through text-stone-500' : ''} flex items-center gap-1`}>
+                          {absent ? <span className="mr-1">🚫</span> : canceled ? <span className="mr-1">❌</span> : ''}
+                          {isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                          {res.name}
                         </span>
                         {isUnavailable
                           ? <span className="text-[9px] bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded border border-stone-300 font-bold">{absent ? 'AUSENTE' : 'CANCELADA'}</span>

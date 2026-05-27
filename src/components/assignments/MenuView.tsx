@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Lock, Unlock } from 'lucide-react';
-import { getFloorColor } from '@/lib/floor-utils';
+import { getFloorColor, getGroupColor } from '@/lib/floor-utils';
+import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
 import { VisitBlock } from './VisitBadge';
@@ -24,7 +25,9 @@ const piso4Banners = [
 ];
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
-  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate } = data;
+  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
+
+  const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
 
   const [bannerIdx, setBannerIdx] = useState(0);
 
@@ -253,15 +256,22 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
 
         {/* ══════ ACOMPAÑANTES DE GRUPO ══════ */}
         {(() => {
-          const acompanantes: { id: number; name: string; deviceName: string }[] = [];
+          const acompanantesMap = new Map<number, { id: number; name: string; devices: { name: string; grupo: number | null }[] }>();
           Object.entries(dateAssignments).forEach(([devId, arr]: [string, any]) => {
             const devObj = dbDevices.find((dd: any) => dd.id === devId);
             arr.forEach((r: any) => {
               if (r.acompana_grupo && !isAgentAbsent(r.id, currentDate)) {
-                acompanantes.push({ id: r.id, name: r.name, deviceName: devObj?.name || devId });
+                if (!acompanantesMap.has(r.id)) {
+                  acompanantesMap.set(r.id, { id: r.id, name: r.name, devices: [] });
+                }
+                acompanantesMap.get(r.id)!.devices.push({
+                  name: devObj?.name || devId,
+                  grupo: r.numero_grupo ?? null,
+                });
               }
             });
           });
+          const acompanantes = Array.from(acompanantesMap.values());
           if (acompanantes.length === 0) return null;
           return (
             <div className="mb-4 sm:mb-6 rounded-xl border-2 border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))] overflow-hidden">
@@ -272,12 +282,26 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                 </span>
               </div>
               <div className="p-2 sm:p-3 space-y-1">
-                {acompanantes.map((a, i) => (
-                  <div key={`acomp-${a.id}-${i}`} className="flex items-center justify-between px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[hsl(var(--floor-2-border))]/30 bg-card text-[11px] sm:text-xs">
-                    <span className="font-bold text-foreground truncate">🏫 {a.name}</span>
-                    <span className="text-[9px] sm:text-[10px] font-medium text-[hsl(var(--floor-2-text))] flex-shrink-0 ml-2">
-                      📍 {a.deviceName}
-                    </span>
+                {acompanantes.map((a) => (
+                  <div key={`acomp-${a.id}`} className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[hsl(var(--floor-2-border))]/30 bg-card text-[11px] sm:text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground truncate flex items-center gap-1">
+                        🏫 {isAperturaB(currentDate, a.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                        {a.name}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {a.devices.map((d, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 text-[10px]">
+                          📍 {d.name}
+                          {d.grupo != null && (
+                            <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${getGroupColor(d.grupo)}`}>
+                              G{d.grupo}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -383,8 +407,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                       : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                       : ''
                                     }`}>
-                                       {absent ? '🚫 ' : canceled ? '❌ ' : ''}{res.name}
-                                     </span>
+                                       {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
+                                      </span>
                                   </div>
                                 );
                               })}
@@ -409,7 +433,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                 : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                 : ''
                               }`}>
-                                {absent ? '🚫 ' : canceled ? '❌ ' : ''}{res.name}
+                                {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
                               </span>
                               <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
                                 {group != null && (

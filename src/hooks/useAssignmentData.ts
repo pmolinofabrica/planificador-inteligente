@@ -56,6 +56,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [isLoading, setIsLoading] = useState(true);
   const [activeDates, setActiveDates] = useState<string[]>([]);
   const [dateTurnoMap, setDateTurnoMap] = useState<Record<string, number>>({});
+  const [agentTipoTurnoMap, setAgentTipoTurnoMap] = useState<Record<string, Record<number, string>>>({});
   const [inasistenciasDb, setInasistenciasDb] = useState<InasistenciasMap>({});
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
   const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
@@ -184,6 +185,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           
           if (!isRotationMultiDevice) {
             // Apertura/dispositivos fijos: un agente solo puede estar en un dispositivo por fecha.
+            // Excepción: si el agente tiene marcado "acompaña grupo", puede estar en varios.
             Object.keys(next[uiDate]).forEach(dId => {
               const found = next[uiDate][dId].find(a => a.id === agentId);
               if (found) {
@@ -194,6 +196,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 if (Array.isArray(found.numero_grupos) && existingGroup == null) {
                   existingGroup = found.numero_grupos[0] ?? null;
                 }
+                if (found.acompana_grupo) return; // no remover si acompaña grupo
               }
               next[uiDate][dId] = next[uiDate][dId].filter(a => a.id !== agentId);
             });
@@ -870,6 +873,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               diasData.forEach(dd => { if (dd.fecha) diasDict[dd.id_dia] = dd.fecha.substring(0, 10); });
 
               const planiToUiDate: Record<number, string> = {};
+              const planiTipoMap: Record<number, string> = {};
               const filteredPlaniIds: number[] = [];
 
               planisData.forEach(p => {
@@ -881,8 +885,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 if (fy !== yFilt || fm !== mmFilt) return;
                 const uiDate = formatUiDate(fd, fm);
                 planiToUiDate[p.id_plani] = uiDate;
+                planiTipoMap[p.id_plani] = tipo;
                 filteredPlaniIds.push(p.id_plani);
               });
+
+              const agentTipo: Record<string, Record<number, string>> = {};
 
               if (filteredPlaniIds.length > 0) {
                 // Fetch only for these planiIds to avoid hitting the 1000 row API limit
@@ -900,6 +907,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
                     if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
                     if (!dateAgentConvStatus[uiDate]) dateAgentConvStatus[uiDate] = {};
+                    if (!agentTipo[uiDate]) agentTipo[uiDate] = {};
 
                     // Save id_convocatoria so we can reference it, even if canceled (we'll filter visually)
                     if (!dateAgentConv[uiDate][c.id_agente]) {
@@ -908,6 +916,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
                     // Track status
                     dateAgentConvStatus[uiDate][c.id_agente] = c.estado || 'vigente';
+
+                    // Track tipo_turno per agent per date (from planification -> turnos)
+                    agentTipo[uiDate][c.id_agente] = planiTipoMap[c.id_plani] || '';
 
                     // Only count them as "active" in the UI pool if they are actually vigente
                     if (c.estado === 'vigente') {
@@ -922,6 +933,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
               setAgentConvocatoriaMap(dateAgentConv);
               setAgentConvocatoriaStatusMap(dateAgentConvStatus);
+              setAgentTipoTurnoMap(agentTipo);
             } catch (e) {
               console.error("Error cargando convocatoria:", e);
             }
@@ -997,7 +1009,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               if (fy !== yFilt || fm !== mmFilt) return;
               const uiDate = formatUiDate(fd, fm);
               allActiveDates.add(uiDate);
-              if (!turnoPerDate[uiDate]) turnoPerDate[uiDate] = ms.id_turno;
+              if (!turnoPerDate[uiDate]) {
+                turnoPerDate[uiDate] = ms.id_turno;
+              }
             });
           }
           setDateTurnoMap(turnoPerDate);
@@ -1178,7 +1192,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     dbDevices, dbResidents, allResidentsDb, assignmentsDb,
     agentGroups, calendarDb, setCalendarDb, convocadosCountDb,
     convocadosDb, isLoading, setIsLoading, activeDates,
-    dateTurnoMap, inasistenciasDb, agentConvocatoriaMap,
+    dateTurnoMap, agentTipoTurnoMap, inasistenciasDb, agentConvocatoriaMap,
     agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     visitasByDate,

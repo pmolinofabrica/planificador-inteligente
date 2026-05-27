@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Monitor, Plus, Check, AlertCircle, Moon, Lock } from 'lucide-react';
+import { Monitor, Plus, Check, AlertCircle, Moon, Lock, Clock } from 'lucide-react';
 import { getFloorColor, getGroupColor, getPisoFromDeviceName, getFloorPisoStyle } from '@/lib/floor-utils';
+import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { VisitBlock } from './VisitBadge';
@@ -26,9 +27,11 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     visitasByDate, turnoFilter, dateTurnoMap,
     aperturaMetricsDb, tardeMananaMetricsDb,
     tipoOrganizacionMap, addAssignmentDraft, setAssignmentsDb,
+    agentTipoTurnoMap,
   } = data;
 
   const isAperturaMode = turnoFilter === 'apertura';
+  const isAperturaB = (agentId: number) => normalizeStr(agentTipoTurnoMap[execDate]?.[agentId] || '') === 'apertura al publico b';
 
   const [selectedClosedDevice, setSelectedClosedDevice] = useState<string | null>(null);
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
@@ -97,6 +100,18 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
   // Toggle acompaña_grupo for a resident in apertura (menu table)
   const handleToggleAcompana = async (resId: number, deviceId: string, current: boolean) => {
     if (isLoading) return;
+
+    // Si se está desmarcando, verificar que el residente no esté en múltiples dispositivos (solo en dispositivos fijos)
+    if (current && !isAperturaMode && !isRotation) {
+      const deviceCount = Object.keys(assignmentsDb[execDate] || {}).filter(dId =>
+        (assignmentsDb[execDate][dId] || []).some((a: any) => a.id === resId)
+      ).length;
+      if (deviceCount > 1) {
+        alert(`El residente está asignado a ${deviceCount} dispositivos. Para quitar "acompaña grupo", primero deje al residente vacante o asígnelo a un solo dispositivo.`);
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
       const updateObj: any = {};
@@ -354,7 +369,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         {/* Row 1: name + controls */}
         <div className="flex items-center justify-between gap-1.5">
           <span className={`font-bold truncate ${isAbsent ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-            {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{res.name}
+            {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0 inline" />}{res.name}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Group badge/editing (rotation modes only) */}

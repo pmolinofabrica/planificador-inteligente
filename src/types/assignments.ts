@@ -136,6 +136,7 @@ export interface AssignmentDataContext {
   // Turno y fechas
   turnoFilter: string;
   dateTurnoMap: Record<string, number>;
+  agentTipoTurnoMap: Record<string, Record<number, string>>;
   tipoOrganizacionMap: Record<string, string>;
   // Convocatorias y asistencia
   agentConvocatoriaMap: Record<string, Record<number, number>>;
