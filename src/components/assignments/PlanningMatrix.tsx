@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Users, AlertCircle, Zap } from 'lucide-react';
+import { Calendar, Users, AlertCircle, Zap, Clock } from 'lucide-react';
 import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
+import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice, AssignmentDataContext } from '@/types/assignments';
 import { toast } from 'sonner';
@@ -28,10 +29,11 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   showVacantsSidebar, setShowVacantsSidebar,
   year,
 }) => {
-  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, allResidentsDb, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate } = data;
+  const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, allResidentsDb, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate, agentTipoTurnoMap } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
   const isApertura = turnoFilter === 'apertura';
   const totalDeviceCount = dbDevices.length;
+  const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
 
   // Pre-build caps lookup: agentId (string) → caps Record<deviceId, date>
   const capsMap = useMemo(() => {
@@ -202,6 +204,20 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     const isAperturaMode = turnoFilter === 'apertura';
     const table = isAperturaMode ? 'menu' : 'menu_semana';
+
+    // Si se está desmarcando, verificar que el residente no esté en múltiples dispositivos (solo en dispositivos fijos)
+    const orgTypeCheck = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
+    const isRotationMode = orgTypeCheck === 'rotacion simple' || orgTypeCheck === 'rotacion completa';
+    if (current && !isAperturaMode && !isRotationMode) {
+      const deviceCount = Object.keys(assignmentsDb[date] || {}).filter(dId =>
+        (assignmentsDb[date][dId] || []).some((a: any) => a.id === resId)
+      ).length;
+      if (deviceCount > 1) {
+        alert(`El residente está asignado a ${deviceCount} dispositivos. Para quitar "acompaña grupo", primero deje al residente vacante o asígnelo a un solo dispositivo.`);
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
       const updateObj: any = {};
@@ -474,7 +490,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                         : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                         : ''
                                       }`}>
-                                        {absent && <span className="mr-1">🚫</span>}{res.name}
+                                        {absent && <span className="mr-1">🚫</span>}{isAperturaB(date, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
                                       </span>
                                       {/* No-cap indicator */}
                                       {!absent && (() => {

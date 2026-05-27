@@ -183,7 +183,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
           });
         } else if (existing && existing.length > 0) {
           const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
-          const firstRow = existing[0];
+          const hasAcompana = existing.some((m: any) => m['acompa\u00f1a_grupo']);
           if (vacanteRow) {
              data.addAssignmentDraft({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
@@ -191,6 +191,21 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
               action: 'update',
               matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
               payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
+              uiDate: selectedVacant.date
+            });
+          } else if (hasAcompana) {
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}-${deviceId}`,
+              table: 'menu_semana',
+              action: 'insert',
+              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
+              payload: {
+                id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+                id_convocatoria: convId, id_turno: turnoId,
+                tipo_organizacion: orgType,
+                _ui_name: resName
+              },
               uiDate: selectedVacant.date
             });
           } else {
@@ -202,7 +217,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
                 id_agente: selectedVacant.id,
                 fecha_asignacion: fechaDB,
                 id_turno: turnoId,
-                id_dispositivo: firstRow.id_dispositivo,
+                id_dispositivo: existing[0].id_dispositivo,
               },
               payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
               uiDate: selectedVacant.date
@@ -213,7 +228,7 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
             id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
             table: 'menu_semana',
             action: 'insert',
-            matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_turno: turnoId },
+            matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
             payload: {
               id_agente: selectedVacant.id,
               id_dispositivo: parseInt(deviceId),

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Check, AlertCircle, Moon, Lock } from 'lucide-react';
+import { Check, AlertCircle, Moon, Lock, Clock } from 'lucide-react';
 import { getFloorColor, getScoreColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
+import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedDevice, SelectedResident, AssignmentDataContext, UndoEntry } from '@/types/assignments';
 
@@ -19,21 +20,27 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   selectedDevice, selectedDate, setSelectedDevice, setSelectedDateFilter,
   setSelectedResident, data, pushUndo, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isAgentCanceled, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, tipoOrganizacionMap } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isAgentCanceled, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, agentTipoTurnoMap, tipoOrganizacionMap } = data;
   const deviceId = selectedDevice.id;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
   const isApertura = turnoFilter === 'apertura';
+  const agentTipos = agentTipoTurnoMap[selectedDate] || {};
+  const isAperturaB = (id: number) => normalizeStr(agentTipos[id] || '') === 'apertura al publico b';
   const orgType = tipoOrganizacionMap[selectedDate] || 'dispositivos fijos';
   const isRotation = orgType.includes('rotacion');
 
   const [d, mStr] = selectedDate.split("/");
   const fechaDB = `${year}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
 
-  // Build occupancy map
+  // Build occupancy map and acompana_grupo map
   const occupancies: Record<number, string> = {};
+  const acompanaMap: Record<number, boolean> = {};
   Object.entries(assignmentsDb[selectedDate] || {}).forEach(([devId, arr]: [string, any]) => {
     const devObj = dbDevices.find((dd: any) => dd.id === devId);
-    arr.forEach((r: any) => { occupancies[r.id] = devObj ? devObj.name : 'Otro'; });
+    arr.forEach((r: any) => { 
+      occupancies[r.id] = devObj ? devObj.name : 'Otro';
+      if (r.acompana_grupo) acompanaMap[r.id] = true;
+    });
   });
 
   // Current assignments in this cell
@@ -57,16 +64,18 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
     const isCanceled = isAgentCanceled && isAgentCanceled(res.id, selectedDate);
 
     const capInfo = capDate ? ` (Cap: ${capDate})` : '';
+    const isAcompanaGrupo = !!acompanaMap[res.id];
     let reason = '';
     if (isAbsent) reason = '🚫 Inasistente';
     else if (isCanceled) reason = '❌ Convocatoria Cancelada';
     else if (isBusy && isConvocado && isApertura) reason = `🔄 ${currentLocation}`;
+    else if (isBusy && isAcompanaGrupo) reason = `🔄 ${currentLocation}`;
     else if (isBusy) reason = isRotation ? `🔄 ${currentLocation}` : `🔒 ${currentLocation}`;
     else reason = isConvocado ? 'Libre' : 'Descanso';
     reason += capInfo;
 
-    // In rotation modes OR Apertura convocados, busy residents CAN be transferred
-    const effectivelyBusy = isAbsent || isCanceled || (isBusy && !isRotation && !(isConvocado && isApertura));
+    // In rotation modes OR Apertura convocados OR acompaña grupo, busy residents CAN be transferred
+    const effectivelyBusy = isAbsent || isCanceled || (isBusy && !isRotation && !(isConvocado && isApertura) && !isAcompanaGrupo);
     const alt: AltItem = { id: res.id, name: res.name, reason, isBusy: effectivelyBusy, isAbsent, isCanceled };
 
     if (isConvocado && isCapacitado) tier1.push(alt);
@@ -254,6 +263,8 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
             .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB).eq('id_turno', turnoId);
           if (fetchErr) throw fetchErr;
 
+          const hasAcompana = existing?.some((m: any) => m['acompa\u00f1a_grupo']);
+
           if (existing && existing.length > 0) {
             const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
             if (vacantRow) {
@@ -263,6 +274,22 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
               action: 'update',
               matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999, id_turno: turnoId },
               payload: { id_dispositivo: parseInt(deviceId), tipo_organizacion: orgType, _ui_name: resName },
+              uiDate: selectedDate
+            });
+          } else if (hasAcompana) {
+            // Acompaña grupo: agregar nuevo dispositivo (INSERT) sin moverlo del actual
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}-${deviceId}`,
+              table: 'menu_semana',
+              action: 'insert',
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
+              payload: {
+                id_agente: agentId, id_dispositivo: parseInt(deviceId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+                id_convocatoria: convId, id_turno: turnoId,
+                tipo_organizacion: orgType,
+                _ui_name: resName
+              },
               uiDate: selectedDate
             });
           } else {
@@ -285,7 +312,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
               table: 'menu_semana',
               action: 'insert',
-              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId },
+              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
               payload: {
                 id_agente: agentId, id_dispositivo: parseInt(deviceId),
                 fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
@@ -328,7 +355,10 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   : 'border-emerald-200 bg-emerald-50 hover:border-emerald-400 cursor-pointer'
               }`}>
               <div>
-                <div className={`font-bold text-sm ${alt.isAbsent || alt.isCanceled ? 'line-through text-stone-400' : ''}`}>{alt.name}</div>
+                <div className={`font-bold text-sm ${alt.isAbsent || alt.isCanceled ? 'line-through text-stone-400' : ''} flex items-center gap-1`}>
+                  {isAperturaB(alt.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                  {alt.name}
+                </div>
                 <div className="text-[10px] font-medium mt-0.5 opacity-80">{alt.reason}</div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -388,6 +418,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                 }}
                 className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.dbDevices.length, data.annualMetricsDb).localReps)}`}>
                 <span className="flex items-center gap-1">
+                  {isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
                   {res.name}
                   {/* No-cap indicator */}
                   {(() => {

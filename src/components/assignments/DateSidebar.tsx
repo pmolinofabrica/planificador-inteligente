@@ -1,6 +1,7 @@
 import React from 'react';
-import { Calendar, Check, AlertCircle, MapPin } from 'lucide-react';
+import { Calendar, Check, AlertCircle, MapPin, Clock } from 'lucide-react';
 import { VisitBlock } from './VisitBadge';
+import { normalizeStr } from '@/lib/utils';
 import type { AssignmentDataContext } from '@/types/assignments';
 
 interface DateSidebarProps {
@@ -13,8 +14,10 @@ interface DateSidebarProps {
 export const DateSidebar: React.FC<DateSidebarProps> = ({
   selectedDate, setSelectedDateFilter, data, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, turnoFilter } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, turnoFilter, agentTipoTurnoMap } = data;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
+  const agentTipos = agentTipoTurnoMap[selectedDate] || {};
+  const isAperturaB = (id: number) => normalizeStr(agentTipos[id] || '') === 'apertura al publico b';
 
   // Build occupancy map: agentId -> deviceName
   const occupancies: Record<number, string> = {};
@@ -81,7 +84,10 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
           <div className="space-y-1">
             {assigned.map(r => (
               <div key={r.id} className="p-2 rounded-lg border border-emerald-200 bg-emerald-50 flex justify-between items-center">
-                <span className="font-bold text-xs text-emerald-900">{r.name}</span>
+                <span className="font-bold text-xs text-emerald-900 flex items-center gap-1">
+                  {isAperturaB(r.id) && <Clock className="w-3 h-3 text-amber-500" />}
+                  {r.name}
+                </span>
                 <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-0.5">
                   <MapPin className="w-2.5 h-2.5" />{r.location}
                 </span>
@@ -99,7 +105,10 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
             <div className="space-y-1">
               {vacant.map(r => (
                 <div key={r.id} className="p-2 rounded-lg border border-destructive/20 bg-destructive/5">
-                  <span className="font-bold text-xs text-destructive">{r.name}</span>
+                  <span className="font-bold text-xs text-destructive flex items-center gap-1">
+                    {isAperturaB(r.id) && <Clock className="w-3 h-3 text-amber-500" />}
+                    {r.name}
+                  </span>
                 </div>
               ))}
             </div>
@@ -115,7 +124,10 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
             <div className="space-y-1">
               {absent.map(r => (
                 <div key={r.id} className="p-2 rounded-lg border border-stone-300 bg-stone-50 border-dashed">
-                  <span className="font-medium text-xs text-stone-500 line-through">{r.name}</span>
+                  <span className="font-medium text-xs text-stone-500 line-through flex items-center gap-1">
+                    {isAperturaB(r.id) && <Clock className="w-3 h-3 text-amber-500" />}
+                    {r.name}
+                  </span>
                 </div>
               ))}
             </div>
@@ -130,7 +142,10 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
           <div className="space-y-1">
             {noConvocados.map(r => (
               <div key={r.id} className="p-2 rounded-lg border border-border bg-muted/20">
-                <span className="font-medium text-xs text-muted-foreground">{r.name}</span>
+                <span className="font-medium text-xs text-muted-foreground flex items-center gap-1">
+                  {isAperturaB(r.id) && <Clock className="w-3 h-3 text-amber-500" />}
+                  {r.name}
+                </span>
               </div>
             ))}
           </div>
