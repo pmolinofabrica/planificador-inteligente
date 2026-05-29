@@ -77,6 +77,16 @@ export interface VisitaInfo {
   rango_etario: string | null;
   estado: string;
   numero_grupo: number[] | null;
+  observaciones: string | null;
+}
+
+export interface LlamadoInfo {
+  id_llamado: number;
+  id_asignacion: number | null;
+  agente: string | null;
+  atendio: boolean | null;
+  observaciones: string | null;
+  fecha_hora: string | null;
 }
 
 export type AssignmentsMatrix = Record<string, Record<string, AssignmentEntry[]>>;
@@ -146,6 +156,7 @@ export interface AssignmentDataContext {
   getAbsenceMotivo?: (agentId: number, uiDate: string) => string;
   // Visitas y métricas
   visitasByDate: VisitasByDateMap;
+  llamadosByAsignacion: Record<number, LlamadoInfo[]>;
   annualMetricsDb: AnnualMetricsMap;
   aperturaMetricsDb: AnnualMetricsMap;
   tardeMananaMetricsDb: AnnualMetricsMap;

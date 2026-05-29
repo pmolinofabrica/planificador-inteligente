@@ -25,11 +25,12 @@ const piso4Banners = [
 ];
 
 export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
-  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
+  const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
 
   const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
 
   const [bannerIdx, setBannerIdx] = useState(0);
+  const [motivoPopup, setMotivoPopup] = useState<{ name: string; motivo: string } | null>(null);
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
@@ -96,14 +97,14 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
   });
   const totalVacant = totalCupos - totalAssigned;
 
-  const absentAssigned: { name: string; device: string, reason: string }[] = [];
+  const absentAssigned: { id: number; name: string; device: string, reason: string }[] = [];
   Object.entries(dateAssignments).forEach(([devId, arr]: [string, any]) => {
     const devObj = dbDevices.find((dd: any) => dd.id === devId);
     arr.forEach((r: any) => {
       if (isAgentAbsent(r.id, currentDate)) {
-        absentAssigned.push({ name: r.name, device: devObj?.name || devId, reason: 'Ausente' });
+        absentAssigned.push({ id: r.id, name: r.name, device: devObj?.name || devId, reason: 'Ausente' });
       } else if (isAgentCanceled && isAgentCanceled(r.id, currentDate)) {
-        absentAssigned.push({ name: r.name, device: devObj?.name || devId, reason: 'Cancelada' });
+        absentAssigned.push({ id: r.id, name: r.name, device: devObj?.name || devId, reason: 'Cancelada' });
       }
     });
   });
@@ -407,7 +408,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                       : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                       : ''
                                     }`}>
-                                       {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
+                                       {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                                       {absent ? (
+                                         <button onClick={() => setMotivoPopup({ name: res.name, motivo: getAbsenceMotivo?.(res.id, currentDate) || 'Sin motivo' })} className="underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">{res.name}</button>
+                                       ) : res.name}
                                       </span>
                                   </div>
                                 );
@@ -433,7 +437,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                 : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
                                 : ''
                               }`}>
-                                {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
+                                {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                                {absent ? (
+                                  <button onClick={() => setMotivoPopup({ name: res.name, motivo: getAbsenceMotivo?.(res.id, currentDate) || 'Sin motivo' })} className="underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">{res.name}</button>
+                                ) : res.name}
                               </span>
                               <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
                                 {group != null && (
@@ -462,7 +469,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
             <div className="p-2 sm:p-3 space-y-1">
               {absentAssigned.map((item, i) => (
                 <div key={`assigned-${i}`} className="flex items-center justify-between px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border border-[hsl(var(--score-mid-border))]/30 bg-card text-[11px] sm:text-xs">
-                  <span className="font-bold line-through text-muted-foreground truncate">{item.name}</span>
+                  <button onClick={() => setMotivoPopup({ name: item.name, motivo: getAbsenceMotivo?.(item.id, currentDate) || 'Sin motivo' })} className="font-bold line-through text-muted-foreground truncate underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">{item.name}</button>
                   <span className="text-[9px] sm:text-[10px] font-medium text-[hsl(var(--score-mid-text))] flex-shrink-0 ml-2">{item.device}</span>
                 </div>
               ))}
@@ -503,6 +510,29 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
           </div>
         )}
       </div>
+
+      {/* Popup Motivo Inasistencia */}
+      {motivoPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setMotivoPopup(null)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-card rounded-xl border shadow-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm">Inasistencia</h3>
+              <button onClick={() => setMotivoPopup(null)} className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground">✕</button>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🚫</span>
+                <span className="font-bold text-sm">{motivoPopup.name}</span>
+              </div>
+              <div className="px-3 py-2 rounded-lg border border-[hsl(var(--score-mid-border))] bg-[hsl(var(--score-mid-bg))] text-xs">
+                <span className="font-semibold text-[hsl(var(--score-mid-text))]">Motivo: </span>
+                <span className="text-foreground">{motivoPopup.motivo}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

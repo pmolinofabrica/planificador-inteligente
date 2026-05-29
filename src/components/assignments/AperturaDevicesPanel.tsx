@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Monitor, Plus, Check, AlertCircle, Moon, Lock, Clock } from 'lucide-react';
+import { Monitor, Plus, Check, AlertCircle, Moon, Lock, Clock, MessageSquare } from 'lucide-react';
 import { getFloorColor, getGroupColor, getPisoFromDeviceName, getFloorPisoStyle } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { VisitBlock } from './VisitBadge';
+import { ObservacionesPopup } from './ObservacionesPopup';
 import type { AssignmentDataContext, UndoEntry } from '@/types/assignments';
 
 interface AperturaDevicesPanelProps {
@@ -27,7 +28,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     visitasByDate, turnoFilter, dateTurnoMap,
     aperturaMetricsDb, tardeMananaMetricsDb,
     tipoOrganizacionMap, addAssignmentDraft, setAssignmentsDb,
-    agentTipoTurnoMap,
+    agentTipoTurnoMap, llamadosByAsignacion,
   } = data;
 
   const isAperturaMode = turnoFilter === 'apertura';
@@ -35,6 +36,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
   const [selectedClosedDevice, setSelectedClosedDevice] = useState<string | null>(null);
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const [observacionesVisit, setObservacionesVisit] = useState<{ open: boolean; idAsignacion: number | null; nombre: string }>({ open: false, idAsignacion: null, nombre: '' });
 
   const [d, mStr] = execDate.split('/');
   const fechaDB = `${year}-${mStr?.padStart(2, '0')}-${d?.padStart(2, '0')}`;
@@ -512,8 +514,69 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     <div className="space-y-6">
       {/* ══════ VISITAS GRUPALES (context from mañana/tarde) ══════ */}
       {visitas.length > 0 && (
-        <div>
-          <VisitBlock visitas={visitas} locked={false} interactive={false} onGroupChange={() => refresh()} />
+        <div className="space-y-3">
+          <VisitBlock
+            visitas={visitas}
+            locked={false}
+            interactive={true}
+            onGroupChange={() => refresh()}
+            onObservaciones={(idAsig, nombre) => setObservacionesVisit({ open: true, idAsignacion: idAsig, nombre })}
+          />
+
+          {/* ══════ ACOMPAÑANTES DE GRUPO ══════ */}
+          {(() => {
+            const acompanantesMap = new Map<number, { id: number; name: string; devices: { name: string; grupo: number | null }[] }>();
+            Object.entries(assignmentsDb[execDate] || {}).forEach(([devId, arr]: [string, any]) => {
+              const devObj = dbDevices.find((dd: any) => dd.id === devId);
+              arr.forEach((r: any) => {
+                if (r.acompana_grupo && !isAgentAbsent(r.id, execDate)) {
+                  if (!acompanantesMap.has(r.id)) {
+                    acompanantesMap.set(r.id, { id: r.id, name: r.name, devices: [] });
+                  }
+                  acompanantesMap.get(r.id)!.devices.push({
+                    name: devObj?.name || devId,
+                    grupo: r.numero_grupo ?? null,
+                  });
+                }
+              });
+            });
+            const acompanantes = Array.from(acompanantesMap.values());
+            if (acompanantes.length === 0) return null;
+            return (
+              <div className="rounded-xl border-2 border-[hsl(var(--floor-2-border))] bg-[hsl(var(--floor-2-bg))] overflow-hidden">
+                <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-[hsl(var(--floor-2-border))]/50 flex items-center gap-2">
+                  <span className="text-sm sm:text-base">🏫</span>
+                  <span className="font-black text-xs sm:text-sm tracking-wide text-[hsl(var(--floor-2-text))]">
+                    Acompañantes de Grupo ({acompanantes.length})
+                  </span>
+                </div>
+                <div className="p-2 sm:p-3 space-y-1">
+                  {acompanantes.map((a) => (
+                    <div key={`acomp-${a.id}`} className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[hsl(var(--floor-2-border))]/30 bg-card text-[11px] sm:text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground truncate flex items-center gap-1">
+                          🏫 {isAperturaB(a.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
+                          {a.name}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {a.devices.map((d, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 text-[10px]">
+                            📍 {d.name}
+                            {d.grupo != null && (
+                              <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${getGroupColor(d.grupo)}`}>
+                                G{d.grupo}
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -690,6 +753,17 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
           ))}
         </div>
       </div>
+
+      {/* ══════ POPUP OBSERVACIONES ══════ */}
+      {observacionesVisit.open && observacionesVisit.idAsignacion && (
+        <ObservacionesPopup
+          idAsignacion={observacionesVisit.idAsignacion}
+          nombre={observacionesVisit.nombre}
+          observacionesReferente={visitas.find(v => v.id_asignacion === observacionesVisit.idAsignacion)?.observaciones || null}
+          llamados={llamadosByAsignacion[observacionesVisit.idAsignacion] || []}
+          onClose={() => setObservacionesVisit({ open: false, idAsignacion: null, nombre: '' })}
+        />
+      )}
     </div>
   );
 };

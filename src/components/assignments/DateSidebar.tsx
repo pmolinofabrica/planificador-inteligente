@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar, Check, AlertCircle, MapPin, Clock } from 'lucide-react';
 import { VisitBlock } from './VisitBadge';
+import { ObservacionesPopup } from './ObservacionesPopup';
 import { normalizeStr } from '@/lib/utils';
 import type { AssignmentDataContext } from '@/types/assignments';
 
@@ -14,7 +15,7 @@ interface DateSidebarProps {
 export const DateSidebar: React.FC<DateSidebarProps> = ({
   selectedDate, setSelectedDateFilter, data, year,
 }) => {
-  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, turnoFilter, agentTipoTurnoMap } = data;
+  const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, turnoFilter, agentTipoTurnoMap, llamadosByAsignacion } = data;
   const convocadoIds = new Set(convocadosDb[selectedDate] || []);
   const agentTipos = agentTipoTurnoMap[selectedDate] || {};
   const isAperturaB = (id: number) => normalizeStr(agentTipos[id] || '') === 'apertura al publico b';
@@ -51,6 +52,7 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
   const absent = convocados.filter(c => c.absent);
 
   const visitas = visitasByDate?.[selectedDate] || [];
+  const [observacionesVisit, setObservacionesVisit] = useState<{ open: boolean; idAsignacion: number | null; nombre: string }>({ open: false, idAsignacion: null, nombre: '' });
 
   return (
     <div className="w-96 bg-card border-l border-border shadow-2xl flex flex-col absolute right-0 h-full z-50 overflow-hidden">
@@ -72,7 +74,12 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
         {/* Visitas Grupales */}
         {visitas.length > 0 && (
           <div>
-            <VisitBlock visitas={visitas} interactive onGroupChange={() => data.refresh()} />
+            <VisitBlock
+              visitas={visitas}
+              interactive
+              onGroupChange={() => data.refresh()}
+              onObservaciones={(idAsig, nombre) => setObservacionesVisit({ open: true, idAsignacion: idAsig, nombre })}
+            />
           </div>
         )}
 
@@ -151,6 +158,17 @@ export const DateSidebar: React.FC<DateSidebarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Popup Observaciones */}
+      {observacionesVisit.open && observacionesVisit.idAsignacion && (
+        <ObservacionesPopup
+          idAsignacion={observacionesVisit.idAsignacion}
+          nombre={observacionesVisit.nombre}
+          observacionesReferente={visitas.find(v => v.id_asignacion === observacionesVisit.idAsignacion)?.observaciones || null}
+          llamados={llamadosByAsignacion[observacionesVisit.idAsignacion] || []}
+          onClose={() => setObservacionesVisit({ open: false, idAsignacion: null, nombre: '' })}
+        />
+      )}
     </div>
   );
 };
