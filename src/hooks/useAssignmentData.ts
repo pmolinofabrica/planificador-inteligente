@@ -1118,6 +1118,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 11. VISITAS GRUPALES (all turnos — informational for apertura)
         // ═══════════════════════════════════════════════════════════
+        let vMap: VisitasByDateMap = {};
         try {
           const { data: visitasData } = await supabase
             .from('asignaciones_visita')
@@ -1125,7 +1126,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             .in('estado', ['asignado', 'asignada', 'confirmado', 'confirmada']);
 
           console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas (asignado/confirmado only)`);
-          let vMap: VisitasByDateMap = {};
           if (visitasData && visitasData.length > 0) {
             const diasDict3: Record<number, string> = {};
             diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
