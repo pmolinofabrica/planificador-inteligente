@@ -6,7 +6,7 @@ import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
-  VisitaInfo, VisitasByDateMap, AnnualMetricsMap, AgentAnnualMetrics,
+  VisitaInfo, LlamadoInfo, VisitasByDateMap, AnnualMetricsMap, AgentAnnualMetrics,
   PendingMutation, MutationAction,
 } from '@/types/assignments';
 
@@ -62,6 +62,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
+  const [llamadosByAsignacion, setLlamadosByAsignacion] = useState<Record<number, LlamadoInfo[]>>({});
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
   const [aperturaMetricsDb, setAperturaMetricsDb] = useState<AnnualMetricsMap>({});
   const [tardeMananaMetricsDb, setTardeMananaMetricsDb] = useState<AnnualMetricsMap>({});
@@ -1120,7 +1121,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         try {
           const { data: visitasData } = await supabase
             .from('asignaciones_visita')
-            .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado, numero_grupo')
+            .select('id_asignacion, id_plani, nombre_institucion, cantidad_personas_original, rango_etario, estado, numero_grupo, observaciones')
             .in('estado', ['asignado', 'asignada', 'confirmado', 'confirmada']);
 
           console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas (asignado/confirmado only)`);
@@ -1154,6 +1155,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
                 rango_etario: v.rango_etario,
                 estado: v.estado,
                 numero_grupo: (v.numero_grupo as number[] | null) ?? null,
+                observaciones: v.observaciones || null,
               });
             });
             console.log(`[Visitas] Mapped to dates:`, Object.keys(vMap).map(d => `${d}(${vMap[d].length})`).join(', ') || 'none');
@@ -1164,6 +1166,37 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         } catch (e) {
           console.error('Error visitas:', e);
           setVisitasByDate({});
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 12. SEGUIMIENTO LLAMADOS (for visitas loaded)
+        // ═══════════════════════════════════════════════════════════
+        try {
+          const allAsignacionIds = Object.values(vMap).flat().map(v => v.id_asignacion);
+          if (allAsignacionIds.length > 0) {
+            const { data: llamData } = await supabase
+              .from('seguimiento_llamados_visita' as any)
+              .select('id_llamado, id_asignacion, agente, atendio, observaciones, fecha_hora')
+              .in('id_asignacion', allAsignacionIds)
+              .order('fecha_hora', { ascending: true });
+
+            if (llamData && llamData.length > 0) {
+              const lMap: Record<number, LlamadoInfo[]> = {};
+              (llamData as unknown as LlamadoInfo[]).forEach(l => {
+                if (l.id_asignacion == null) return;
+                if (!lMap[l.id_asignacion]) lMap[l.id_asignacion] = [];
+                lMap[l.id_asignacion].push(l);
+              });
+              setLlamadosByAsignacion(lMap);
+            } else {
+              setLlamadosByAsignacion({});
+            }
+          } else {
+            setLlamadosByAsignacion({});
+          }
+        } catch (e) {
+          console.error('Error llamados:', e);
+          setLlamadosByAsignacion({});
         }
 
       } catch (err) {
@@ -1196,6 +1229,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
     visitasByDate,
+    llamadosByAsignacion,
     annualMetricsDb, // export anual metrics
     aperturaMetricsDb, // export apertura metrics
     tardeMananaMetricsDb, // export tarde/manana metrics

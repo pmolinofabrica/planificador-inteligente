@@ -3,6 +3,7 @@ import type { VisitaInfo } from '@/types/assignments';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getGroupColor } from '@/lib/floor-utils';
+import { MessageSquare } from 'lucide-react';
 
 interface VisitBadgeProps {
   visitas: VisitaInfo[];
@@ -10,6 +11,7 @@ interface VisitBadgeProps {
   locked?: boolean;
   onGroupChange?: (id_asignacion: number, grupos: number[] | null) => void;
   interactive?: boolean;
+  onObservaciones?: (idAsignacion: number, nombre: string) => void;
 }
 
 const estadoStyle: Record<string, string> = {
@@ -79,7 +81,7 @@ export const VisitDetailChip: React.FC<{ visitas: VisitaInfo[] }> = ({ visitas }
 };
 
 /** Full block for MenuView / detail views — with optional multi-group assignment */
-export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false, locked = false, onGroupChange, interactive = false }) => {
+export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false, locked = false, onGroupChange, interactive = false, onObservaciones }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
 
   if (visitas.length === 0) return null;
@@ -207,6 +209,15 @@ export const VisitBlock: React.FC<VisitBadgeProps> = ({ visitas, compact = false
               <div className="flex items-center gap-3 mt-1 text-[10px] sm:text-[11px] font-medium opacity-80">
                 <span>👥 {v.cantidad_personas} personas</span>
                 {v.rango_etario && <span>📅 {v.rango_etario}</span>}
+                {onObservaciones && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onObservaciones(v.id_asignacion, v.nombre_institucion || 'Sin nombre'); }}
+                    className="ml-auto text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
+                    title="Ver observaciones"
+                  >
+                    <MessageSquare className="w-3 h-3" /> Obs.
+                  </button>
+                )}
               </div>
             </div>
           );
