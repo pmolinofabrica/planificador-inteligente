@@ -1125,6 +1125,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             .in('estado', ['asignado', 'asignada', 'confirmado', 'confirmada']);
 
           console.log(`[Visitas] Fetched ${visitasData?.length || 0} visitas (asignado/confirmado only)`);
+          let vMap: VisitasByDateMap = {};
           if (visitasData && visitasData.length > 0) {
             const diasDict3: Record<number, string> = {};
             diasData.forEach(dd => { if (dd.fecha) diasDict3[dd.id_dia] = dd.fecha.substring(0, 10); });
@@ -1142,7 +1143,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
             });
 
-            const vMap: VisitasByDateMap = {};
             visitasData.forEach(v => {
               if (!v.id_plani) return;
               const uiDate = planiDateMap[v.id_plani];
