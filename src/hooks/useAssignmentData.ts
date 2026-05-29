@@ -1118,6 +1118,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 11. VISITAS GRUPALES (all turnos — informational for apertura)
         // ═══════════════════════════════════════════════════════════
+        let vMap: VisitasByDateMap = {};
         try {
           const { data: visitasData } = await supabase
             .from('asignaciones_visita')
@@ -1142,7 +1143,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               }
             });
 
-            const vMap: VisitasByDateMap = {};
             visitasData.forEach(v => {
               if (!v.id_plani) return;
               const uiDate = planiDateMap[v.id_plani];
