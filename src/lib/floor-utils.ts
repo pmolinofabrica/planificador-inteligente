@@ -86,17 +86,17 @@ export const getFloorPisoStyle = (pisoNum: string) => {
 
 export const getGroupColor = (num: number | null): string => {
   if (!num) return "bg-muted text-muted-foreground border-border";
-  if (num === 1) return "bg-[hsl(var(--floor-1-accent))] text-white border-[hsl(var(--floor-1-accent))]";
-  if (num === 2) return "bg-[hsl(var(--floor-2-accent))] text-white border-[hsl(var(--floor-2-accent))]";
-  if (num === 3) return "bg-[hsl(var(--floor-3-accent))] text-white border-[hsl(var(--floor-3-accent))]";
+  if (num === 1) return "bg-[hsl(var(--group-1-accent))] text-white border-[hsl(var(--group-1-accent))]";
+  if (num === 2) return "bg-[hsl(var(--group-2-accent))] text-white border-[hsl(var(--group-2-accent))]";
+  if (num === 3) return "bg-[hsl(var(--group-3-accent))] text-white border-[hsl(var(--group-3-accent))]";
   return "bg-primary text-primary-foreground border-primary";
 };
 
 export const getGroupUnderline = (num: number | null): string => {
   if (!num) return "";
-  if (num === 1) return "border-b-2 border-[hsl(var(--floor-1-accent))]";
-  if (num === 2) return "border-b-2 border-[hsl(var(--floor-2-accent))]";
-  if (num === 3) return "border-b-2 border-[hsl(var(--floor-3-accent))]";
+  if (num === 1) return "border-b-2 border-[hsl(var(--group-1-accent))]";
+  if (num === 2) return "border-b-2 border-[hsl(var(--group-2-accent))]";
+  if (num === 3) return "border-b-2 border-[hsl(var(--group-3-accent))]";
   return "border-b-2 border-primary";
 };
 
@@ -143,3 +143,50 @@ export const getNotCapacitadoStyle = (
   }
   return null;
 };
+
+/** Extract floor number (1, 2, 3) from a device name, or 0 if not found / P4 */
+export function getDeviceFloor(deviceName: string): number {
+  if (deviceName.includes('(P1)')) return 1;
+  if (deviceName.includes('(P2)')) return 2;
+  if (deviceName.includes('(P3)')) return 3;
+  return 0;
+}
+
+/**
+ * For each resident, count assignments per floor (1/2/3) and return
+ * the floor with the fewest assignments. Ties resolve to lower floor.
+ * Returns: Record<residentId, floorNumber>
+ */
+export function computeLeastFloors(
+  assignmentsByDevice: Record<string, Array<{ id: number }>>,
+  dbDevices: Array<{ id: string; name: string }>,
+): Record<number, number> {
+  const counts: Record<number, Record<number, number>> = {};
+  Object.entries(assignmentsByDevice).forEach(([devId, residents]) => {
+    const dev = dbDevices.find(d => String(d.id) === devId);
+    if (!dev) return;
+    const floor = getDeviceFloor(dev.name);
+    if (floor === 0) return;
+    residents.forEach(r => {
+      if (!counts[r.id]) counts[r.id] = { 1: 0, 2: 0, 3: 0 };
+      counts[r.id][floor]++;
+    });
+  });
+  const result: Record<number, number> = {};
+  Object.entries(counts).forEach(([idStr, floorCounts]) => {
+    let minFloor = 1;
+    let minCount = floorCounts[1];
+    if (floorCounts[2] < minCount) { minCount = floorCounts[2]; minFloor = 2; }
+    if (floorCounts[3] < minCount) { minFloor = 3; }
+    result[Number(idStr)] = minFloor;
+  });
+  return result;
+}
+
+/** Returns Tailwind class for the accent color of a floor (for text/border) */
+export function getFloorTextClass(floor: number): string {
+  if (floor === 1) return 'text-[hsl(var(--floor-1-accent))] border-b-2 border-[hsl(var(--floor-1-accent))]';
+  if (floor === 2) return 'text-[hsl(var(--floor-2-accent))] border-b-2 border-[hsl(var(--floor-2-accent))]';
+  if (floor === 3) return 'text-[hsl(var(--floor-3-accent))] border-b-2 border-[hsl(var(--floor-3-accent))]';
+  return '';
+}

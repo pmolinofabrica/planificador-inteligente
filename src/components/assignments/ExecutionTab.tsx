@@ -17,6 +17,8 @@ interface ExecutionTabProps {
   year: string;
   setSelectedDevice: (d: { id: string; name: string; date: string } | null) => void;
   setSelectedDateFilter: (d: string | null) => void;
+  showCapacitadosColors?: boolean;
+  showPisoColors?: boolean;
 }
 
 const floorNames: Record<string, { label: string; bgClass: string; borderClass: string }> = {
@@ -32,6 +34,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   selectedVacant, setSelectedVacant,
   setShowVacantsSidebar, pushUndo, year,
   setSelectedDevice, setSelectedDateFilter,
+  showCapacitadosColors = true, showPisoColors = false,
 }) => {
   const { activeDates, allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, tipoOrganizacionMap, turnoFilter } = data;
   const [showConvocados, setShowConvocados] = useState(false);
@@ -240,6 +243,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
           setSelectedDevice={setSelectedDevice}
           setSelectedDateFilter={setSelectedDateFilter}
           visibleGroups={visibleGroups}
+          showCapacitadosColors={showCapacitadosColors}
+          showPisoColors={showPisoColors}
         />
       </div>
     </main>

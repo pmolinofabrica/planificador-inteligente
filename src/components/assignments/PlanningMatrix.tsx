@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, Users, AlertCircle, Zap, Clock } from 'lucide-react';
-import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle } from '@/lib/floor-utils';
+import { getFloorColor, getScoreColor, getGroupColor, computeRotationMetrics, getRepsColor, getNotCapacitadoStyle, computeLeastFloors, getFloorTextClass } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { SelectedResident, SelectedDevice, AssignmentDataContext } from '@/types/assignments';
@@ -18,6 +18,8 @@ interface PlanningMatrixProps {
   showVacantsSidebar: boolean;
   setShowVacantsSidebar: (v: boolean) => void;
   year: string;
+  showCapacitadosColors?: boolean;
+  showPisoColors?: boolean;
 }
 
 const ORG_TYPES = ['dispositivos fijos', 'rotacion simple', 'rotacion completa'] as const;
@@ -27,7 +29,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
   selectedDevice, setSelectedDevice,
   selectedDateFilter, setSelectedDateFilter,
   showVacantsSidebar, setShowVacantsSidebar,
-  year,
+  year, showCapacitadosColors = true, showPisoColors = false,
 }) => {
   const { dbDevices, activeDates, assignmentsDb, calendarDb, convocadosCountDb, convocadosDb, agentGroups, allResidentsDb, isAgentAbsent, tipoOrganizacionMap, turnoFilter, dateTurnoMap, refresh, setIsLoading, visitasByDate, agentTipoTurnoMap } = data;
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
@@ -73,6 +75,30 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     return map;
   }, [activeDates, tipoOrganizacionMap, visitasByDate, assignmentsDb]);
 
+  const leastFloors = useMemo(() => {
+    if (!showPisoColors) return {};
+    const allAssignments: Record<string, Array<{ id: number }>> = {};
+    activeDates.forEach(date => {
+      Object.entries(assignmentsDb[date] || {}).forEach(([devId, residents]) => {
+        if (!allAssignments[devId]) allAssignments[devId] = [];
+        allAssignments[devId].push(...(residents as Array<{ id: number }>));
+      });
+    });
+    return computeLeastFloors(allAssignments, dbDevices);
+  }, [showPisoColors, activeDates, assignmentsDb, dbDevices]);
+
+  const getResidentColor = (resId: number): string => {
+    if (showPisoColors && leastFloors[resId] != null) {
+      return getFloorTextClass(leastFloors[resId]);
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'A') {
+      return 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]';
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'B') {
+      return 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]';
+    }
+    return '';
+  };
 
   const handleRunEngine = async () => {
     if (isRunningEngine) return;
@@ -486,9 +512,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                     <span className="flex items-center gap-1 min-w-0">
                                       <span className={`font-bold truncate ${expandedColumns[date] ? 'max-w-[300px]' : 'max-w-[80px]'} text-xs ${
                                         absent ? 'line-through text-stone-500 opacity-60'
-                                        : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                                        : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                                        : ''
+                                        : getResidentColor(res.id)
                                       }`}>
                                         {absent && <span className="mr-1">🚫</span>}{isAperturaB(date, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
                                       </span>
@@ -522,8 +546,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                           }}
                                           className={`text-[8px] px-1 py-0.5 rounded border transition-all hover:scale-110 ${
                                             res.acompana_grupo
-                                              ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))] font-bold'
-                                              : 'border-dashed border-muted-foreground/30 text-muted-foreground/50 hover:border-primary hover:text-primary'
+                                              ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-accent))] ring-1 ring-[hsl(var(--floor-2-accent))] font-bold'
+                                              : 'border-border text-muted-foreground/40 opacity-60 hover:opacity-100 hover:border-primary hover:text-primary'
                                           }`}
                                           title={res.acompana_grupo ? 'Acompaña grupo ✓' : 'Asignar como acompañante de grupo'}
                                         >

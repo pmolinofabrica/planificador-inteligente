@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Monitor, Plus, Check, AlertCircle, Moon, Lock, Clock, MessageSquare } from 'lucide-react';
-import { getFloorColor, getGroupColor, getPisoFromDeviceName, getFloorPisoStyle } from '@/lib/floor-utils';
+import { getFloorColor, getGroupColor, getPisoFromDeviceName, getFloorPisoStyle, computeLeastFloors, getFloorTextClass } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -16,10 +16,13 @@ interface AperturaDevicesPanelProps {
   setSelectedDevice: (d: { id: string; name: string; date: string } | null) => void;
   setSelectedDateFilter: (d: string | null) => void;
   visibleGroups?: Record<number, boolean>;
+  showCapacitadosColors?: boolean;
+  showPisoColors?: boolean;
 }
 
 export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
   data, execDate, pushUndo, year, setSelectedDevice, setSelectedDateFilter, visibleGroups,
+  showCapacitadosColors = true, showPisoColors = false,
 }) => {
   const {
     dbDevices, assignmentsDb, calendarDb, setCalendarDb,
@@ -28,7 +31,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     visitasByDate, turnoFilter, dateTurnoMap,
     aperturaMetricsDb, tardeMananaMetricsDb,
     tipoOrganizacionMap, addAssignmentDraft, setAssignmentsDb,
-    agentTipoTurnoMap, llamadosByAsignacion,
+    agentTipoTurnoMap, llamadosByAsignacion, agentGroups,
   } = data;
 
   const isAperturaMode = turnoFilter === 'apertura';
@@ -98,6 +101,24 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     });
     return map;
   }, [assignmentsDb, execDate, dbDevices]);
+
+  const leastFloors = useMemo(() => {
+    if (!showPisoColors) return {};
+    return computeLeastFloors(assignmentsDb[execDate] || {}, dbDevices);
+  }, [showPisoColors, assignmentsDb, execDate, dbDevices]);
+
+  const getResidentColor = (resId: number): string => {
+    if (showPisoColors && leastFloors[resId] != null) {
+      return getFloorTextClass(leastFloors[resId]);
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'A') {
+      return 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]';
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'B') {
+      return 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]';
+    }
+    return '';
+  };
 
   // Toggle acompaña_grupo for a resident in apertura (menu table)
   const handleToggleAcompana = async (resId: number, deviceId: string, current: boolean) => {
@@ -370,7 +391,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       }`}>
         {/* Row 1: name + controls */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className={`font-bold truncate ${isAbsent ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+          <span className={`font-bold truncate ${isAbsent ? 'line-through text-muted-foreground' : getResidentColor(res.id)}`}>
             {isAbsent && '🚫 '}{isAcompanante && '🏫 '}{isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0 inline" />}{res.name}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -417,8 +438,8 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                 onClick={(e) => { e.stopPropagation(); onToggleAcompana(res.id, device.id, isAcompanante); }}
                 className={`text-[11px] px-2 py-1 rounded border font-bold transition-all hover:scale-105 ${
                   isAcompanante
-                    ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
-                    : 'bg-muted text-muted-foreground border-border hover:border-primary'
+                    ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-accent))] ring-1 ring-[hsl(var(--floor-2-accent))]'
+                    : 'bg-muted text-muted-foreground/50 opacity-60 hover:opacity-100 border-border hover:border-primary hover:text-primary'
                 }`}
                 title={isAcompanante ? 'Quitar acompañante de grupo' : 'Marcar como acompañante de grupo'}
               >

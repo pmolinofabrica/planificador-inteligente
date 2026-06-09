@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3 } from 'lucide-react';
+import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
+import { useSettings } from '@/hooks/useSettings';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
 import { ExecutionTab } from '@/components/assignments/ExecutionTab';
 import { MenuView } from '@/components/assignments/MenuView';
@@ -42,6 +45,7 @@ const Index = () => {
   const data = useAssignmentData({ selectedMonth, turnoFilter });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
   const { signOut } = useAuth();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors } = useSettings();
 
   // Selection states
   const [selectedResident, setSelectedResident] = useState<SelectedResident | null>(null);
@@ -194,6 +198,47 @@ const Index = () => {
             >
               <Unlock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+                  title="Configuración"
+                >
+                  <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-4">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-foreground">Configuración</h3>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="show-capacitados" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Ver capacitados
+                    </label>
+                    <Switch
+                      id="show-capacitados"
+                      checked={showCapacitadosColors}
+                      onCheckedChange={setShowCapacitadosColors}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    Colorea nombres según grupo A/B de capacitaciones.
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="show-piso" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Ver piso
+                    </label>
+                    <Switch
+                      id="show-piso"
+                      checked={showPisoColors}
+                      onCheckedChange={setShowPisoColors}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    Colorea nombres según el piso con menos coordinaciones.
+                  </p>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Actions — desktop only inline, mobile collapsed */}
@@ -404,11 +449,13 @@ const Index = () => {
             showVacantsSidebar={showVacantsSidebar}
             setShowVacantsSidebar={setShowVacantsSidebar}
             year={year}
+            showCapacitadosColors={showCapacitadosColors}
+            showPisoColors={showPisoColors}
           />
         )}
 
         {activeTab === 'menu' && (
-          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} />
+          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} showCapacitadosColors={showCapacitadosColors} showPisoColors={showPisoColors} />
         )}
 
         {activeTab === 'exec' && (
@@ -425,6 +472,8 @@ const Index = () => {
             setSelectedDateFilter={setSelectedDateFilter}
             pushUndo={pushUndo}
             year={year}
+            showCapacitadosColors={showCapacitadosColors}
+            showPisoColors={showPisoColors}
           />
         )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Lock, Unlock } from 'lucide-react';
-import { getFloorColor, getGroupColor } from '@/lib/floor-utils';
+import { getFloorColor, getGroupColor, computeLeastFloors, getFloorTextClass } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
@@ -12,6 +12,8 @@ interface MenuViewProps {
   year: string;
   isLocked?: boolean;
   onLock?: (locked: boolean) => void;
+  showCapacitadosColors?: boolean;
+  showPisoColors?: boolean;
 }
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
@@ -24,7 +26,7 @@ const piso4Banners = [
   '/banners/banner4'
 ];
 
-export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock }) => {
+export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock, showCapacitadosColors = true, showPisoColors = false }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
 
   const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
@@ -164,6 +166,24 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
     return Array.from(groups).sort();
   }, [dateAssignments, isRotacionMode, visitasByDate, currentDate]);
 
+  const leastFloors = useMemo(() => {
+    if (!showPisoColors) return {};
+    return computeLeastFloors(dateAssignments, dbDevices);
+  }, [showPisoColors, dateAssignments, dbDevices]);
+
+  const getResidentColor = (resId: number): string => {
+    if (showPisoColors && leastFloors[resId] != null) {
+      return getFloorTextClass(leastFloors[resId]);
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'A') {
+      return 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]';
+    }
+    if (showCapacitadosColors && agentGroups[String(resId)] === 'B') {
+      return 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]';
+    }
+    return '';
+  };
+
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0">
       <div className={`mx-auto px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5 ${isLocked ? 'max-w-4xl' : 'max-w-5xl'}`}>
@@ -247,10 +267,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
           <div className="mb-3 flex items-center gap-2 px-1">
             <span className="text-[10px] font-bold text-muted-foreground">Grupos:</span>
             {distinctGroups.map(g => (
-              <span key={g} className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
-                <span className={`w-2.5 h-2.5 rounded-full ${getGroupDotColor(g)}`} />
-                G{g}
-              </span>
+              <GroupBadge key={g} group={g} />
             ))}
           </div>
         )}
@@ -401,12 +418,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                   <div key={i} className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md border text-[10px] sm:text-xs ${
                                     isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getGroupDotColor(gNum)}`} />
+                                    <GroupBadge group={gNum} />
                               <span className={`font-bold truncate ${
                                       isUnavailable ? 'line-through text-muted-foreground'
-                                      : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                                      : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                                      : ''
+                                      : getResidentColor(res.id)
                                     }`}>
                                        {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
                                        {absent ? (
@@ -433,19 +448,15 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                             }`}>
                               <span className={`font-bold truncate ${
                                 isUnavailable ? 'line-through text-muted-foreground'
-                                : agentGroups[String(res.id)] === 'A' ? 'text-[hsl(var(--group-a-text))] border-b-2 border-[hsl(var(--group-a-accent))]'
-                                : agentGroups[String(res.id)] === 'B' ? 'text-[hsl(var(--group-b-text))] border-b-2 border-[hsl(var(--group-b-accent))]'
-                                : ''
+                                : getResidentColor(res.id)
                               }`}>
                                 {absent ? '🚫 ' : canceled ? '❌ ' : ''}{isAperturaB(currentDate, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
                                 {absent ? (
                                   <button onClick={() => setMotivoPopup({ name: res.name, motivo: getAbsenceMotivo?.(res.id, currentDate) || 'Sin motivo' })} className="underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors">{res.name}</button>
                                 ) : res.name}
                               </span>
-                              <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ml-1">
-                                {group != null && (
-                                  <span className={`w-2 h-2 rounded-full ${getGroupDotColor(group)}`} />
-                                )}
+                              <div className="flex items-center flex-shrink-0 ml-1">
+                                {group != null && <GroupBadge group={group} />}
                               </div>
                             </div>
                           );
@@ -537,10 +548,32 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
   );
 };
 
-/** Returns a colored dot class for group number, matching floor accent colors */
-function getGroupDotColor(num: number | null): string {
-  if (num === 1) return 'bg-[hsl(var(--floor-1-accent))]';
-  if (num === 2) return 'bg-[hsl(var(--floor-2-accent))]';
-  if (num === 3) return 'bg-[hsl(var(--floor-3-accent))]';
-  return 'bg-primary';
+/** Group badge: shape with G1/G2/G3 label inside */
+function GroupBadge({ group }: { group: number }) {
+  const color = group === 1 ? 'hsl(var(--group-1-accent))'
+    : group === 2 ? 'hsl(var(--group-2-accent))'
+    : 'hsl(var(--group-3-accent))';
+  const label = `${group}`;
+  if (group === 1) {
+    return (
+      <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+        <rect x="2" y="2" width="20" height="20" fill={color} rx="4" />
+        <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
+      </svg>
+    );
+  }
+  if (group === 2) {
+    return (
+      <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+        <polygon points="12,3 22,22 2,22" fill={color} />
+        <text x="12" y="19" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
+      </svg>
+    );
+  }
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+      <circle cx="12" cy="12" r="10" fill={color} />
+      <text x="12" y="17" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
+    </svg>
+  );
 }
