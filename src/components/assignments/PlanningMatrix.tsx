@@ -207,30 +207,12 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       uiDate: date,
     });
 
-    data.setAssignmentsDb(prev => {
-      const next = { ...prev };
-      const day = next[date] || {};
-      const deviceResidents = day[deviceId] || [];
-      day[deviceId] = deviceResidents.flatMap((r: any) => {
-        if (r.id !== resId) return [r];
-        const existing = Array.isArray(r.numero_grupos) ? r.numero_grupos : (r.numero_grupo != null ? [r.numero_grupo] : []);
-        const nextGroups = action === 'delete'
-          ? existing.filter(g => g !== physicalGroup)
-          : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
-        if (nextGroups.length === 0) return [{ ...r, numero_grupo: null, numero_grupos: [] }];
-        return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
-      });
-      next[date] = day;
-      return next;
-    });
   };
 
   const handleToggleAcompana = async (resId: number, date: string, deviceId: string, current: boolean) => {
     const [d, m] = date.split('/');
     const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     const isAperturaMode = turnoFilter === 'apertura';
-    const table = isAperturaMode ? 'menu' : 'menu_semana';
-
     // Si se está desmarcando, verificar que el residente no esté en múltiples dispositivos (solo en dispositivos fijos)
     const orgTypeCheck = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
     const isRotationMode = orgTypeCheck === 'rotacion simple' || orgTypeCheck === 'rotacion completa';
@@ -244,53 +226,31 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       }
     }
 
-    setIsLoading(true);
-    try {
-      const updateObj: any = {};
-      updateObj['acompa\u00f1a_grupo'] = !current;
-      let query: any;
-      if (isAperturaMode) {
-        query = supabase.from('menu')
-          .update(updateObj)
-          .eq('id_agente', resId)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(deviceId))
-          .select();
-      } else {
-        const turnoId = dateTurnoMap[date];
-        if (!turnoId) {
-          toast.error(`No se pudo resolver id_turno para ${date}`);
-          setIsLoading(false);
-          return;
-        }
-        console.info('[AcompañaGrupo] sql-plan', {
-          table: 'menu_semana',
-          statement: 'update matching agent/date/turno/device',
-          match: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
-          payload: updateObj,
-        });
-        query = supabase.from('menu_semana')
-          .update(updateObj)
-          .eq('id_agente', resId)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(deviceId))
-          .eq('id_turno', turnoId)
-          .select('id_menu_semana, id_agente, fecha_asignacion, id_turno, id_dispositivo, numero_grupo, acompa\u00f1a_grupo');
-      }
-      const { error, data: updated } = await query;
-      if (error) throw error;
-      if (!updated || updated.length === 0) {
-        console.warn('[AcompañaGrupo] Update matched 0 rows', { resId, fechaDB, deviceId, isAperturaMode });
-        toast.error('No se encontró la fila para actualizar');
-        setIsLoading(false);
+    const updateObj: any = {};
+    updateObj['acompaña_grupo'] = !current;
+    if (isAperturaMode) {
+      data.addAssignmentDraft({
+        id: `acompanar-${resId}-${fechaDB}-${deviceId}`,
+        table: 'menu',
+        action: 'update',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(deviceId) },
+        payload: updateObj,
+        uiDate: date,
+      });
+    } else {
+      const turnoId = dateTurnoMap[date];
+      if (!turnoId) {
+        toast.error(`No se pudo resolver id_turno para ${date}`);
         return;
       }
-      console.log('[AcompañaGrupo] Updated rows:', updated);
-      refresh();
-    } catch (err: any) {
-      console.error('Error toggling acompa\u00f1a_grupo:', err);
-      toast.error(`Error: ${err.message || err}`);
-      setIsLoading(false);
+      data.addAssignmentDraft({
+        id: `acompanar-${resId}-${fechaDB}-${turnoId}-${deviceId}`,
+        table: 'menu_semana',
+        action: 'update',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
+        payload: updateObj,
+        uiDate: date,
+      });
     }
   };
 

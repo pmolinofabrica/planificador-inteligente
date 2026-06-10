@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { buildResidentCaps } from '@/lib/caps-builder';
+import { buildMutationKey, compactPendingMutations } from '@/lib/draftMutations';
 import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
@@ -28,21 +29,6 @@ interface StaticCache {
 }
 
 const DRAFT_AUDIT_ENABLED = true;
-
-const buildMutationKey = (m: PendingMutation) => {
-  const agentId = m.matchParams?.id_agente ?? m.payload?.id_agente ?? 'na';
-  const fecha = m.matchParams?.fecha_asignacion ?? m.payload?.fecha_asignacion ?? 'na';
-  const turno = m.matchParams?.id_turno ?? m.payload?.id_turno ?? 'na';
-  const dispositivo = m.matchParams?.id_dispositivo ?? m.payload?.id_dispositivo ?? 'na';
-  const grupo = m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? 'na';
-  const includeDevice = m.table === 'menu_semana' && (
-    String(m.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-    (m.matchParams?.id_dispositivo != null && m.matchParams?.id_dispositivo !== 999)
-  );
-  return includeDevice
-    ? [m.table, agentId, fecha, turno, dispositivo, grupo].join(':')
-    : [m.table, agentId, fecha, turno].join(':');
-};
 
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
@@ -72,6 +58,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>([]);
   const hasLoadedStatic = useRef(false);
   const staticCache = useRef<StaticCache | null>(null);
+  const isSavingRef = useRef(false);
 
   const addAssignmentDraft = useCallback((mutation: PendingMutation) => {
     const uiDate = mutation.uiDate;
@@ -116,6 +103,16 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       if (existingIndex !== -1) {
         const existing = prev[existingIndex];
         const next = [...prev];
+        const payloadKeys = Object.keys(mutation.payload || {});
+        const existingPayloadKeys = Object.keys(existing.payload || {});
+        const isAcompanaOnlyUpdate =
+          mutation.action === 'update' &&
+          payloadKeys.length === 1 &&
+          payloadKeys[0] === 'acompaña_grupo';
+        const existingIsAcompanaOnlyUpdate =
+          existing.action === 'update' &&
+          existingPayloadKeys.length === 1 &&
+          existingPayloadKeys[0] === 'acompaña_grupo';
 
         // Lógica de mezcla simplificada:
         // Si el nuevo es un 'remove' (dispositivo 999) y el anterior era un 'insert', simplemente eliminamos ambos
@@ -126,6 +123,25 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               key: buildMutationKey(mutation),
               removedExistingId: existing.id,
               incomingId: mutation.id,
+            });
+          }
+          return next;
+        }
+
+        if (isAcompanaOnlyUpdate || existingIsAcompanaOnlyUpdate) {
+          next[existingIndex] = {
+            ...existing,
+            ...mutation,
+            action: existing.action === 'insert' ? 'insert' : mutation.action,
+            matchParams: { ...existing.matchParams, ...mutation.matchParams },
+            payload: { ...existing.payload, ...mutation.payload },
+          };
+          if (DRAFT_AUDIT_ENABLED) {
+            console.info('[DraftAudit] merge-partial-update', {
+              key: buildMutationKey(mutation),
+              replacedId: existing.id,
+              incomingId: mutation.id,
+              finalAction: next[existingIndex].action,
             });
           }
           return next;
@@ -218,7 +234,16 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           }
 
           // Si el destino no es 999, lo agregamos al nuevo dispositivo
-          if (targetDispId && targetDispId !== 999) {
+          if (mutation.payload && Object.prototype.hasOwnProperty.call(mutation.payload, 'acompaña_grupo') && mutation.matchParams?.id_dispositivo) {
+            const dIdStr = String(mutation.matchParams.id_dispositivo);
+            if (next[uiDate][dIdStr]) {
+              next[uiDate][dIdStr] = next[uiDate][dIdStr].map((a) =>
+                a.id === agentId
+                  ? { ...a, acompana_grupo: mutation.payload['acompaña_grupo'], _isDraft: true }
+                  : a
+              );
+            }
+          } else if (targetDispId && targetDispId !== 999) {
             const dIdStr = String(targetDispId);
             if (!next[uiDate][dIdStr]) next[uiDate][dIdStr] = [];
             const incomingGroup = mutation.payload?.numero_grupo ?? null;
@@ -286,7 +311,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
   const saveDrafts = async () => {
     if (pendingMutations.length === 0) return { success: true };
+    if (isSavingRef.current) return { success: false, error: 'Ya hay un guardado en curso' };
+    isSavingRef.current = true;
     setIsLoading(true);
+    const mutationsToSave = compactPendingMutations(pendingMutations);
+    const processedMutationIds = new Set<string>();
     try {
       const persistMenuLike = async (
         table: 'menu' | 'menu_semana',
@@ -377,6 +406,38 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           return;
         }
 
+        const payloadKeys = Object.keys(cleanPayload || {});
+        const isPartialAssignmentUpdate =
+          action === 'update' &&
+          payloadKeys.length > 0 &&
+          payloadKeys.every((k) => !['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo', 'numero_grupo'].includes(k));
+        const isPartialMenuSemanaUpdate =
+          table === 'menu_semana' &&
+          isPartialAssignmentUpdate &&
+          isMenuSemanaMultiDevice &&
+          !hasPhysicalGroup;
+        const isPartialMenuUpdate =
+          table === 'menu' &&
+          isPartialAssignmentUpdate;
+
+        if (isPartialMenuSemanaUpdate || isPartialMenuUpdate) {
+          const updateKey = isPartialMenuUpdate ? (cleanMatchParams || logicalKey) : logicalKey;
+          if (DRAFT_AUDIT_ENABLED) {
+            console.info('[DraftAudit] sql-plan', {
+              table,
+              action,
+              logicalKey: updateKey,
+              statement: 'partial update matching logicalKey',
+              cleanPayload,
+            });
+          }
+          let updQ: any = supabase.from(table).update(cleanPayload);
+          for (const [k, v] of Object.entries(updateKey)) updQ = updQ.eq(k, v);
+          const { error: updErr } = await updQ;
+          if (updErr) throw new Error(`[${table}] Partial update failed: ${updErr.message}`);
+          return;
+        }
+
         let existingQ: any = supabase.from(table).select('*');
         for (const [k, v] of Object.entries(logicalKey)) existingQ = existingQ.eq(k, v);
         const { data: existingRows, error: existingErr } = await existingQ;
@@ -428,9 +489,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       };
 
       if (DRAFT_AUDIT_ENABLED) {
-        console.groupCollapsed(`[DraftAudit] save-start (${pendingMutations.length} mutaciones)`);
+        console.groupCollapsed(`[DraftAudit] save-start (${pendingMutations.length} mutaciones, ${mutationsToSave.length} compactadas)`);
         console.table(
-          pendingMutations.map((m, idx) => ({
+          mutationsToSave.map((m, idx) => ({
             idx,
             id: m.id,
             table: m.table,
@@ -443,7 +504,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         );
       }
 
-      const duplicates = pendingMutations.reduce((acc, m) => {
+      const duplicates = mutationsToSave.reduce((acc, m) => {
         const key = buildMutationKey(m);
         acc[key] = (acc[key] || 0) + 1;
         return acc;
@@ -453,7 +514,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         console.warn('[DraftAudit] duplicate logical keys in queue', duplicateKeys);
       }
 
-      for (const m of pendingMutations) {
+      for (const m of mutationsToSave) {
         const cleanPayload: any = m.payload ? Object.fromEntries(
           Object.entries(m.payload).filter(([key]) => !key.startsWith('_'))
         ) : null;
@@ -523,6 +584,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             key: buildMutationKey(m),
           });
         }
+        processedMutationIds.add(m.id);
       }
       setPendingMutations([]);
       setRefreshCounter(c => c + 1);
@@ -538,8 +600,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         console.error('[DraftAudit] save-failed', err);
         console.groupEnd();
       }
+      setPendingMutations(mutationsToSave.filter((m) => !processedMutationIds.has(m.id)));
       setIsLoading(false);
       return { success: false, error: err.message };
+    } finally {
+      isSavingRef.current = false;
     }
   };
 

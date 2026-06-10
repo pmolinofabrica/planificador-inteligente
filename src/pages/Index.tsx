@@ -94,6 +94,12 @@ const Index = () => {
     }
   };
 
+  const handleSaveDrafts = async () => {
+    if (data.isLoading) return;
+    const res = await data.saveDrafts();
+    if (!res.success) alert(`Error al guardar: ${res.error}`);
+  };
+
   const handleLockToggle = () => {
     if (!menuLocked) {
       setMenuLocked(true);
@@ -247,11 +253,9 @@ const Index = () => {
               {data.pendingMutations.length > 0 ? (
                 <>
                   <button
-                    onClick={async () => {
-                      const res = await data.saveDrafts();
-                      if (!res.success) alert(`Error al guardar: ${res.error}`);
-                    }}
-                    className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 flex items-center gap-1.5"
+                    onClick={handleSaveDrafts}
+                    disabled={data.isLoading}
+                    className="font-bold px-3 py-1.5 rounded-xl transition-colors shadow-warm text-xs border-2 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 flex items-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     💾 Guardar ({data.pendingMutations.length})
                   </button>
@@ -338,11 +342,9 @@ const Index = () => {
           {data.pendingMutations.length > 0 ? (
             <>
               <button
-                onClick={async () => {
-                  const res = await data.saveDrafts();
-                  if (!res.success) alert(`Error al guardar: ${res.error}`);
-                }}
-                className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1 bg-primary/10 border-primary/30 text-primary"
+                onClick={handleSaveDrafts}
+                disabled={data.isLoading}
+                className="font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] border flex items-center gap-1 flex-1 bg-primary/10 border-primary/30 text-primary disabled:opacity-50 disabled:pointer-events-none"
               >
                 💾 Guardar ({data.pendingMutations.length})
               </button>

@@ -30,7 +30,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     agentConvocatoriaMap, isLoading, setIsLoading, refresh,
     visitasByDate, turnoFilter, dateTurnoMap,
     aperturaMetricsDb, tardeMananaMetricsDb,
-    tipoOrganizacionMap, addAssignmentDraft, setAssignmentsDb,
+    tipoOrganizacionMap, addAssignmentDraft,
     agentTipoTurnoMap, llamadosByAsignacion, agentGroups,
   } = data;
 
@@ -135,44 +135,33 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       }
     }
 
-    setIsLoading(true);
-    try {
-      const updateObj: any = {};
-      updateObj['acompa\u00f1a_grupo'] = !current;
-      let query: any;
-      if (isAperturaMode) {
-        query = supabase.from('menu')
-          .update(updateObj)
-          .eq('id_agente', resId)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(deviceId))
-          .select();
-      } else {
-        const turnoId = dateTurnoMap[execDate] || 4;
-        query = supabase.from('menu_semana')
-          .update(updateObj)
-          .eq('id_agente', resId)
-          .eq('fecha_asignacion', fechaDB)
-          .eq('id_dispositivo', parseInt(deviceId))
-          .eq('id_turno', turnoId)
-          .select();
-      }
-      const { error, data: updated } = await query;
-      if (error) throw error;
-      if (!updated || updated.length === 0) {
-        console.warn('[Acompa\u00f1aGrupo] Update matched 0 rows', { resId, fechaDB, deviceId, isAperturaMode });
-        toast.error('No se encontró la fila para actualizar');
-        setIsLoading(false);
+    const updateObj: any = {};
+    updateObj['acompaña_grupo'] = !current;
+    if (isAperturaMode) {
+      addAssignmentDraft({
+        id: `acompanar-${resId}-${fechaDB}-${deviceId}`,
+        table: 'menu',
+        action: 'update',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(deviceId) },
+        payload: updateObj,
+        uiDate: execDate,
+      });
+    } else {
+      const turnoId = dateTurnoMap[execDate];
+      if (!turnoId) {
+        toast.error(`No se pudo resolver id_turno para ${execDate}`);
         return;
       }
-      toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
-      refresh();
-      setIsLoading(false);
-    } catch (err: any) {
-      console.error('Error toggling acompa\u00f1a_grupo:', err);
-      toast.error(`Error: ${err.message || err}`);
-      setIsLoading(false);
+      addAssignmentDraft({
+        id: `acompanar-${resId}-${fechaDB}-${turnoId}-${deviceId}`,
+        table: 'menu_semana',
+        action: 'update',
+        matchParams: { id_agente: resId, fecha_asignacion: fechaDB, id_turno: turnoId, id_dispositivo: parseInt(deviceId) },
+        payload: updateObj,
+        uiDate: execDate,
+      });
     }
+    toast.success(!current ? 'Marcado como acompañante' : 'Desmarcado como acompañante');
   };
 
   // Toggle group assignment for rotation modes (mirrors PlanningMatrix.handleGroupChange)
@@ -228,24 +217,6 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
       uiDate: execDate,
     });
 
-    setAssignmentsDb((prev: any) => {
-      const next = { ...prev };
-      const day = next[execDate] ? { ...next[execDate] } : {};
-      const deviceResidents = day[deviceId] || [];
-      day[deviceId] = deviceResidents.flatMap((r: any) => {
-        if (r.id !== resId) return [r];
-        const existing = Array.isArray(r.numero_grupos)
-          ? r.numero_grupos
-          : (r.numero_grupo != null ? [r.numero_grupo] : []);
-        const nextGroups = action === 'delete'
-          ? existing.filter((g: number) => g !== physicalGroup)
-          : Array.from(new Set([...existing, physicalGroup].filter((g): g is number => g != null))).sort((a, b) => a - b);
-        if (nextGroups.length === 0) return [{ ...r, numero_grupo: null, numero_grupos: [] }];
-        return [{ ...r, numero_grupo: nextGroups[0] ?? null, numero_grupos: nextGroups }];
-      });
-      next[execDate] = day;
-      return next;
-    });
   };
 
   // Remove resident from device
