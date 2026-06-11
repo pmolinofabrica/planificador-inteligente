@@ -21,6 +21,8 @@ interface Dispositivo { id_dispositivo: number; nombre_dispositivo: string; piso
 interface Asignacion { id_agente: number; id_dispositivo: number; fecha_asignacion: string; }
 interface Capacitacion { id_agente: number; id_dispositivo: number; fecha_capacitacion: string; }
 
+interface AcompanaEntry { id_agente: number; fecha_asignacion: string; }
+
 // Status Maps
 type StatusMap = Record<string, Record<number, string>>; // { "YYYY-MM-DD": { agenteId: "descanso" | "inasistencia" | "convocatoria" } }
 
@@ -33,6 +35,7 @@ export default function DashboardRotacion() {
     asignaciones: Asignacion[];
     capacitaciones: Capacitacion[];
     statusMap: StatusMap;
+    acompanaList: AcompanaEntry[];
   } | null>(null);
 
   const [selectedResidenteId, setSelectedResidenteId] = useState<string>("all");
@@ -117,7 +120,26 @@ export default function DashboardRotacion() {
       });
       (inasData || []).forEach(i => i.fecha_inasistencia && addStatus(i.fecha_inasistencia, i.id_agente, "inasistencia"));
 
-      setData({ residentes, dispositivos, asignaciones, capacitaciones, statusMap });
+      // 6. Cargar datos de acompaña_grupo (menu + menu_semana)
+      const [acompMenu, acompSemana] = await Promise.all([
+        supabase.from("menu").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", "2026-01-01").lte("fecha_asignacion", "2026-12-31"),
+        supabase.from("menu_semana").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", "2026-01-01").lte("fecha_asignacion", "2026-12-31"),
+      ]);
+      const acompanaList: AcompanaEntry[] = [];
+      const seen = new Set<string>();
+      const dedup = (row: { id_agente: number; fecha_asignacion: string | null }) => {
+        if (!row.fecha_asignacion) return;
+        const date = row.fecha_asignacion.split("T")[0];
+        if (!resIds.has(row.id_agente)) return;
+        const key = `${row.id_agente}-${date}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        acompanaList.push({ id_agente: row.id_agente, fecha_asignacion: date });
+      };
+      (acompMenu?.data || []).forEach(dedup);
+      (acompSemana?.data || []).forEach(dedup);
+
+      setData({ residentes, dispositivos, asignaciones, capacitaciones, statusMap, acompanaList });
       toast.success("Datos actualizados correctamente desde Supabase.");
     } catch (error: any) {
       console.error(error);
@@ -140,8 +162,8 @@ export default function DashboardRotacion() {
     }
   };
 
-  const { residentes, dispositivos, asignaciones, capacitaciones, statusMap } = data || {
-    residentes: [], dispositivos: [], asignaciones: [], capacitaciones: [], statusMap: {}
+  const { residentes, dispositivos, asignaciones, capacitaciones, statusMap, acompanaList } = data || {
+    residentes: [], dispositivos: [], asignaciones: [], capacitaciones: [], statusMap: {}, acompanaList: []
   };
 
   const datesApertura = useMemo(() => {
@@ -152,6 +174,17 @@ export default function DashboardRotacion() {
 
   const dispMap = useMemo(() => new Map(dispositivos.map(d => [d.id_dispositivo, d])), [dispositivos]);
   const resMap = useMemo(() => new Map(residentes.map(r => [r.id_agente, r])), [residentes]);
+
+  const acompanaMap = useMemo(() => {
+    const map = new Map<number, { count: number; dates: string[] }>();
+    acompanaList.forEach(a => {
+      if (!map.has(a.id_agente)) map.set(a.id_agente, { count: 0, dates: [] });
+      const entry = map.get(a.id_agente)!;
+      entry.count++;
+      if (!entry.dates.includes(a.fecha_asignacion)) entry.dates.push(a.fecha_asignacion);
+    });
+    return map;
+  }, [acompanaList]);
 
   // --- Capa 3: Métricas Globales ---
   const globalMetrics = useMemo(() => {
@@ -219,8 +252,12 @@ export default function DashboardRotacion() {
 
     const diversidad = ((dispCoordinados.size / (dispositivos.length || 1)) * 100).toFixed(1) + "%";
 
-    return { chartPorPiso, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad };
-  }, [selectedResidenteId, asignaciones, capacitaciones, dispMap, dispositivos.length]);
+    const acomp = acompanaMap.get(rId);
+    const acompanaCount = acomp?.count || 0;
+    const acompanaDates = acomp?.dates ? [...acomp.dates].sort() : [];
+
+    return { chartPorPiso, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad, acompanaCount, acompanaDates };
+  }, [selectedResidenteId, asignaciones, capacitaciones, dispMap, dispositivos.length, acompanaMap]);
 
   // --- Capa 2: Dispositivo ---
   const dispositivoStats = useMemo(() => {
@@ -395,7 +432,7 @@ export default function DashboardRotacion() {
 
             {residenteStats ? (
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                    <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex flex-col justify-center items-center text-center">
                       <span className="text-sm font-semibold text-blue-600 mb-1">Total Asignaciones</span>
                       <span className="text-3xl font-bold text-blue-900">{residenteStats.totalAsig}</span>
@@ -407,6 +444,15 @@ export default function DashboardRotacion() {
                    <div className="bg-purple-50/50 p-4 rounded-lg border border-purple-100 flex flex-col justify-center items-center text-center">
                       <span className="text-sm font-semibold text-purple-600 mb-1">Nivel de Diversidad</span>
                       <span className="text-3xl font-bold text-purple-900">{residenteStats.diversidad}</span>
+                   </div>
+                   <div className="bg-pink-50/50 p-4 rounded-lg border border-pink-100 flex flex-col justify-center items-center text-center">
+                      <span className="text-sm font-semibold text-pink-600 mb-1">🏫 Acompaña Grupo</span>
+                      <span className="text-3xl font-bold text-pink-900">{residenteStats.acompanaCount}</span>
+                      {residenteStats.acompanaCount > 0 && (
+                        <span className="text-[10px] text-pink-500 mt-1">
+                          {residenteStats.acompanaDates.length} fechas
+                        </span>
+                      )}
                    </div>
                 </div>
 
@@ -482,6 +528,21 @@ export default function DashboardRotacion() {
                   </div>
 
                 </div>
+
+                {residenteStats.acompanaCount > 0 && (
+                  <div className="border rounded-xl p-5 bg-pink-50/30 shadow-sm border-pink-100">
+                    <h3 className="font-semibold text-pink-800 mb-3 flex items-center gap-2">
+                      🏫 Historial de Acompaña Grupo ({residenteStats.acompanaCount} veces)
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {residenteStats.acompanaDates.map((date, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-pink-200 text-xs font-medium text-pink-700 shadow-sm">
+                          {formatDate(date)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             ) : (
               <CardContent className="p-12 text-center text-muted-foreground bg-slate-50 border-t">
@@ -602,6 +663,77 @@ export default function DashboardRotacion() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* TARJETA GLOBAL ACOMPAÑA GRUPO */}
+      <Card className="shadow-md border-t-4 border-t-pink-500">
+        <CardHeader className="bg-muted/30 pb-4 border-b flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              🏫 Ranking Acompaña Grupo
+            </CardTitle>
+            <CardDescription>
+              Residentes que acompañaron grupo, ordenados por cantidad de veces.
+            </CardDescription>
+          </div>
+          <Badge className="bg-pink-100 text-pink-800 hover:bg-pink-200 text-sm px-3 py-1">
+            {acompanaList.length} registros
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(() => {
+            const ranking = residentes
+              .map(r => {
+                const a = acompanaMap.get(r.id_agente);
+                return {
+                  residente: r.nombre_completo,
+                  count: a?.count || 0,
+                  lastDate: a?.dates?.length ? [...a.dates].sort().pop()! : null,
+                };
+              })
+              .filter(r => r.count > 0)
+              .sort((a, b) => b.count - a.count);
+
+            if (ranking.length === 0) {
+              return (
+                <div className="p-12 text-center text-muted-foreground">
+                  No hay registros de "acompaña grupo" en 2026.
+                </div>
+              );
+            }
+
+            return (
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="w-12 text-center">#</TableHead>
+                      <TableHead>Residente</TableHead>
+                      <TableHead className="text-center">Cantidad</TableHead>
+                      <TableHead className="text-right">Última Fecha</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ranking.map((item, idx) => (
+                      <TableRow key={idx} className={idx === 0 ? "bg-pink-50/50" : ""}>
+                        <TableCell className="text-center font-medium text-muted-foreground">{idx + 1}</TableCell>
+                        <TableCell className="font-semibold">{item.residente}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge className="bg-pink-100 text-pink-800 hover:bg-pink-200 min-w-[32px] justify-center text-sm px-3">
+                            {item.count}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          {item.lastDate ? formatDate(item.lastDate) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* MODAL RANKING DIVERSIDAD */}
       <Dialog open={showDiversidadModal} onOpenChange={setShowDiversidadModal}>
