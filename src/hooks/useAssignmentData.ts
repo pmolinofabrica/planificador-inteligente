@@ -47,6 +47,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
   const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
+  const [refuerzosDb, setRefuerzosDb] = useState<AssignmentsMatrix>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [llamadosByAsignacion, setLlamadosByAsignacion] = useState<Record<number, LlamadoInfo[]>>({});
   const [annualMetricsDb, setAnnualMetricsDb] = useState<AnnualMetricsMap>({});
@@ -683,7 +684,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         const activeCohorte = getActiveCohorteSync();
         const { data: rd } = await supabase
           .from('datos_personales')
-          .select('id_agente, nombre, apellido, cohorte')
+          .select('id_agente, nombre, apellido, cohorte, refuerzo, periodo_refuerzo')
           .eq('activo', true)
           .eq('cohorte', activeCohorte);
         
@@ -771,7 +772,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         // ═══════════════════════════════════════════════════════════
         // 5. ASIGNACIONES Y CONFIGURACION
         // ═══════════════════════════════════════════════════════════
-        const [menuRes, menuSemanaRes, configRes] = await Promise.all([
+        const [menuRes, menuSemanaRes, configRes, refuerzosRes] = await Promise.all([
           supabase.from('menu')
             .select('*')
             .gte('fecha_asignacion', startOfMonth)
@@ -783,12 +784,17 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           supabase.from('configuracion_turnos')
             .select('*')
             .gte('fecha', startOfMonth)
+            .lte('fecha', endOfMonth),
+          supabase.from('refuerzos_asignaciones')
+            .select('*')
+            .gte('fecha', startOfMonth)
             .lte('fecha', endOfMonth)
         ]);
 
         const menuData = menuRes.data || [];
         const menuSemanaData = menuSemanaRes.data || [];
         const configData = configRes.data || [];
+        const refuerzosRaw = refuerzosRes.data || [];
 
         if (DRAFT_AUDIT_ENABLED && menuSemanaData.length > 0) {
           const dupCounter: Record<string, number> = {};
@@ -1089,6 +1095,51 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           });
           setAssignmentsDb(matrix);
 
+          // ═══════════════════════════════════════════════════════════
+          // REFUERZOS: build separate matrix
+          // ═══════════════════════════════════════════════════════════
+          const refMatrix: AssignmentsMatrix = {};
+          if (refuerzosRaw.length > 0) {
+            // Build name lookup for refuerzo agents (they may not be in current cohort)
+            const missingIds = refuerzosRaw
+              .map((r: any) => r.id_agente)
+              .filter((id: number) => !nameDict[id]);
+            const uniqueMissing = [...new Set<number>(missingIds)];
+            let refNameDict = { ...nameDict };
+            if (uniqueMissing.length > 0) {
+              try {
+                const { data: refNames } = await supabase
+                  .from('datos_personales')
+                  .select('id_agente, nombre, apellido')
+                  .in('id_agente', uniqueMissing);
+                if (refNames) {
+                  refNames.forEach((rn: any) => {
+                    refNameDict[rn.id_agente] = `${rn.apellido} ${rn.nombre}`;
+                  });
+                }
+              } catch (e) {
+                console.error('Error loading refuerzo names:', e);
+              }
+            }
+            refuerzosRaw.forEach((r: any) => {
+              if (!r.fecha) return;
+              const [fy, fm, fd] = r.fecha.split('-');
+              if (fy !== yFilt || fm !== mmFilt) return;
+              const uiDate = formatUiDate(fd, fm);
+              const dId = String(r.id_dispositivo);
+              if (!refMatrix[uiDate]) refMatrix[uiDate] = {};
+              if (!refMatrix[uiDate][dId]) refMatrix[uiDate][dId] = [];
+              refMatrix[uiDate][dId].push({
+                id: r.id_agente,
+                name: refNameDict[r.id_agente] || "Desconocido",
+                score: 0,
+                numero_grupo: r.numero_grupo ?? null,
+                numero_grupos: r.numero_grupo != null ? [r.numero_grupo] : [],
+              });
+            });
+          }
+          setRefuerzosDb(refMatrix);
+
           const sorted = Array.from(allActiveDates).sort((a, b) => {
             const [dayA, monthA] = a.split("/").map(Number);
             const [dayB, monthB] = b.split("/").map(Number);
@@ -1293,7 +1344,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     dateTurnoMap, agentTipoTurnoMap, inasistenciasDb, agentConvocatoriaMap,
     agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
-    visitasByDate,
+    visitasByDate, refuerzosDb,
     llamadosByAsignacion,
     annualMetricsDb, // export anual metrics
     aperturaMetricsDb, // export apertura metrics

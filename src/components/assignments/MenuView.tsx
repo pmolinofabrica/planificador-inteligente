@@ -14,6 +14,7 @@ interface MenuViewProps {
   onLock?: (locked: boolean) => void;
   showCapacitadosColors?: boolean;
   showPisoColors?: boolean;
+  showRefuerzos?: boolean;
 }
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
@@ -26,7 +27,7 @@ const piso4Banners = [
   '/banners/banner4'
 ];
 
-export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock, showCapacitadosColors = true, showPisoColors = false }) => {
+export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock, showCapacitadosColors = true, showPisoColors = false, showRefuerzos = false }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
 
   const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
@@ -78,11 +79,12 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
     arr.forEach((r: any) => assignedIds.add(r.id));
   });
 
-  // Group devices by piso - only those with assignments
+  // Group devices by piso - only those with assignments or refuerzos
   const pisoGroups: Record<number, typeof dbDevices> = {};
   dbDevices.forEach((dev: any) => {
     const assignments: AssignmentEntry[] = dateAssignments[dev.id] || [];
-    if (assignments.length === 0) return;
+    const refuerzos = (data.refuerzosDb?.[currentDate]?.[dev.id] || []);
+    if (assignments.length === 0 && (!showRefuerzos || refuerzos.length === 0)) return;
     const p = dev.piso || 0;
     if (!pisoGroups[p]) pisoGroups[p] = [];
     pisoGroups[p].push(dev);
@@ -463,6 +465,24 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                         })}
                       </div>
                     )}
+                    {showRefuerzos && (() => {
+                      const deviceRefs = data.refuerzosDb?.[currentDate]?.[dev.id];
+                      if (!deviceRefs || deviceRefs.length === 0) return null;
+                      return (
+                        <div className="border-t border-dashed border-amber-300/40 mx-1.5 sm:mx-2 mt-1 pt-1 pb-1.5 space-y-0.5">
+                          {deviceRefs.map((rr: any, ri: number) => (
+                            <div key={ri} className="flex items-center gap-0.5 lg:gap-1 px-1 lg:px-2 py-0.5 lg:py-1.5 rounded-md border border-dashed border-amber-300/30 bg-amber-50/40 dark:bg-amber-900/10 text-[9px] lg:text-xs">
+                              <span className="font-bold truncate text-amber-700 dark:text-amber-300">{rr.name}</span>
+                              {rr.numero_grupo != null && (
+                                <span className={`text-[9px] lg:text-xs font-bold px-1 py-0.5 rounded border ${getGroupColor(rr.numero_grupo)} flex-shrink-0`}>
+                                  G{rr.numero_grupo}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

@@ -154,6 +154,8 @@ export interface AssignmentDataContext {
   isAgentAbsent: (agentId: number, uiDate: string) => boolean;
   isAgentCanceled: (agentId: number, uiDate: string) => boolean;
   getAbsenceMotivo?: (agentId: number, uiDate: string) => string;
+  // Refuerzos
+  refuerzosDb: AssignmentsMatrix;
   // Visitas y métricas
   visitasByDate: VisitasByDateMap;
   llamadosByAsignacion: Record<number, LlamadoInfo[]>;

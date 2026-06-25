@@ -1936,6 +1936,8 @@ export type Database = {
           fecha_nacimiento: string | null
           id_agente: number
           nombre: string
+          periodo_refuerzo: number[] | null
+          refuerzo: boolean | null
           telefono: string | null
         }
         Insert: {
@@ -1950,6 +1952,8 @@ export type Database = {
           fecha_nacimiento?: string | null
           id_agente?: number
           nombre: string
+          periodo_refuerzo?: number[] | null
+          refuerzo?: boolean | null
           telefono?: string | null
         }
         Update: {
@@ -1964,6 +1968,8 @@ export type Database = {
           fecha_nacimiento?: string | null
           id_agente?: number
           nombre?: string
+          periodo_refuerzo?: number[] | null
+          refuerzo?: boolean | null
           telefono?: string | null
         }
         Relationships: []
@@ -2952,6 +2958,51 @@ export type Database = {
           usa_horario_custom?: boolean | null
         }
         Relationships: []
+      }
+      refuerzos_asignaciones: {
+        Row: {
+          created_at: string | null
+          fecha: string
+          id_agente: number
+          id_dispositivo: number
+          id_refuerzo: number
+          id_turno: number | null
+          numero_grupo: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          fecha: string
+          id_agente: number
+          id_dispositivo: number
+          id_refuerzo?: number
+          id_turno?: number | null
+          numero_grupo?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          fecha?: string
+          id_agente?: number
+          id_dispositivo?: number
+          id_refuerzo?: number
+          id_turno?: number | null
+          numero_grupo?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refuerzos_asignaciones_id_agente_fkey"
+            columns: ["id_agente"]
+            isOneToOne: false
+            referencedRelation: "datos_personales"
+            referencedColumns: ["id_agente"]
+          },
+          {
+            foreignKeyName: "refuerzos_asignaciones_id_dispositivo_fkey"
+            columns: ["id_dispositivo"]
+            isOneToOne: false
+            referencedRelation: "dispositivos"
+            referencedColumns: ["id_dispositivo"]
+          },
+        ]
       }
       saldos: {
         Row: {

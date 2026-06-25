@@ -19,6 +19,7 @@ import { DateSidebar } from '@/components/assignments/DateSidebar';
 import { CellSidebar } from '@/components/assignments/CellSidebar';
 import { VacantsSidebar } from '@/components/assignments/VacantsSidebar';
 import { VacantActionSidebar } from '@/components/assignments/VacantActionSidebar';
+import { RefuerzosModal } from '@/components/assignments/RefuerzosModal';
 import type { ActiveTab, SelectedResident, SelectedDevice, SelectedVacant } from '@/types/assignments';
 
 const MONTHS_LIST = generateSchoolYearMonths();
@@ -40,6 +41,8 @@ const Index = () => {
   const [menuLocked, setMenuLocked] = useState(false);
   const [showUnlockInput, setShowUnlockInput] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
+  const [showRefuerzos, setShowRefuerzos] = useState(false);
+  const [refuerzosModalOpen, setRefuerzosModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const data = useAssignmentData({ selectedMonth, turnoFilter });
@@ -196,6 +199,13 @@ const Index = () => {
               title="Abrir Dashboard de Rotación"
             >
               <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+            <button
+              onClick={() => setRefuerzosModalOpen(true)}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+              title="Gestionar refuerzos"
+            >
+              💪
             </button>
             <button
               onClick={handleLockToggle}
@@ -457,7 +467,7 @@ const Index = () => {
         )}
 
         {activeTab === 'menu' && (
-          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} showCapacitadosColors={showCapacitadosColors} showPisoColors={showPisoColors} />
+          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} showCapacitadosColors={showCapacitadosColors} showPisoColors={showPisoColors} showRefuerzos={showRefuerzos} />
         )}
 
         {activeTab === 'exec' && (
@@ -486,6 +496,23 @@ const Index = () => {
           />
         )}
       </div>
+
+      {/* Refuerzos Modal */}
+      <RefuerzosModal
+        open={refuerzosModalOpen}
+        onClose={() => setRefuerzosModalOpen(false)}
+        activeDates={data.activeDates}
+        devices={data.dbDevices}
+        refuerzosDb={data.refuerzosDb}
+        assignmentsDb={data.assignmentsDb}
+        turnoFilter={turnoFilter}
+        dateTurnoMap={data.dateTurnoMap}
+        tipoOrganizacionMap={data.tipoOrganizacionMap}
+        onSaved={() => data.hardRefresh()}
+        year={year}
+        showRefuerzos={showRefuerzos}
+        onToggleShow={setShowRefuerzos}
+      />
 
       {/* Loading Overlay */}
       {data.isLoading && (
