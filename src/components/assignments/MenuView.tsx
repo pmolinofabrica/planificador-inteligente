@@ -397,7 +397,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                     </div>
                     {/* Resident list - horizontal columns for rotación, stacked otherwise */}
                     {isRotacionMode && distinctGroups.length > 0 ? (
-                      <div className="p-1 sm:p-2 flex gap-0.5 sm:gap-1">
+                      <div className="p-1 lg:p-2 flex gap-0.5 lg:gap-1">
                         {distinctGroups.map(gNum => {
                           const groupAssignments = assignments.filter(r => {
                             if (Array.isArray((r as any).numero_grupos) && (r as any).numero_grupos.length > 0) {
@@ -415,7 +415,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                 const canceled = isAgentCanceled && isAgentCanceled(res.id, currentDate);
                                 const isUnavailable = absent || canceled;
                                 return (
-                                  <div key={i} className={`flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1.5 rounded-md border text-[9px] sm:text-xs ${
+                                  <div key={i} className={`flex items-center gap-0.5 lg:gap-1 px-1 lg:px-2 py-0.5 lg:py-1.5 rounded-md border text-[9px] lg:text-xs ${
                                     isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
                                     <GroupBadge group={gNum} size="sm" />
@@ -555,7 +555,7 @@ function GroupBadge({ group, size = 'md' }: { group: number; size?: 'sm' | 'md' 
     : 'hsl(var(--group-3-accent))';
   const label = `${group}`;
   const cls = size === 'sm'
-    ? 'w-[18px] h-[18px] sm:w-7 sm:h-7 flex-shrink-0 drop-shadow-sm'
+    ? 'w-[18px] h-[18px] lg:w-7 lg:h-7 flex-shrink-0 drop-shadow-sm'
     : 'w-7 h-7 flex-shrink-0 drop-shadow-sm';
   if (group === 1) {
     return (
