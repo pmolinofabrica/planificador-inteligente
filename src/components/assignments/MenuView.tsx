@@ -397,7 +397,7 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                     </div>
                     {/* Resident list - horizontal columns for rotación, stacked otherwise */}
                     {isRotacionMode && distinctGroups.length > 0 ? (
-                      <div className="p-1.5 sm:p-2 flex gap-1">
+                      <div className="p-1 sm:p-2 flex gap-0.5 sm:gap-1">
                         {distinctGroups.map(gNum => {
                           const groupAssignments = assignments.filter(r => {
                             if (Array.isArray((r as any).numero_grupos) && (r as any).numero_grupos.length > 0) {
@@ -415,10 +415,10 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                 const canceled = isAgentCanceled && isAgentCanceled(res.id, currentDate);
                                 const isUnavailable = absent || canceled;
                                 return (
-                                  <div key={i} className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md border text-[10px] sm:text-xs ${
+                                  <div key={i} className={`flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1.5 rounded-md border text-[9px] sm:text-xs ${
                                     isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
                                   }`}>
-                                    <GroupBadge group={gNum} />
+                                    <GroupBadge group={gNum} size="sm" />
                               <span className={`font-bold truncate ${
                                       isUnavailable ? 'line-through text-muted-foreground'
                                       : getResidentColor(res.id)
@@ -549,14 +549,17 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
 };
 
 /** Group badge: shape with G1/G2/G3 label inside */
-function GroupBadge({ group }: { group: number }) {
+function GroupBadge({ group, size = 'md' }: { group: number; size?: 'sm' | 'md' }) {
   const color = group === 1 ? 'hsl(var(--group-1-accent))'
     : group === 2 ? 'hsl(var(--group-2-accent))'
     : 'hsl(var(--group-3-accent))';
   const label = `${group}`;
+  const cls = size === 'sm'
+    ? 'w-[18px] h-[18px] sm:w-7 sm:h-7 flex-shrink-0 drop-shadow-sm'
+    : 'w-7 h-7 flex-shrink-0 drop-shadow-sm';
   if (group === 1) {
     return (
-      <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+      <svg viewBox="0 0 24 24" className={cls}>
         <rect x="2" y="2" width="20" height="20" fill={color} rx="4" />
         <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
       </svg>
@@ -564,14 +567,14 @@ function GroupBadge({ group }: { group: number }) {
   }
   if (group === 2) {
     return (
-      <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+      <svg viewBox="0 0 24 24" className={cls}>
         <polygon points="12,3 22,22 2,22" fill={color} />
         <text x="12" y="19" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
       </svg>
     );
   }
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" className="flex-shrink-0 drop-shadow-sm">
+    <svg viewBox="0 0 24 24" className={cls}>
       <circle cx="12" cy="12" r="10" fill={color} />
       <text x="12" y="17" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif">{label}</text>
     </svg>
