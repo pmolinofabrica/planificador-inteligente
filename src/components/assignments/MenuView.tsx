@@ -32,7 +32,24 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
 
   const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
 
-  const [bannerIdx, setBannerIdx] = useState(0);
+  const [defaultBannerIdx, setDefaultBannerIdx] = useState(() => {
+    const saved = localStorage.getItem('defaultBannerIdx');
+    if (saved !== null) {
+      const idx = parseInt(saved, 10);
+      if (idx >= 0 && idx < piso4Banners.length) {
+        return idx;
+      }
+    }
+    return 0;
+  });
+
+  const [bannerIdx, setBannerIdx] = useState(defaultBannerIdx);
+
+  const handleSetDefaultBanner = (idx: number) => {
+    localStorage.setItem('defaultBannerIdx', String(idx));
+    setDefaultBannerIdx(idx);
+  };
+
   const [motivoPopup, setMotivoPopup] = useState<{ name: string; motivo: string } | null>(null);
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
@@ -359,13 +376,24 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                   }}
                 />
 
-                <div className="relative z-10 w-full flex justify-end px-3 sm:px-4">
+                 <div className="relative z-10 w-full flex justify-end gap-2 px-3 sm:px-4">
                   <button
                     onClick={() => setBannerIdx((prev) => (prev + 1) % piso4Banners.length)}
                     title="Cambiar diseño del banner"
-                    className="p-1.5 sm:p-2 rounded-md bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition-colors text-xs font-bold opacity-0 group-hover:opacity-100 shadow-sm"
+                    className="p-1.5 sm:p-2 rounded-md bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition-colors text-xs font-bold opacity-0 group-hover:opacity-100 shadow-sm animate-fade-in"
                   >
                     ✨ Rotar Imagen
+                  </button>
+                  <button
+                    onClick={() => handleSetDefaultBanner(bannerIdx)}
+                    title="Fijar este banner como predeterminado"
+                    className={`p-1.5 sm:p-2 rounded-md text-white backdrop-blur-sm transition-all text-xs font-bold opacity-0 group-hover:opacity-100 shadow-sm ${
+                      bannerIdx === defaultBannerIdx
+                        ? 'bg-emerald-600/80 hover:bg-emerald-600'
+                        : 'bg-black/40 hover:bg-black/60'
+                    }`}
+                  >
+                    {bannerIdx === defaultBannerIdx ? '📌 Fijado' : '📌 Fijar Banner'}
                   </button>
                 </div>
               </div>
