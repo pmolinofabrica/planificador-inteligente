@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RefreshCw, Activity, Users, Map as MapIcon, Award, Calendar, ArrowLeft } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,11 +34,14 @@ export default function DashboardRotacion() {
     residentes: Residente[];
     dispositivos: Dispositivo[];
     asignaciones: Asignacion[];
+    tmAsignaciones: Asignacion[];
     capacitaciones: Capacitacion[];
     statusMap: StatusMap;
+    tmStatusMap: StatusMap;
     acompanaList: AcompanaEntry[];
   } | null>(null);
 
+  const [turnoMode, setTurnoMode] = useState<'apertura' | 'tm' | 'total'>('apertura');
   const [selectedResidenteId, setSelectedResidenteId] = useState<string>("all");
   const [selectedDispositivoId, setSelectedDispositivoId] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string>("all");
@@ -85,6 +89,23 @@ export default function DashboardRotacion() {
         return dow === 0 || dow === 6;
       }).map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] }));
 
+      // 3b. Cargar datos T/M (Turno Mañana/Tarde) - consulta optimizada con filtro por id_turno
+      const { data: turnosAll } = await supabase.from("turnos").select("id_turno, tipo_turno");
+      const tmIds = (turnosAll || []).filter(t => t.tipo_turno?.toLowerCase().includes('turno')).map(t => t.id_turno);
+      let tmAsignaciones: Asignacion[] = [];
+      if (tmIds.length > 0) {
+        const { data: tmRaw } = await supabase
+          .from("menu_semana")
+          .select("id_agente, id_dispositivo, fecha_asignacion")
+          .in("id_turno", tmIds)
+          .gte("fecha_asignacion", "2026-01-01")
+          .lte("fecha_asignacion", "2026-12-31")
+          .not("id_dispositivo", "is", null);
+        tmAsignaciones = (tmRaw || [])
+          .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
+          .map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] }));
+      }
+
       // 4. Cargar Capacitaciones
       const { data: capData, error: err4 } = await supabase
         .from("vista_agentes_capacitados")
@@ -103,22 +124,30 @@ export default function DashboardRotacion() {
       const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").gte("fecha_inasistencia", "2026-01-01").lte("fecha_inasistencia", "2026-12-31");
       const { data: convData } = await supabase.from("vista_convocatoria_completa").select("id_agente, fecha_turno, tipo_turno").eq("anio", 2026).neq("estado", "cancelada");
 
-      const statusMap: StatusMap = {};
-      const addStatus = (dateStr: string, agent: number, status: string) => {
+      const addStatus = (map: StatusMap, dateStr: string, agent: number, status: string) => {
         const date = dateStr.split("T")[0]; // Evitar diferencias por huso horario (timestamps)
-        if (!statusMap[date]) statusMap[date] = {};
+        if (!map[date]) map[date] = {};
         // Prioridad: Inasistencia > Convocatoria
-        if (!statusMap[date][agent] || status === "inasistencia") {
-          statusMap[date][agent] = status;
+        if (!map[date][agent] || status === "inasistencia") {
+          map[date][agent] = status;
         }
       };
 
+      const statusMap: StatusMap = {};
+      const tmStatusMap: StatusMap = {};
       (convData || []).forEach(c => {
         if (!c.fecha_turno) return;
-        const status = c.tipo_turno?.toLowerCase().includes("apertura") ? "convocatoria" : "descanso";
-        addStatus(c.fecha_turno, c.id_agente, status);
+        const aperturaStatus = c.tipo_turno?.toLowerCase().includes("apertura") ? "convocatoria" : "descanso";
+        addStatus(statusMap, c.fecha_turno, c.id_agente, aperturaStatus);
+        const tmStatus = c.tipo_turno?.toLowerCase().includes('turno') ? "convocatoria" : "descanso";
+        addStatus(tmStatusMap, c.fecha_turno, c.id_agente, tmStatus);
       });
-      (inasData || []).forEach(i => i.fecha_inasistencia && addStatus(i.fecha_inasistencia, i.id_agente, "inasistencia"));
+      (inasData || []).forEach(i => {
+        if (i.fecha_inasistencia) {
+          addStatus(statusMap, i.fecha_inasistencia, i.id_agente, "inasistencia");
+          addStatus(tmStatusMap, i.fecha_inasistencia, i.id_agente, "inasistencia");
+        }
+      });
 
       // 6. Cargar datos de acompaña_grupo (menu + menu_semana)
       const [acompMenu, acompSemana] = await Promise.all([
@@ -139,7 +168,7 @@ export default function DashboardRotacion() {
       (acompMenu?.data || []).forEach(dedup);
       (acompSemana?.data || []).forEach(dedup);
 
-      setData({ residentes, dispositivos, asignaciones, capacitaciones, statusMap, acompanaList });
+      setData({ residentes, dispositivos, asignaciones, tmAsignaciones, capacitaciones, statusMap, tmStatusMap, acompanaList });
       toast.success("Datos actualizados correctamente desde Supabase.");
     } catch (error: any) {
       console.error(error);
@@ -162,9 +191,33 @@ export default function DashboardRotacion() {
     }
   };
 
-  const { residentes, dispositivos, asignaciones, capacitaciones, statusMap, acompanaList } = data || {
-    residentes: [], dispositivos: [], asignaciones: [], capacitaciones: [], statusMap: {}, acompanaList: []
+  const { residentes, dispositivos, asignaciones: aperturaAsignaciones, tmAsignaciones, capacitaciones, statusMap: aperturaStatusMap, tmStatusMap, acompanaList } = data || {
+    residentes: [], dispositivos: [], asignaciones: [], tmAsignaciones: [], capacitaciones: [], statusMap: {}, tmStatusMap: {}, acompanaList: []
   };
+
+  const asignaciones = useMemo(() => {
+    if (turnoMode === 'apertura') return aperturaAsignaciones;
+    if (turnoMode === 'tm') return tmAsignaciones;
+    return aperturaAsignaciones.concat(tmAsignaciones);
+  }, [turnoMode, aperturaAsignaciones, tmAsignaciones]);
+
+  const statusMap = useMemo(() => {
+    if (turnoMode === 'apertura') return aperturaStatusMap;
+    if (turnoMode === 'tm') return tmStatusMap;
+    const merged: StatusMap = {};
+    for (const map of [aperturaStatusMap, tmStatusMap]) {
+      for (const [date, agents] of Object.entries(map)) {
+        if (!merged[date]) merged[date] = {};
+        for (const [agentId, status] of Object.entries(agents)) {
+          const aId = Number(agentId);
+          if (!merged[date][aId] || status === 'inasistencia') {
+            merged[date][aId] = status;
+          }
+        }
+      }
+    }
+    return merged;
+  }, [turnoMode, aperturaStatusMap, tmStatusMap]);
 
   const datesApertura = useMemo(() => {
     const dates = new Set<string>();
@@ -219,17 +272,35 @@ export default function DashboardRotacion() {
   const residenteStats = useMemo(() => {
     if (selectedResidenteId === "all") return null;
     const rId = parseInt(selectedResidenteId);
-    
-    const misAsig = asignaciones.filter(a => a.id_agente === rId);
+
+    const misAsigApertura = aperturaAsignaciones.filter(a => a.id_agente === rId);
+    const misAsigTm = tmAsignaciones.filter(a => a.id_agente === rId);
+    const misAsig = turnoMode === 'apertura' ? misAsigApertura : turnoMode === 'tm' ? misAsigTm : [...misAsigApertura, ...misAsigTm];
     const conteoPorDisp = new Map<number, number>();
     misAsig.forEach(a => conteoPorDisp.set(a.id_dispositivo, (conteoPorDisp.get(a.id_dispositivo) || 0) + 1));
-    
+
     const porPisoObj: Record<string, number> = {};
     conteoPorDisp.forEach((count, dId) => {
       const piso = dispMap.get(dId)?.piso_dispositivo?.toString() || "Otro";
       porPisoObj[`Piso ${piso}`] = (porPisoObj[`Piso ${piso}`] || 0) + count;
     });
     const chartPorPiso = Object.entries(porPisoObj).map(([piso, count]) => ({ piso, cantidad: count })).sort((a,b) => a.piso.localeCompare(b.piso));
+
+    // Per-piso split for Total mode
+    const porPisoAp: Record<string, number> = {};
+    const porPisoTm: Record<string, number> = {};
+    misAsigApertura.forEach(a => {
+      const piso = dispMap.get(a.id_dispositivo)?.piso_dispositivo?.toString() || "Otro";
+      porPisoAp[`Piso ${piso}`] = (porPisoAp[`Piso ${piso}`] || 0) + 1;
+    });
+    misAsigTm.forEach(a => {
+      const piso = dispMap.get(a.id_dispositivo)?.piso_dispositivo?.toString() || "Otro";
+      porPisoTm[`Piso ${piso}`] = (porPisoTm[`Piso ${piso}`] || 0) + 1;
+    });
+    const allPisos = new Set([...Object.keys(porPisoAp), ...Object.keys(porPisoTm)]);
+    const chartPorPisoSplit = turnoMode === 'total'
+      ? Array.from(allPisos).sort().map(piso => ({ piso, ap: porPisoAp[piso] || 0, tm: porPisoTm[piso] || 0 }))
+      : undefined;
 
     const listaTop = Array.from(conteoPorDisp.entries())
       .map(([dId, count]) => ({ dispositivo: dispMap.get(dId)?.nombre_dispositivo || "Desc.", cantidad: count }))
@@ -256,8 +327,8 @@ export default function DashboardRotacion() {
     const acompanaCount = acomp?.count || 0;
     const acompanaDates = acomp?.dates ? [...acomp.dates].sort() : [];
 
-    return { chartPorPiso, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad, acompanaCount, acompanaDates };
-  }, [selectedResidenteId, asignaciones, capacitaciones, dispMap, dispositivos.length, acompanaMap]);
+    return { chartPorPiso, chartPorPisoSplit, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad, acompanaCount, acompanaDates };
+  }, [selectedResidenteId, turnoMode, aperturaAsignaciones, tmAsignaciones, capacitaciones, dispMap, dispositivos.length, acompanaMap]);
 
   // --- Capa 2: Dispositivo ---
   const dispositivoStats = useMemo(() => {
@@ -326,11 +397,27 @@ export default function DashboardRotacion() {
               Rotaciones dispositivos
             </h1>
             <p className="text-muted-foreground mt-1">
-              Cohorte 2026 - Asignaciones de Fin de Semana
+              Cohorte 2026 - {turnoMode === 'apertura' ? 'Asignaciones Apertura (FDS)' : turnoMode === 'tm' ? 'Asignaciones Turno Mañana/Tarde' : 'Asignaciones Totales (Ap + T/M)'}
             </p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <ToggleGroup
+            type="single"
+            value={turnoMode}
+            onValueChange={(v) => { if (v) setTurnoMode(v as 'apertura' | 'tm' | 'total'); }}
+            className="bg-slate-100 p-1 rounded-lg border shadow-sm"
+          >
+            <ToggleGroupItem value="apertura" className="text-xs font-medium px-3 data-[state=on]:bg-blue-600 data-[state=on]:text-white data-[state=on]:shadow-sm rounded-md">
+              Ap
+            </ToggleGroupItem>
+            <ToggleGroupItem value="total" className="text-xs font-medium px-3 data-[state=on]:bg-slate-700 data-[state=on]:text-white data-[state=on]:shadow-sm rounded-md">
+              Total
+            </ToggleGroupItem>
+            <ToggleGroupItem value="tm" className="text-xs font-medium px-3 data-[state=on]:bg-amber-600 data-[state=on]:text-white data-[state=on]:shadow-sm rounded-md">
+              T/M
+            </ToggleGroupItem>
+          </ToggleGroup>
           {datesApertura.length > 0 && (
             <Select value={selectedDate} onValueChange={setSelectedDate}>
               <SelectTrigger className="w-[180px] bg-white border-primary/20 shadow-sm">
@@ -356,7 +443,7 @@ export default function DashboardRotacion() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-sm border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Asignaciones FDS</CardTitle>
+            <CardTitle className="text-sm font-medium">{turnoMode === 'apertura' ? 'Asignaciones FDS' : turnoMode === 'tm' ? 'Asignaciones T/M' : 'Asignaciones Totales'}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -462,17 +549,40 @@ export default function DashboardRotacion() {
                     <h3 className="font-semibold text-lg mb-4 text-slate-800">Coordinaciones según Piso</h3>
                     <div className="h-[250px] w-full mb-6">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={residenteStats.chartPorPiso} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                          <XAxis dataKey="piso" axisLine={false} tickLine={false} />
-                          <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
-                          <RechartsTooltip cursor={{fill: '#F1F5F9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                          <Bar dataKey="cantidad" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40}>
-                            {residenteStats.chartPorPiso.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'][index % 5]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
+                        {residenteStats.chartPorPisoSplit ? (
+                          <BarChart data={residenteStats.chartPorPisoSplit} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                            <XAxis dataKey="piso" axisLine={false} tickLine={false} />
+                            <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
+                            <RechartsTooltip
+                              cursor={{fill: '#F1F5F9'}}
+                              contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                              formatter={(value: number, name: string) => [value, name === 'Ap' ? 'Apertura' : 'T/M']}
+                            />
+                            <Bar dataKey="ap" stackId="a" fillOpacity={0.35} radius={[0, 0, 0, 0]} barSize={40} name="Ap">
+                              {residenteStats.chartPorPisoSplit.map((entry, index) => (
+                                <Cell key={`ap-${index}`} fill={['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'][index % 5]} />
+                              ))}
+                            </Bar>
+                            <Bar dataKey="tm" stackId="a" radius={[4, 4, 0, 0]} barSize={40} name="T/M">
+                              {residenteStats.chartPorPisoSplit.map((entry, index) => (
+                                <Cell key={`tm-${index}`} fill={['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'][index % 5]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        ) : (
+                          <BarChart data={residenteStats.chartPorPiso} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                            <XAxis dataKey="piso" axisLine={false} tickLine={false} />
+                            <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
+                            <RechartsTooltip cursor={{fill: '#F1F5F9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                            <Bar dataKey="cantidad" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40}>
+                              {residenteStats.chartPorPiso.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'][index % 5]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        )}
                       </ResponsiveContainer>
                     </div>
 
@@ -565,8 +675,11 @@ export default function DashboardRotacion() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">-- Seleccionar Dispositivo --</SelectItem>
-                    {dispositivos.map(d => (
-                      <SelectItem key={d.id_dispositivo} value={d.id_dispositivo.toString()}>{d.nombre_dispositivo} (Piso {d.piso_dispositivo})</SelectItem>
+                    {[...dispositivos].sort((a, b) => a.piso_dispositivo - b.piso_dispositivo || a.nombre_dispositivo.localeCompare(b.nombre_dispositivo)).map(d => (
+                      <SelectItem key={d.id_dispositivo} value={d.id_dispositivo.toString()}
+                        className={d.piso_dispositivo === 1 ? 'bg-[hsl(var(--floor-1-bg))]' : d.piso_dispositivo === 2 ? 'bg-[hsl(var(--floor-2-bg))]' : d.piso_dispositivo === 3 ? 'bg-[hsl(var(--floor-3-bg))]' : ''}>
+                        {d.nombre_dispositivo} (Piso {d.piso_dispositivo})
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -615,7 +728,7 @@ export default function DashboardRotacion() {
                               </TableCell>
                             </TableRow>
                           )) : (
-                            <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground h-32">Nadie fue asignado a este dispositivo los FDS</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground h-32">Nadie fue asignado a este dispositivo{turnoMode !== 'total' ? ` en ${turnoMode === 'apertura' ? 'FDS' : 'T/M'}` : ''}</TableCell></TableRow>
                           )}
                         </TableBody>
                       </Table>
@@ -641,7 +754,7 @@ export default function DashboardRotacion() {
                                 <span className="text-xs flex items-center gap-1 text-slate-500">
                                   <Calendar className="w-3 h-3" /> {formatDate(r.fechaCap)}
                                 </span>
-                                <Badge variant="outline" className="text-xs text-orange-600 bg-orange-50 border-orange-200">0 FDS</Badge>
+                                <Badge variant="outline" className="text-xs text-orange-600 bg-orange-50 border-orange-200">0 {turnoMode === 'apertura' ? 'FDS' : turnoMode === 'tm' ? 'T/M' : 'Total'}</Badge>
                               </div>
                             </div>
                           ))
