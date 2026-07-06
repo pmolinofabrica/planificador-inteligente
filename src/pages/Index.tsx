@@ -45,10 +45,10 @@ const Index = () => {
   const [refuerzosModalOpen, setRefuerzosModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const data = useAssignmentData({ selectedMonth, turnoFilter });
-  const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors } = useSettings();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura } = useSettings();
+  const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura });
+  const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 
   // Selection states
   const [selectedResident, setSelectedResident] = useState<SelectedResident | null>(null);
@@ -251,6 +251,19 @@ const Index = () => {
                   </div>
                   <p className="text-[10px] text-muted-foreground/60 leading-tight">
                     Colorea nombres según el piso con menos coordinaciones.
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="multi-apertura" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Multi-dispositivo apertura
+                    </label>
+                    <Switch
+                      id="multi-apertura"
+                      checked={allowMultiDispositivoApertura}
+                      onCheckedChange={setAllowMultiDispositivoApertura}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    Permite asignar un residente a +1 dispositivo por día en apertura al público.
                   </p>
                 </div>
               </PopoverContent>

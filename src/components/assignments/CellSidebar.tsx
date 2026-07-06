@@ -107,6 +107,15 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
   const cupoLimit = data.calendarDb[selectedDate]?.[deviceId] || disp?.max || 0;
   const currentCount = currentAssignments.length;
 
+  const deviceCountPerResident: Record<number, number> = {};
+  if (data.allowMultiDispositivoApertura) {
+    Object.values(assignmentsDb[selectedDate] || {}).forEach((arr: any) => {
+      (arr || []).forEach((r: any) => {
+        deviceCountPerResident[r.id] = (deviceCountPerResident[r.id] || 0) + 1;
+      });
+    });
+  }
+
   const handleAssign = async (agentId: number) => {
     if (isLoading) return;
 
@@ -179,45 +188,60 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
       const resName = data.allResidentsDb?.find((r:any) => r.id === agentId)?.name || "Borrador";
 
       if (isApertura) {
-        const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
-          .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB);
-        if (fetchErr) throw fetchErr;
+        if (data.allowMultiDispositivoApertura) {
+          data.addAssignmentDraft({
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}-${deviceId}`,
+            table: 'menu',
+            action: 'upsert',
+            matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: parseInt(deviceId) },
+            payload: {
+              id_agente: agentId, id_dispositivo: parseInt(deviceId),
+              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
+              _ui_name: resName,
+            },
+            uiDate: selectedDate
+          });
+        } else {
+          const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
+            .eq('id_agente', agentId).eq('fecha_asignacion', fechaDB);
+          if (fetchErr) throw fetchErr;
 
-        if (existing && existing.length > 0) {
-          const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
-          const firstRow = existing[0];
-          if (vacantRow) {
-            data.addAssignmentDraft({
-              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-              table: 'menu',
-              action: 'update',
-              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999 },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
-              uiDate: selectedDate
-            });
+          if (existing && existing.length > 0) {
+            const vacantRow = existing.find((m: any) => m.id_dispositivo === 999);
+            const firstRow = existing[0];
+            if (vacantRow) {
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu',
+                action: 'update',
+                matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: 999 },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedDate
+              });
+            } else {
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu',
+                action: 'update',
+                matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedDate
+              });
+            }
           } else {
             data.addAssignmentDraft({
               id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
               table: 'menu',
-              action: 'update',
-              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+              action: 'insert',
+                matchParams: { id_agente: agentId, fecha_asignacion: fechaDB },
+              payload: {
+                id_agente: agentId, id_dispositivo: parseInt(deviceId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
+                _ui_name: resName
+              },
               uiDate: selectedDate
             });
           }
-        } else {
-          data.addAssignmentDraft({
-            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-            table: 'menu',
-            action: 'insert',
-              matchParams: { id_agente: agentId, fecha_asignacion: fechaDB },
-            payload: {
-              id_agente: agentId, id_dispositivo: parseInt(deviceId),
-              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
-              _ui_name: resName
-            },
-            uiDate: selectedDate
-          });
         }
       } else {
         const turnoId = dateTurnoMap[selectedDate];
@@ -416,7 +440,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   setSelectedDevice(null);
                   setSelectedDateFilter(null);
                 }}
-                className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.dbDevices.length, data.annualMetricsDb).localReps)}`}>
+                className={`p-2 rounded border text-xs font-bold cursor-pointer hover:ring-2 hover:ring-primary/30 flex items-center justify-between ${getRepsColor(computeRotationMetrics(res.id, selectedDevice.id, data.dbDevices.length, data.annualMetricsDb).localReps)} ${(deviceCountPerResident[res.id] || 0) > 1 ? 'brightness-90 underline decoration-2 decoration-dotted underline-offset-4' : ''}`}>
                 <span className="flex items-center gap-1">
                   {isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
                   {res.name}

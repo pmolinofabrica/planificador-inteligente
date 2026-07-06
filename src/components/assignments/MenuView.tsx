@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Lock, Unlock } from 'lucide-react';
-import { getFloorColor, getGroupColor, computeLeastFloors, getFloorTextClass } from '@/lib/floor-utils';
+import { getFloorColor, getGroupColor, computeLeastFloors, getFloorTextClass, getFloorLightBg, getPisoFromDeviceName } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentEntry } from '@/types/assignments';
@@ -189,6 +189,17 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
     if (!showPisoColors) return {};
     return computeLeastFloors(dateAssignments, dbDevices);
   }, [showPisoColors, dateAssignments, dbDevices]);
+
+  const multiDeviceResCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    if (!data.allowMultiDispositivoApertura) return counts;
+    Object.values(dateAssignments).forEach((arr: any) => {
+      (arr || []).forEach((r: any) => {
+        counts[r.id] = (counts[r.id] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [data.allowMultiDispositivoApertura, dateAssignments]);
 
   const getResidentColor = (resId: number): string => {
     if (showPisoColors && leastFloors[resId] != null) {
@@ -446,7 +457,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                 const isUnavailable = absent || canceled;
                                 return (
                                   <div key={i} className={`flex items-center gap-0.5 lg:gap-1 px-1 lg:px-2 py-0.5 lg:py-1.5 rounded-md border text-[9px] lg:text-xs ${
-                                    isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                                    isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60'
+                                    : (multiDeviceResCounts[res.id] > 1 ? `${getFloorLightBg(getPisoFromDeviceName(dev.name))} border-border` : 'bg-card border-border')
                                   }`}>
                                     <GroupBadge group={gNum} size="sm" />
                               <span className={`font-bold truncate ${
@@ -474,7 +486,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                           const group = res.numero_grupo;
                           return (
                             <div key={i} className={`flex items-center justify-between px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border text-[11px] sm:text-xs ${
-                              isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60' : 'bg-card border-border'
+                              isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60'
+                              : (multiDeviceResCounts[res.id] > 1 ? `${getFloorLightBg(getPisoFromDeviceName(dev.name))} border-border` : 'bg-card border-border')
                             }`}>
                               <span className={`font-bold truncate ${
                                 isUnavailable ? 'line-through text-muted-foreground'

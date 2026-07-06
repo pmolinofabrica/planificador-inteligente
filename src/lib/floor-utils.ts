@@ -105,6 +105,13 @@ export const getPisoFromDeviceName = (name: string): string => {
   return match ? match[1] : '1';
 };
 
+export const getFloorLightBg = (piso: string): string => {
+  if (piso === '1' || piso === 'P1') return 'floor-p1-light';
+  if (piso === '2' || piso === 'P2') return 'floor-p2-light';
+  if (piso === '3' || piso === 'P3') return 'floor-p3-light';
+  return 'floor-p4-light';
+};
+
 export const getPisoBadgeColor = (piso: string): string => {
   if (piso === 'P1') return 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]';
   if (piso === 'P2') return 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]';

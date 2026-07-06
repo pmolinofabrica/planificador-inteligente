@@ -87,6 +87,21 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
     return computeLeastFloors(allAssignments, dbDevices);
   }, [showPisoColors, activeDates, assignmentsDb, dbDevices]);
 
+  const multiDeviceDateMap = useMemo(() => {
+    const map: Record<string, Set<number>> = {};
+    if (!data.allowMultiDispositivoApertura) return map;
+    activeDates.forEach(date => {
+      const counts: Record<number, number> = {};
+      Object.values(assignmentsDb[date] || {}).forEach((residents: any) => {
+        (residents || []).forEach((r: any) => {
+          counts[r.id] = (counts[r.id] || 0) + 1;
+        });
+      });
+      map[date] = new Set(Object.entries(counts).filter(([, c]) => c > 1).map(([id]) => Number(id)));
+    });
+    return map;
+  }, [data.allowMultiDispositivoApertura, activeDates, assignmentsDb]);
+
   const getResidentColor = (resId: number): string => {
     if (showPisoColors && leastFloors[resId] != null) {
       return getFloorTextClass(leastFloors[resId]);
@@ -465,7 +480,8 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                     }}
                                     className={`text-left px-2 py-1.5 rounded border text-sm flex justify-between items-center transition-all cursor-pointer
                                       ${absent ? 'bg-stone-100 text-stone-600 border-stone-400 border-dashed' : getRepsColor(metrics.localReps)}
-                                      ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}`
+                                      ${selectedResident?.name === res.name && selectedResident?.date === date ? 'ring-2 ring-primary shadow-md scale-[1.03] z-10 font-bold' : 'hover:scale-[1.02] hover:shadow-sm'}
+                                      ${multiDeviceDateMap[date]?.has(res.id) ? 'brightness-90 underline decoration-2 decoration-dotted underline-offset-4' : ''}`
                                     }
                                     style={isRotation ? { gridColumn: `${groupColMin + 1} / ${groupColMax + 2}` } : undefined}
                                   >

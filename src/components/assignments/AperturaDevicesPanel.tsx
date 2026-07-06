@@ -334,6 +334,15 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     '4': { label: 'P4', bgClass: 'bg-muted-foreground', borderClass: 'border-muted-foreground' },
   };
 
+  const multiDeviceResCounts: Record<number, number> = {};
+  if (data.allowMultiDispositivoApertura) {
+    Object.values(assignmentsDb[execDate] || {}).forEach((arr: any) => {
+      (arr || []).forEach((r: any) => {
+        multiDeviceResCounts[r.id] = (multiDeviceResCounts[r.id] || 0) + 1;
+      });
+    });
+  }
+
   const ResidentCard = ({
     res, device, isAbsent, isAcompanante, isEditing,
     visitas, residentFloorCounts,
@@ -355,11 +364,12 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     const floorCounts = residentFloorCounts[res.id] || {};
     const apCount = aperturaMetricsDb?.[res.id]?.deviceReps?.[device.id] || 0;
     const tmCount = tardeMananaMetricsDb?.[res.id]?.deviceReps?.[device.id] || 0;
+    const isMultiAssigned = (multiDeviceResCounts[res.id] || 0) > 1;
 
     return (
       <div className={`p-3 rounded-lg border text-sm ${
         isAbsent ? 'border-dashed border-muted-foreground/30 bg-muted/30' : 'border-border bg-muted/30'
-      }`}>
+      } ${isMultiAssigned ? 'brightness-90 underline decoration-2 decoration-dotted underline-offset-4' : ''}`}>
         {/* Row 1: name + controls */}
         <div className="flex items-center justify-between gap-1.5">
           <span className={`font-bold truncate ${isAbsent ? 'line-through text-muted-foreground' : getResidentColor(res.id)}`}>

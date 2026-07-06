@@ -14,6 +14,7 @@ import type {
 interface UseAssignmentDataProps {
   selectedMonth: string;
   turnoFilter?: string;
+  allowMultiDispositivoApertura?: boolean;
 }
 
 interface StaticCache {
@@ -30,7 +31,7 @@ interface StaticCache {
 
 const DRAFT_AUDIT_ENABLED = true;
 
-export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: UseAssignmentDataProps) {
+export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
@@ -61,11 +62,37 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
   const staticCache = useRef<StaticCache | null>(null);
   const isSavingRef = useRef(false);
 
-  const addAssignmentDraft = useCallback((mutation: PendingMutation) => {
+  const addAssignmentDraft = (mutation: PendingMutation) => {
     const uiDate = mutation.uiDate;
     if (!uiDate) {
       console.warn("addAssignmentDraft: uiDate is missing in mutation", mutation);
       return;
+    }
+
+    // Normalize mutation for multi-dispositivo apertura mode
+    if (allowMultiDispositivoApertura && mutation.table === 'menu' && mutation.action === 'update') {
+      const sourceDisp = mutation.matchParams?.id_dispositivo;
+      const targetDisp = mutation.payload?.id_dispositivo;
+      if (sourceDisp != null && targetDisp != null && sourceDisp !== targetDisp && targetDisp !== 999 && sourceDisp !== 999) {
+        // This is a "move" operation changing device. In multi-device mode,
+        // convert to "insert" for the new device (keeping the old one).
+        mutation = {
+          ...mutation,
+          action: 'insert',
+          matchParams: {
+            id_agente: mutation.matchParams.id_agente,
+            fecha_asignacion: mutation.matchParams.fecha_asignacion,
+            id_dispositivo: targetDisp,
+          },
+          payload: {
+            id_agente: mutation.matchParams.id_agente,
+            fecha_asignacion: mutation.matchParams.fecha_asignacion,
+            estado_ejecucion: 'planificado',
+            ...mutation.payload,
+            id_dispositivo: targetDisp,
+          },
+        };
+      }
     }
     
     setPendingMutations(prev => {
@@ -73,13 +100,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
       // Para menu/menu_semana el espacio es (tabla, agente, fecha, turno)
       const isAssignment = mutation.table === 'menu' || mutation.table === 'menu_semana';
       const isRotationMultiDevice =
-        mutation.table === 'menu_semana' &&
-        (
-          String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-          // Si matchParams tiene un id_dispositivo real (!=999), la operación es específica de ese
-          // dispositivo — esto aplica tanto a asignaciones como a quitadas en modo rotación.
-          (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
-        );
+        (mutation.table === 'menu' && allowMultiDispositivoApertura) ||
+        (mutation.table === 'menu_semana' &&
+          (
+            String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
+          ));
       let existingIndex = -1;
 
       if (isAssignment && mutation.matchParams?.id_agente) {
@@ -91,7 +117,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
           (
             !isRotationMultiDevice ||
             (
-              m.matchParams?.id_dispositivo === mutation.matchParams?.id_dispositivo &&
+              (m.matchParams?.id_dispositivo ?? m.payload?.id_dispositivo ?? null) ===
+                (mutation.matchParams?.id_dispositivo ?? mutation.payload?.id_dispositivo ?? null) &&
               (m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? null) ===
                 (mutation.matchParams?.numero_grupo ?? mutation.payload?.numero_grupo ?? null)
             )
@@ -186,13 +213,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
 
       if (agentId) {
         const isRotationMultiDevice =
-          mutation.table === 'menu_semana' &&
-          (
-            String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-            // Si matchParams tiene un id_dispositivo real (!=999), la operación es específica de ese
-            // dispositivo — esto aplica tanto a asignaciones como a quitadas en modo rotación.
-            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
-          );
+          (mutation.table === 'menu' && allowMultiDispositivoApertura) ||
+          (mutation.table === 'menu_semana' &&
+            (
+              String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+              (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
+            ));
         setAssignmentsDb(prev => {
           const next = { ...prev };
           if (!next[uiDate]) next[uiDate] = {};
@@ -304,11 +330,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
         }));
       }
     }
-  }, []);
+  };
 
-  const removeAssignmentDraft = useCallback((mutation: PendingMutation) => {
+  const removeAssignmentDraft = (mutation: PendingMutation) => {
      addAssignmentDraft(mutation);
-  }, [addAssignmentDraft]);
+  };
 
   const saveDrafts = async () => {
     if (pendingMutations.length === 0) return { success: true };
@@ -350,6 +376,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
             String(cleanPayload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
             (cleanMatchParams?.id_dispositivo != null && cleanMatchParams?.id_dispositivo !== 999)
           );
+        const isMenuMultiDevice =
+          table === 'menu' && allowMultiDispositivoApertura;
         const hasPhysicalGroup =
           table === 'menu_semana' &&
           isMenuSemanaMultiDevice &&
@@ -361,7 +389,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
               ? (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo', 'numero_grupo'] as const)
               : (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'] as const))
             : (['id_agente', 'fecha_asignacion', 'id_turno'] as const))
-          : (['id_agente', 'fecha_asignacion'] as const);
+          : table === 'menu' && isMenuMultiDevice
+            ? (['id_agente', 'fecha_asignacion', 'id_dispositivo'] as const)
+            : (['id_agente', 'fecha_asignacion'] as const);
 
         const logicalKey: Record<string, any> = {};
         keyFields.forEach((k) => {
@@ -1353,5 +1383,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura' }: U
     refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
     pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,
+    allowMultiDispositivoApertura,
   };
 }

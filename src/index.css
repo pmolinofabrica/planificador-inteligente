@@ -51,6 +51,12 @@
     --floor-3-border: 38 35% 78%;
     --floor-3-accent: 38 60% 50%;
 
+    /* Floor very light backgrounds (for multi-dispositivo indicator) */
+    --floor-1-bg-light: 205 45% 97%;
+    --floor-2-bg-light: 8 45% 98%;
+    --floor-3-bg-light: 38 50% 97%;
+    --floor-4-bg-light: 0 0% 95%;
+
     /* Group A/B colors for capacitación groups */
     --group-a-text: 205 60% 35%;
     --group-a-accent: 205 50% 48%;
@@ -158,6 +164,19 @@
   }
   .floor-p3 {
     @apply bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))];
+  }
+
+  .floor-p1-light {
+    @apply bg-[hsl(var(--floor-1-bg-light))];
+  }
+  .floor-p2-light {
+    @apply bg-[hsl(var(--floor-2-bg-light))];
+  }
+  .floor-p3-light {
+    @apply bg-[hsl(var(--floor-3-bg-light))];
+  }
+  .floor-p4-light {
+    @apply bg-[hsl(var(--floor-4-bg-light))];
   }
 
   .score-high {

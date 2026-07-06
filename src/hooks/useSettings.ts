@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 
 const CAP_KEY = 'settings_show_capacitados_colors';
 const PISO_KEY = 'settings_show_piso_colors';
+const MULTI_AP_KEY = 'settings_allow_multi_dispositivo_apertura';
 
 export function useSettings() {
   const [showCapacitadosColors, setShowCapacitadosColorsState] = useState(() => {
@@ -22,6 +23,15 @@ export function useSettings() {
     }
   });
 
+  const [allowMultiDispositivoApertura, setAllowMultiDispositivoAperturaState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(MULTI_AP_KEY);
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+
   const setShowCapacitadosColors = useCallback((value: boolean) => {
     setShowCapacitadosColorsState(value);
     try { localStorage.setItem(CAP_KEY, JSON.stringify(value)); } catch {}
@@ -32,5 +42,14 @@ export function useSettings() {
     try { localStorage.setItem(PISO_KEY, JSON.stringify(value)); } catch {}
   }, []);
 
-  return { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors };
+  const setAllowMultiDispositivoApertura = useCallback((value: boolean) => {
+    setAllowMultiDispositivoAperturaState(value);
+    try { localStorage.setItem(MULTI_AP_KEY, JSON.stringify(value)); } catch {}
+  }, []);
+
+  return {
+    showCapacitadosColors, setShowCapacitadosColors,
+    showPisoColors, setShowPisoColors,
+    allowMultiDispositivoApertura, setAllowMultiDispositivoApertura,
+  };
 }
