@@ -383,15 +383,30 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           isMenuSemanaMultiDevice &&
           (cleanMatchParams?.numero_grupo != null || cleanPayload?.numero_grupo != null);
 
-        const keyFields = table === 'menu_semana'
-          ? (isMenuSemanaMultiDevice
-            ? (hasPhysicalGroup
-              ? (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo', 'numero_grupo'] as const)
-              : (['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'] as const))
-            : (['id_agente', 'fecha_asignacion', 'id_turno'] as const))
-          : table === 'menu' && isMenuMultiDevice
-            ? (['id_agente', 'fecha_asignacion', 'id_dispositivo'] as const)
-            : (['id_agente', 'fecha_asignacion'] as const);
+        let keyFields: readonly string[];
+        if (table === 'menu_semana') {
+          if (isMenuSemanaMultiDevice) {
+            keyFields = hasPhysicalGroup
+              ? ['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo', 'numero_grupo']
+              : ['id_agente', 'fecha_asignacion', 'id_turno', 'id_dispositivo'];
+          } else {
+            keyFields = ['id_agente', 'fecha_asignacion', 'id_turno'];
+            if (cleanMatchParams?.id_dispositivo != null) {
+              keyFields = [...keyFields, 'id_dispositivo'];
+            }
+          }
+        } else if (table === 'menu') {
+          if (isMenuMultiDevice) {
+            keyFields = ['id_agente', 'fecha_asignacion', 'id_dispositivo'];
+          } else {
+            keyFields = ['id_agente', 'fecha_asignacion'];
+            if (cleanMatchParams?.id_dispositivo != null) {
+              keyFields = [...keyFields, 'id_dispositivo'];
+            }
+          }
+        } else {
+          keyFields = ['id_agente', 'fecha_asignacion'];
+        }
 
         const logicalKey: Record<string, any> = {};
         keyFields.forEach((k) => {
@@ -907,14 +922,19 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
                 const dId = String(a.id_dispositivo);
                 if (!matrix[uiDate]) matrix[uiDate] = {};
                 if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
-                const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
-                matrix[uiDate][dId].push({
-                  id: a.id_agente,
-                  name: nameDict[a.id_agente] || "Desconocido",
-                  score: a.orden || 1000,
-                  numero_grupo: grupoMap[grupoKey] ?? null,
-                  acompana_grupo: !!(a as any)['acompa\u00f1a_grupo'],
-                });
+                const existingResident = matrix[uiDate][dId].find((r: any) => r.id === a.id_agente);
+                if (existingResident) {
+                  existingResident.acompana_grupo = existingResident.acompana_grupo || !!(a as any)['acompa\u00f1a_grupo'];
+                } else {
+                  const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
+                  matrix[uiDate][dId].push({
+                    id: a.id_agente,
+                    name: nameDict[a.id_agente] || "Desconocido",
+                    score: a.orden || 1000,
+                    numero_grupo: grupoMap[grupoKey] ?? null,
+                    acompana_grupo: !!(a as any)['acompa\u00f1a_grupo'],
+                  });
+                }
               }
             });
           } else {
