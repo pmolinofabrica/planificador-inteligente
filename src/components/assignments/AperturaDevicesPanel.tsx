@@ -268,7 +268,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
 
     let message = `¿Asignar a ${resName} en ${toDev?.name}?\n\n`;
     message += `• Se agrega cupo en ${toDev?.name} (${toCupo} → ${toCupo + 1})\n`;
-    if (currentOccupancy && !isRotation) {
+    if (currentOccupancy && !isRotation && !data.allowMultiDispositivoApertura) {
       message += `• Se quita de: ${currentOccupancy.deviceName}\n`;
     }
 
@@ -728,7 +728,9 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                               )}
                             </div>
                             {item.isBusy ? (
-                              <span className="text-[11px] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] px-2 py-1 rounded border border-[hsl(var(--score-mid-border))] font-bold">Traslado</span>
+                              <span className="text-[11px] bg-[hsl(var(--score-mid-bg))] text-[hsl(var(--score-mid-text))] px-2 py-1 rounded border border-[hsl(var(--score-mid-border))] font-bold">
+                                {isAperturaMode && data.allowMultiDispositivoApertura ? 'Agregar' : 'Traslado'}
+                              </span>
                             ) : (
                               <Plus className="w-3.5 h-3.5 text-primary" />
                             )}

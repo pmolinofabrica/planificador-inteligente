@@ -13,7 +13,7 @@ interface VacantActionSidebarProps {
 export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
   selectedVacant, setSelectedVacant, data, year,
 }) => {
-  const { dbDevices, allResidentsDb, assignmentsDb, calendarDb, isLoading, setIsLoading, refresh } = data;
+  const { dbDevices, allResidentsDb, assignmentsDb, calendarDb, isLoading, setIsLoading, refresh, allowMultiDispositivoApertura } = data;
   const res = allResidentsDb.find((r: any) => r.id === selectedVacant.id);
   if (!res) return null;
 
@@ -106,37 +106,12 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
       const resName = data.allResidentsDb?.find((r:any) => r.id === selectedVacant.id)?.name || 'Borrador';
 
       if (isApertura) {
-        const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
-          .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
-        if (fetchErr) throw fetchErr;
-
-        if (existing && existing.length > 0) {
-          const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
-          const firstRow = existing[0];
-          if (vacanteRow) {
-            data.addAssignmentDraft({
-              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-              table: 'menu',
-              action: 'update',
-              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999 },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
-              uiDate: selectedVacant.date
-            });
-          } else {
-            data.addAssignmentDraft({
-              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
-              table: 'menu',
-              action: 'update',
-              matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
-              payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
-              uiDate: selectedVacant.date
-            });
-          }
-        } else {
+        if (allowMultiDispositivoApertura) {
           data.addAssignmentDraft({
-            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+            id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}-${deviceId}`,
             table: 'menu',
-            action: 'insert',
+            action: 'upsert',
+            matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: parseInt(deviceId) },
             payload: {
               id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
               fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
@@ -144,6 +119,46 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
             },
             uiDate: selectedVacant.date
           });
+        } else {
+          const { data: existing, error: fetchErr } = await supabase.from('menu').select('*')
+            .eq('id_agente', selectedVacant.id).eq('fecha_asignacion', fechaDB);
+          if (fetchErr) throw fetchErr;
+
+          if (existing && existing.length > 0) {
+            const vacanteRow = existing.find((m: any) => m.id_dispositivo === 999);
+            const firstRow = existing[0];
+            if (vacanteRow) {
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu',
+                action: 'update',
+                matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: 999 },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedVacant.date
+              });
+            } else {
+              data.addAssignmentDraft({
+                id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+                table: 'menu',
+                action: 'update',
+                matchParams: { id_agente: selectedVacant.id, fecha_asignacion: fechaDB, id_dispositivo: firstRow.id_dispositivo },
+                payload: { id_dispositivo: parseInt(deviceId), _ui_name: resName },
+                uiDate: selectedVacant.date
+              });
+            }
+          } else {
+            data.addAssignmentDraft({
+              id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
+              table: 'menu',
+              action: 'insert',
+              payload: {
+                id_agente: selectedVacant.id, id_dispositivo: parseInt(deviceId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado', id_convocatoria: convId,
+                _ui_name: resName
+              },
+              uiDate: selectedVacant.date
+            });
+          }
         }
       } else {
         const turnoId = data.dateTurnoMap[selectedVacant.date];
