@@ -15,6 +15,7 @@ interface UseAssignmentDataProps {
   selectedMonth: string;
   turnoFilter?: string;
   allowMultiDispositivoApertura?: boolean;
+  motorAsignacionEnabled?: boolean;
 }
 
 interface StaticCache {
@@ -31,7 +32,7 @@ interface StaticCache {
 
 const DRAFT_AUDIT_ENABLED = true;
 
-export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false }: UseAssignmentDataProps) {
+export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false, motorAsignacionEnabled = false }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
@@ -1404,5 +1405,6 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     setAssignmentsDb,
     pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,
     allowMultiDispositivoApertura,
+    motorAsignacionEnabled,
   };
 }

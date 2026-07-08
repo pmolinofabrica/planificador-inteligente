@@ -46,8 +46,8 @@ const Index = () => {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura } = useSettings();
-  const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura });
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled } = useSettings();
+  const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 
   // Selection states
@@ -264,6 +264,19 @@ const Index = () => {
                   </div>
                   <p className="text-[10px] text-muted-foreground/60 leading-tight">
                     Permite asignar un residente a +1 dispositivo por día en apertura al público.
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="motor-asignacion" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Motor asignación
+                    </label>
+                    <Switch
+                      id="motor-asignacion"
+                      checked={motorAsignacionEnabled}
+                      onCheckedChange={setMotorAsignacionEnabled}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    Muestra el botón para ejecutar el motor de asignación automática.
                   </p>
                 </div>
               </PopoverContent>

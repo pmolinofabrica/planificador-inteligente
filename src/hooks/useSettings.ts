@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 const CAP_KEY = 'settings_show_capacitados_colors';
 const PISO_KEY = 'settings_show_piso_colors';
 const MULTI_AP_KEY = 'settings_allow_multi_dispositivo_apertura';
+const MOTOR_KEY = 'settings_motor_asignacion_enabled';
 
 export function useSettings() {
   const [showCapacitadosColors, setShowCapacitadosColorsState] = useState(() => {
@@ -32,6 +33,15 @@ export function useSettings() {
     }
   });
 
+  const [motorAsignacionEnabled, setMotorAsignacionEnabledState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(MOTOR_KEY);
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+
   const setShowCapacitadosColors = useCallback((value: boolean) => {
     setShowCapacitadosColorsState(value);
     try { localStorage.setItem(CAP_KEY, JSON.stringify(value)); } catch {}
@@ -47,9 +57,15 @@ export function useSettings() {
     try { localStorage.setItem(MULTI_AP_KEY, JSON.stringify(value)); } catch {}
   }, []);
 
+  const setMotorAsignacionEnabled = useCallback((value: boolean) => {
+    setMotorAsignacionEnabledState(value);
+    try { localStorage.setItem(MOTOR_KEY, JSON.stringify(value)); } catch {}
+  }, []);
+
   return {
     showCapacitadosColors, setShowCapacitadosColors,
     showPisoColors, setShowPisoColors,
     allowMultiDispositivoApertura, setAllowMultiDispositivoApertura,
+    motorAsignacionEnabled, setMotorAsignacionEnabled,
   };
 }

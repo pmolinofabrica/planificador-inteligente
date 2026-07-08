@@ -168,6 +168,7 @@ export interface AssignmentDataContext {
   // Pending Drafts Mutaciones
   pendingMutations: PendingMutation[];
   allowMultiDispositivoApertura: boolean;
+  motorAsignacionEnabled: boolean;
   addAssignmentDraft: (mutation: PendingMutation) => void;
   removeAssignmentDraft: (mutation: PendingMutation) => void;
   saveDrafts: () => Promise<{ success: boolean; error?: string }>;

@@ -281,7 +281,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isApertura && (
+            {isApertura && data.motorAsignacionEnabled && (
               <button
                 onClick={() => handleRunEngine()}
                 disabled={isRunningEngine}
