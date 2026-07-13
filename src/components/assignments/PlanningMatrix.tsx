@@ -504,13 +504,28 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                         }
                                         return null;
                                       })()}
-                                      {!absent && (
-                                        <span className={`text-[8px] font-mono px-1 py-0.5 rounded ${
-                                          metrics.localReps <= 1 ? 'bg-emerald-100 text-emerald-700' : metrics.localReps <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                        }`} title={`${metrics.localReps}× aquí | ${metrics.uniqueDevices} disp. únicos | ${metrics.diversityPct}% diversidad`}>
-                                          {metrics.localReps}×
-                                        </span>
-                                      )}
+                                      {!absent && (() => {
+                                        const apCount = data.aperturaMetricsDb?.[res.id]?.deviceReps?.[String(device.id)] || 0;
+                                        const tmCount = data.tardeMananaMetricsDb?.[res.id]?.deviceReps?.[String(device.id)] || 0;
+                                        return (
+                                          <span className="flex items-center gap-1">
+                                            <span className={`text-[8px] font-bold font-mono px-1 py-0.5 rounded border ${
+                                              isApertura
+                                                ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
+                                                : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+                                            }`}>
+                                              {apCount}
+                                            </span>
+                                            <span className={`text-[8px] font-bold font-mono px-1 py-0.5 rounded border ${
+                                              !isApertura
+                                                ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                                                : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+                                            }`}>
+                                              {tmCount}
+                                            </span>
+                                          </span>
+                                        );
+                                      })()}
                                     </span>
                                     <div className="flex items-center gap-0.5">
                                       {/* Acompaña grupo toggle */}

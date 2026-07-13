@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useAssignmentData } from '@/hooks/useAssignmentData';
 import { useUndoStack } from '@/hooks/useUndoStack';
-import { useSettings } from '@/hooks/useSettings';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { PlanningMatrix } from '@/components/assignments/PlanningMatrix';
@@ -41,12 +41,11 @@ const Index = () => {
   const [menuLocked, setMenuLocked] = useState(false);
   const [showUnlockInput, setShowUnlockInput] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
-  const [showRefuerzos, setShowRefuerzos] = useState(false);
   const [refuerzosModalOpen, setRefuerzosModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled } = useSettings();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos } = useUserPreferences();
   const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 

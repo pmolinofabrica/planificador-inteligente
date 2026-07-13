@@ -34,7 +34,7 @@ const DRAFT_AUDIT_ENABLED = true;
 
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false, motorAsignacionEnabled = false }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
-  const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string }[]>([]);
+  const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string; fecha_nacimiento: string | null }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
   const [assignmentsDb, setAssignmentsDb] = useState<AssignmentsMatrix>({});
   const [agentGroups, setAgentGroups] = useState<Record<string, string>>({});
@@ -730,7 +730,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         const activeCohorte = getActiveCohorteSync();
         const { data: rd } = await supabase
           .from('datos_personales')
-          .select('id_agente, nombre, apellido, cohorte, refuerzo, periodo_refuerzo')
+          .select('id_agente, nombre, apellido, cohorte, refuerzo, periodo_refuerzo, fecha_nacimiento')
           .eq('activo', true)
           .eq('cohorte', activeCohorte);
         

@@ -455,19 +455,20 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              {apCount > 0 && (
-                <span className="text-[10px] font-bold bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] px-2 py-1 rounded border border-[hsl(var(--floor-1-border))]">
-                  AP: {apCount}
-                </span>
-              )}
-              {tmCount > 0 && (
-                <span className="text-[10px] font-bold bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] px-2 py-1 rounded border border-[hsl(var(--floor-2-border))]">
-                  T/M: {tmCount}
-                </span>
-              )}
-              {apCount === 0 && tmCount === 0 && (
-                <span className="text-[10px] text-muted-foreground/50 italic">sin datos</span>
-              )}
+              <span className={`text-[10px] font-bold px-2 py-1 rounded border transition-all ${
+                isAperturaMode
+                  ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
+                  : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+              }`}>
+                AP: {apCount}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-1 rounded border transition-all ${
+                !isAperturaMode
+                  ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                  : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+              }`}>
+                T/M: {tmCount}
+              </span>
             </div>
           </div>
         )}
@@ -712,16 +713,20 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
                             <div className="flex items-center gap-1.5">
                               <span className="font-bold">{item.name}</span>
                               <div className="flex items-center gap-0.5">
-                                {item.apCount > 0 && (
-                                  <span className="text-[9px] font-bold bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] px-1 py-0.5 rounded border border-[hsl(var(--floor-1-border))]">
-                                    AP: {item.apCount}
-                                  </span>
-                                )}
-                                {item.tmCount > 0 && (
-                                  <span className="text-[9px] font-bold bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] px-1 py-0.5 rounded border border-[hsl(var(--floor-2-border))]">
-                                    T/M: {item.tmCount}
-                                  </span>
-                                )}
+                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${
+                                  isAperturaMode
+                                    ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
+                                    : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+                                }`}>
+                                  AP: {item.apCount}
+                                </span>
+                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${
+                                  !isAperturaMode
+                                    ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                                    : 'bg-muted/40 text-muted-foreground/50 border-border/40'
+                                }`}>
+                                  T/M: {item.tmCount}
+                                </span>
                               </div>
                               {item.isBusy && (
                                 <span className="ml-1.5 text-[11px] text-[hsl(var(--score-mid-text))] font-mono">← {item.busyDevice}</span>

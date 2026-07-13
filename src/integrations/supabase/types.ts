@@ -2471,6 +2471,7 @@ export type Database = {
           id_dispositivo_origen: number | null
           id_menu: number
           orden: number | null
+          prioridad: number | null
         }
         Insert: {
           acompaña_grupo?: boolean | null
@@ -2485,6 +2486,7 @@ export type Database = {
           id_dispositivo_origen?: number | null
           id_menu?: number
           orden?: number | null
+          prioridad?: number | null
         }
         Update: {
           acompaña_grupo?: boolean | null
@@ -2499,6 +2501,7 @@ export type Database = {
           id_dispositivo_origen?: number | null
           id_menu?: number
           orden?: number | null
+          prioridad?: number | null
         }
         Relationships: [
           {
@@ -2680,6 +2683,7 @@ export type Database = {
           id_turno: number
           numero_grupo: number | null
           orden: number | null
+          prioridad: number | null
           tipo_organizacion: string | null
         }
         Insert: {
@@ -2697,6 +2701,7 @@ export type Database = {
           id_turno: number
           numero_grupo?: number | null
           orden?: number | null
+          prioridad?: number | null
           tipo_organizacion?: string | null
         }
         Update: {
@@ -2714,6 +2719,7 @@ export type Database = {
           id_turno?: number
           numero_grupo?: number | null
           orden?: number | null
+          prioridad?: number | null
           tipo_organizacion?: string | null
         }
         Relationships: [
@@ -3676,6 +3682,38 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vista_planificacion_anio"
             referencedColumns: ["id_plani"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          preferences: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          preferences?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          preferences?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
         ]
       }
