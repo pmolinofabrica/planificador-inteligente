@@ -2348,6 +2348,7 @@ export type Database = {
       }
       inasistencias: {
         Row: {
+          "6ta_tardanza": boolean
           certificado_presentado: boolean | null
           descuento_confirmado: boolean | null
           estado: string | null
@@ -2365,6 +2366,7 @@ export type Database = {
           usuario_actualizo_estado: string | null
         }
         Insert: {
+          "6ta_tardanza"?: boolean
           certificado_presentado?: boolean | null
           descuento_confirmado?: boolean | null
           estado?: string | null
@@ -2382,6 +2384,7 @@ export type Database = {
           usuario_actualizo_estado?: string | null
         }
         Update: {
+          "6ta_tardanza"?: boolean
           certificado_presentado?: boolean | null
           descuento_confirmado?: boolean | null
           estado?: string | null

@@ -234,10 +234,11 @@ Deno.serve(async (req) => {
       `✅ Convocatorias apertura: ${convData.length} en ${Object.keys(convocatoriasPorDia).length} días`
     );
 
-    // 1f. Inasistencias (Hard Constraint D)
+    // 1f. Inasistencias (Hard Constraint D) — exclude 6ta tardanza (they count as present)
     const { data: inasistenciasData } = await supabase
       .from("inasistencias")
       .select("id_agente, fecha_inasistencia")
+      .eq("6ta_tardanza", false)
       .gte("fecha_inasistencia", fechaInicio)
       .lte("fecha_inasistencia", fechaFin);
     const inasistenciasPorDia: Record<string, Set<number>> = {};

@@ -121,7 +121,7 @@ export default function DashboardRotacion() {
         }));
 
       // 5. Cargar estados (Inasistencias, Convocatorias) para FDS 2026
-      const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").gte("fecha_inasistencia", "2026-01-01").lte("fecha_inasistencia", "2026-12-31");
+      const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").eq("6ta_tardanza", false).gte("fecha_inasistencia", "2026-01-01").lte("fecha_inasistencia", "2026-12-31");
       const { data: convData } = await supabase.from("vista_convocatoria_completa").select("id_agente, fecha_turno, tipo_turno").eq("anio", 2026).neq("estado", "cancelada");
 
       const addStatus = (map: StatusMap, dateStr: string, agent: number, status: string) => {

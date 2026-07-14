@@ -751,7 +751,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
           supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
-          supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').limit(5000),
+          supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').eq('6ta_tardanza', false).limit(5000),
         ]);
 
         capData = capsRep.data || [];
