@@ -9,7 +9,6 @@ interface RefuerzosModalProps {
   onClose: () => void;
   activeDates: string[];
   devices: DeviceInfo[];
-  refuerzosDb: AssignmentsMatrix;
   assignmentsDb: AssignmentsMatrix;
   turnoFilter: string;
   dateTurnoMap: Record<string, number>;
@@ -21,7 +20,7 @@ interface RefuerzosModalProps {
 }
 
 export const RefuerzosModal: React.FC<RefuerzosModalProps> = ({
-  open, onClose, activeDates, devices, refuerzosDb, assignmentsDb, turnoFilter, dateTurnoMap, tipoOrganizacionMap, onSaved, year,
+  open, onClose, activeDates, devices, assignmentsDb, turnoFilter, dateTurnoMap, tipoOrganizacionMap, onSaved, year,
   showRefuerzos, onToggleShow
 }) => {
   const [selectedDate, setSelectedDate] = useState('');
@@ -64,18 +63,28 @@ export const RefuerzosModal: React.FC<RefuerzosModalProps> = ({
     })();
   }, [open, year]);
 
-  // Load assignments when date changes (sync from refuerzosDb)
+  // Load assignments directly from DB when date changes
   useEffect(() => {
     if (!selectedDate) return;
-    const currentRefs = refuerzosDb[selectedDate] || {};
-    const curMap: Record<number, { id_dispositivo: string; grupo: number | null }> = {};
-    Object.entries(currentRefs).forEach(([devId, residents]) => {
-      residents.forEach(r => {
-        curMap[r.id] = { id_dispositivo: devId, grupo: r.numero_grupo ?? null };
-      });
-    });
-    setAssignments(curMap);
-  }, [selectedDate, refuerzosDb]);
+    const [dd, mm] = selectedDate.split('/');
+    const fechaStr = `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    (async () => {
+      const { data } = await supabase
+        .from('refuerzos_asignaciones')
+        .select('*')
+        .eq('fecha', fechaStr);
+      const curMap: Record<number, { id_dispositivo: string; grupo: number | null }> = {};
+      if (data) {
+        data.forEach(r => {
+          curMap[r.id_agente] = {
+            id_dispositivo: String(r.id_dispositivo),
+            grupo: r.numero_grupo ?? null,
+          };
+        });
+      }
+      setAssignments(curMap);
+    })();
+  }, [selectedDate, year]);
 
   const handleDeviceChange = (agentId: number, deviceId: string) => {
     setAssignments(prev => ({ ...prev, [agentId]: { id_dispositivo: deviceId, grupo: prev[agentId]?.grupo ?? null } }));
@@ -114,19 +123,41 @@ export const RefuerzosModal: React.FC<RefuerzosModalProps> = ({
       const idTurno = dateTurnoMap[selectedDate] || null;
       const [dd, mm] = selectedDate.split('/');
       const fechaStr = `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-      await supabase.from('refuerzos_asignaciones').delete().eq('fecha', fechaStr);
-      const inserts = Object.entries(assignments).filter(([, v]) => v.id_dispositivo);
-      if (inserts.length > 0) {
-        const rows = inserts.map(([agentId, v]) => ({
-          id_agente: Number(agentId),
-          id_dispositivo: Number(v.id_dispositivo),
+
+      const desiredAgents = Object.entries(assignments)
+        .filter(([, v]) => v.id_dispositivo)
+        .map(([agentId]) => Number(agentId));
+
+      // Delete records for agents NOT in the desired set
+      if (desiredAgents.length > 0) {
+        const agentList = desiredAgents.join(',');
+        await supabase
+          .from('refuerzos_asignaciones')
+          .delete()
+          .eq('fecha', fechaStr)
+          .not('id_agente', 'in', `(${agentList})`);
+      } else {
+        await supabase
+          .from('refuerzos_asignaciones')
+          .delete()
+          .eq('fecha', fechaStr);
+      }
+
+      // Upsert desired records
+      if (desiredAgents.length > 0) {
+        const rows = desiredAgents.map(agentId => ({
+          id_agente: agentId,
+          id_dispositivo: Number(assignments[agentId].id_dispositivo),
           fecha: fechaStr,
           id_turno: idTurno,
-          numero_grupo: v.grupo,
+          numero_grupo: assignments[agentId].grupo,
         }));
-        const { error } = await supabase.from('refuerzos_asignaciones').insert(rows);
+        const { error } = await supabase
+          .from('refuerzos_asignaciones')
+          .upsert(rows, { onConflict: 'id_agente, fecha' });
         if (error) throw error;
       }
+
       onSaved();
       onClose();
     } catch (err: any) {

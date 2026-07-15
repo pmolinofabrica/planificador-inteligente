@@ -528,7 +528,6 @@ const Index = () => {
         onClose={() => setRefuerzosModalOpen(false)}
         activeDates={data.activeDates}
         devices={data.dbDevices}
-        refuerzosDb={data.refuerzosDb}
         assignmentsDb={data.assignmentsDb}
         turnoFilter={turnoFilter}
         dateTurnoMap={data.dateTurnoMap}
