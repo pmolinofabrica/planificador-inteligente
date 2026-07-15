@@ -50,6 +50,7 @@ function saveLocal(prefs: Preferences) {
 export function useUserPreferences() {
   const { user, isLoading: authLoading } = useAuth();
   const [preferences, setPreferences] = useState<Preferences>(loadLocal);
+  const [syncing, setSyncing] = useState(false);
 
   // Load from DB once user is available
   useEffect(() => {
@@ -77,9 +78,8 @@ export function useUserPreferences() {
     });
   }, []);
 
-  // Sync to DB
-  const saveToDb = useCallback(async () => {
-    if (!user) return;
+  const saveToDb = useCallback(async (): Promise<{ error: Error | null }> => {
+    if (!user) return { error: new Error('No autenticado') };
     const prefs = loadLocal();
     const { data: existing } = await supabase
       .from('user_preferences')
@@ -89,15 +89,26 @@ export function useUserPreferences() {
     const { error } = existing
       ? await supabase.from('user_preferences').update({ preferences: prefs }).eq('user_id', user.id)
       : await supabase.from('user_preferences').insert({ user_id: user.id, preferences: prefs });
-    if (error) console.error('Error saving preferences:', error);
+    return { error: error ? new Error(error.message) : null };
   }, [user]);
 
   // Auto-sync to DB when preferences change (debounced)
   useEffect(() => {
     if (!user) return;
-    const timer = setTimeout(() => { saveToDb(); }, 2000);
+    const timer = setTimeout(async () => {
+      const { error } = await saveToDb();
+      if (error) console.error('Error saving preferences:', error.message);
+    }, 2000);
     return () => clearTimeout(timer);
   }, [preferences, user, saveToDb]);
+
+  const syncNow = useCallback(async (): Promise<string | null> => {
+    if (syncing) return null;
+    setSyncing(true);
+    const { error } = await saveToDb();
+    setSyncing(false);
+    return error?.message ?? null;
+  }, [syncing, saveToDb]);
 
   const setters = {
     setShowCapacitadosColors: useCallback((v: boolean) => updatePreference('showCapacitadosColors', v), [updatePreference]),
@@ -110,5 +121,7 @@ export function useUserPreferences() {
   return {
     ...preferences,
     ...setters,
+    syncNow,
+    syncing,
   };
 }

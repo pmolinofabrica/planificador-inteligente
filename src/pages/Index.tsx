@@ -45,7 +45,7 @@ const Index = () => {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos } = useUserPreferences();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, syncNow, syncing } = useUserPreferences();
   const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 
@@ -277,6 +277,22 @@ const Index = () => {
                   <p className="text-[10px] text-muted-foreground/60 leading-tight">
                     Muestra el botón para ejecutar el motor de asignación automática.
                   </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={async () => {
+                        const error = await syncNow();
+                        if (error) {
+                          toast.error(`Error al guardar: ${error}`);
+                        } else {
+                          toast.success('Configuración guardada');
+                        }
+                      }}
+                      disabled={syncing}
+                      className="w-full py-1.5 text-xs font-bold bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {syncing ? 'Guardando...' : 'Guardar configuración'}
+                    </button>
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
