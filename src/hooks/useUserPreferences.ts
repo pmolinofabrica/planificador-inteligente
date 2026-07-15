@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -51,6 +51,7 @@ export function useUserPreferences() {
   const { user, isLoading: authLoading } = useAuth();
   const [preferences, setPreferences] = useState<Preferences>(loadLocal);
   const [syncing, setSyncing] = useState(false);
+  const hasInteracted = useRef(false);
 
   // Load from DB once user is available
   useEffect(() => {
@@ -61,9 +62,9 @@ export function useUserPreferences() {
         .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (!error && data?.preferences) {
+      if (!error && data?.preferences && !hasInteracted.current) {
         const dbPrefs = data.preferences as Partial<Preferences>;
-        const merged = { ...DEFAULTS, ...dbPrefs, ...loadLocal() };
+        const merged = { ...DEFAULTS, ...loadLocal(), ...dbPrefs };
         setPreferences(merged);
         saveLocal(merged);
       }
@@ -71,6 +72,7 @@ export function useUserPreferences() {
   }, [user, authLoading]);
 
   const updatePreference = useCallback(<K extends keyof Preferences>(key: K, value: Preferences[K]) => {
+    hasInteracted.current = true;
     setPreferences(prev => {
       const next = { ...prev, [key]: value };
       saveLocal(next);
