@@ -50,27 +50,22 @@ function saveLocal(prefs: Preferences) {
 export function useUserPreferences() {
   const { user, isLoading: authLoading } = useAuth();
   const [preferences, setPreferences] = useState<Preferences>(loadLocal);
-  const [loaded, setLoaded] = useState(false);
 
   // Load from DB once user is available
   useEffect(() => {
-    if (authLoading || !user) {
-      setLoaded(true);
-      return;
-    }
+    if (authLoading || !user) return;
     (async () => {
       const { data, error } = await supabase
         .from('user_preferences')
         .select('preferences')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       if (!error && data?.preferences) {
         const dbPrefs = data.preferences as Partial<Preferences>;
-        const merged = { ...DEFAULTS, ...loadLocal(), ...dbPrefs };
+        const merged = { ...DEFAULTS, ...dbPrefs, ...loadLocal() };
         setPreferences(merged);
         saveLocal(merged);
       }
-      setLoaded(true);
     })();
   }, [user, authLoading]);
 
@@ -82,25 +77,27 @@ export function useUserPreferences() {
     });
   }, []);
 
-  // Debounced sync to DB
+  // Sync to DB
   const saveToDb = useCallback(async () => {
     if (!user) return;
     const prefs = loadLocal();
-    const { error } = await supabase
+    const { data: existing } = await supabase
       .from('user_preferences')
-      .upsert(
-        { user_id: user.id, preferences: prefs },
-        { onConflict: 'user_id' }
-      );
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const { error } = existing
+      ? await supabase.from('user_preferences').update({ preferences: prefs }).eq('user_id', user.id)
+      : await supabase.from('user_preferences').insert({ user_id: user.id, preferences: prefs });
     if (error) console.error('Error saving preferences:', error);
   }, [user]);
 
   // Auto-sync to DB when preferences change (debounced)
   useEffect(() => {
-    if (!loaded || !user) return;
+    if (!user) return;
     const timer = setTimeout(() => { saveToDb(); }, 2000);
     return () => clearTimeout(timer);
-  }, [preferences, loaded, user, saveToDb]);
+  }, [preferences, user, saveToDb]);
 
   const setters = {
     setShowCapacitadosColors: useCallback((v: boolean) => updatePreference('showCapacitadosColors', v), [updatePreference]),
