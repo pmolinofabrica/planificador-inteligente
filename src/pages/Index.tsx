@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3, Settings } from 'lucide-react';
+import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3, Settings, ClipboardList, MessageSquarePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,8 @@ import { CellSidebar } from '@/components/assignments/CellSidebar';
 import { VacantsSidebar } from '@/components/assignments/VacantsSidebar';
 import { VacantActionSidebar } from '@/components/assignments/VacantActionSidebar';
 import { RefuerzosModal } from '@/components/assignments/RefuerzosModal';
+import { NuevaTarjetaDialog } from '@/components/tablero/NuevaTarjetaDialog';
+import { useTablero } from '@/hooks/useTablero';
 import type { ActiveTab, SelectedResident, SelectedDevice, SelectedVacant } from '@/types/assignments';
 
 const MONTHS_LIST = generateSchoolYearMonths();
@@ -43,9 +45,11 @@ const Index = () => {
   const [unlockCode, setUnlockCode] = useState('');
   const [refuerzosModalOpen, setRefuerzosModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [nuevaTarjetaOpen, setNuevaTarjetaOpen] = useState(false);
 
   const { signOut } = useAuth();
   const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, syncNow, syncing } = useUserPreferences();
+  const { crearItem } = useTablero();
   const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 
@@ -64,6 +68,12 @@ const Index = () => {
       setExecDate(data.activeDates[0]);
     }
   }, [data.activeDates, execDate]);
+
+  const handleCrearTarjeta = async (titulo: string, descripcion: string, tipo: any, autor: any) => {
+    const { error } = await crearItem(titulo, descripcion, tipo, autor);
+    if (error) toast.error(`Error al crear tarjeta: ${error}`);
+    else toast.success('Tarjeta creada');
+  };
 
   const clearSelections = () => {
     setSelectedResident(null);
@@ -296,6 +306,20 @@ const Index = () => {
                 </div>
               </PopoverContent>
             </Popover>
+            <button
+              onClick={() => navigate('/tablero')}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+              title="Ir al Tablero"
+            >
+              <ClipboardList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+            <button
+              onClick={() => setNuevaTarjetaOpen(true)}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+              title="Nueva tarjeta"
+            >
+              <MessageSquarePlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
           </div>
 
           {/* Actions — desktop only inline, mobile collapsed */}
@@ -537,6 +561,15 @@ const Index = () => {
           />
         )}
       </div>
+
+      {/* Nueva Tarjeta Dialog */}
+      <NuevaTarjetaDialog
+        open={nuevaTarjetaOpen}
+        onClose={() => setNuevaTarjetaOpen(false)}
+        currentUser={null}
+        onSubmit={handleCrearTarjeta}
+        dialogTitle="Comentarios - Nueva tarjeta"
+      />
 
       {/* Refuerzos Modal */}
       <RefuerzosModal

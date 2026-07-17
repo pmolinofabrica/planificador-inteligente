@@ -7,6 +7,7 @@ import { AuthGuard } from "@/components/AuthGuard";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import DashboardRotacion from "./pages/DashboardRotacion";
+import TableroPage from "./pages/TableroPage";
 
 const queryClient = new QueryClient();
 
@@ -15,15 +16,14 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthGuard>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/dashboard" element={<DashboardRotacion />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthGuard>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/tablero" element={<TableroPage />} />
+          <Route path="/" element={<AuthGuard><Index /></AuthGuard>} />
+          <Route path="/dashboard" element={<AuthGuard><DashboardRotacion /></AuthGuard>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
