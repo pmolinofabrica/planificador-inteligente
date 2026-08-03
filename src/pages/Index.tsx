@@ -34,13 +34,18 @@ const TURNO_FILTERS = [
 type TurnoFilter = typeof TURNO_FILTERS[number]['key'];
 
 const UNLOCK_CODE = '2350';
+const MENU_LOCKED_KEY = 'settings_menu_locked';
 
 const Index = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('plan');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    try { return localStorage.getItem(MENU_LOCKED_KEY) === 'true' ? 'menu' : 'plan'; } catch { return 'plan'; }
+  });
   const [selectedMonth, setSelectedMonth] = useState(getCurrentSchoolYearMonth);
   const [turnoFilter, setTurnoFilter] = useState<TurnoFilter>('apertura');
-  const [menuLocked, setMenuLocked] = useState(false);
+  const [menuLocked, setMenuLocked] = useState(() => {
+    try { return localStorage.getItem(MENU_LOCKED_KEY) === 'true'; } catch { return false; }
+  });
   const [showUnlockInput, setShowUnlockInput] = useState(false);
   const [unlockCode, setUnlockCode] = useState('');
   const [refuerzosModalOpen, setRefuerzosModalOpen] = useState(false);
@@ -68,6 +73,10 @@ const Index = () => {
       setExecDate(data.activeDates[0]);
     }
   }, [data.activeDates, execDate]);
+
+  React.useEffect(() => {
+    try { localStorage.setItem(MENU_LOCKED_KEY, menuLocked ? 'true' : 'false'); } catch {}
+  }, [menuLocked]);
 
   const handleCrearTarjeta = async (titulo: string, descripcion: string, tipo: any, autor: any) => {
     const { error } = await crearItem(titulo, descripcion, tipo, autor);
