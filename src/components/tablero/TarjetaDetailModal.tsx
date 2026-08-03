@@ -1,8 +1,10 @@
-import { Inbox, PlayCircle, MessageCircle, CheckCircle2, Archive } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Inbox, PlayCircle, MessageCircle, CheckCircle2, Archive, Pencil, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TIPO_CONFIG, ESTADO_COLUMNS } from '@/types/tablero';
-import type { TableroItem, TableroUser, TableroEstado, TableroComentario } from '@/types/tablero';
+import type { TableroItem, TableroUser, TableroEstado, TableroComentario, TableroTipo } from '@/types/tablero';
 import { CommentThread } from './CommentThread';
+import { NuevaTarjetaDialog } from './NuevaTarjetaDialog';
 
 const ICON_MAP = { Inbox, PlayCircle, MessageCircle, CheckCircle2, Archive };
 
@@ -14,13 +16,21 @@ interface TarjetaDetailModalProps {
   comentarios: TableroComentario[];
   onUpdateEstado: (id: number, estado: TableroEstado) => Promise<void>;
   onAddComment: (itemId: number, contenido: string) => Promise<void>;
+  onUpdateItem: (id: number, titulo: string, descripcion: string, tipo: TableroTipo) => Promise<void>;
+  onDeleteItem: (id: number) => Promise<void>;
 }
 
 const isDev = (user: TableroUser | null) => user === 'Pablo';
 
 export function TarjetaDetailModal({
-  item, open, onClose, currentUser, comentarios, onUpdateEstado, onAddComment,
+  item, open, onClose, currentUser, comentarios, onUpdateEstado, onAddComment, onUpdateItem, onDeleteItem,
 }: TarjetaDetailModalProps) {
+  const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    setEditOpen(false);
+  }, [item?.id]);
+
   if (!item) return null;
 
   const tipoCfg = TIPO_CONFIG[item.tipo];
@@ -28,15 +38,43 @@ export function TarjetaDetailModal({
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
+  const handleDelete = () => {
+    if (confirm(`Eliminar "${item.titulo}"?`)) {
+      onDeleteItem(item.id);
+      onClose();
+    }
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tipoCfg.badge}`}>
-              {tipoCfg.icon} {tipoCfg.label}
-            </span>
-            <span className="text-xs text-muted-foreground">por {item.autor_nombre} · {fecha}</span>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tipoCfg.badge}`}>
+                {tipoCfg.icon} {tipoCfg.label}
+              </span>
+              <span className="text-xs text-muted-foreground">por {item.autor_nombre} · {fecha}</span>
+            </div>
+            {currentUser && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                  title="Editar"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
           <DialogTitle>{item.titulo}</DialogTitle>
         </DialogHeader>
@@ -91,5 +129,17 @@ export function TarjetaDetailModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    {item && (
+      <NuevaTarjetaDialog
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        currentUser={currentUser}
+        editItem={item}
+        onSaveEdit={onUpdateItem}
+        dialogTitle="Editar tarjeta"
+      />
+    )}
+    </>
   );
 }

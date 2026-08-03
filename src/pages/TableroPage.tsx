@@ -15,7 +15,7 @@ export default function TableroPage() {
   const [filterTipo, setFilterTipo] = useState<TableroTipo | 'todas'>('todas');
 
   const {
-    items, comentarios, loading, crearItem, updateEstado, agregarComentario, getComentariosByItem, refresh,
+    items, comentarios, loading, crearItem, updateEstado, agregarComentario, updateItem, deleteItem, getComentariosByItem, refresh,
   } = useTablero('asignaciones');
 
   useEffect(() => {
@@ -32,6 +32,16 @@ export default function TableroPage() {
   const handleCrearTarjeta = async (titulo: string, descripcion: string, tipo: TableroTipo, autor: TableroUser) => {
     const { error } = await crearItem(titulo, descripcion, tipo, autor);
     if (error) alert(`Error al crear: ${error}`);
+  };
+
+  const handleUpdateItem = async (id: number, titulo: string, descripcion: string, tipo: TableroTipo) => {
+    const { error } = await updateItem(id, { titulo, descripcion, tipo });
+    if (error) alert(`Error al editar: ${error}`);
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    const { error } = await deleteItem(id);
+    if (error) alert(`Error al eliminar: ${error}`);
   };
 
   const isDev = currentUser === 'Pablo';
@@ -121,6 +131,8 @@ export default function TableroPage() {
               if (!currentUser) return;
               await agregarComentario(itemId, currentUser, contenido);
             }}
+            onUpdateItem={handleUpdateItem}
+            onDeleteItem={handleDeleteItem}
             getComentariosByItem={getComentariosByItem}
           />
         )}

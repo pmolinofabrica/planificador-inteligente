@@ -59,6 +59,24 @@ export function useTablero(app: TableroApp = 'asignaciones') {
     return { error: error?.message || null };
   };
 
+  const updateItem = async (id: number, updates: { titulo?: string; descripcion?: string; tipo?: TableroTipo }) => {
+    const { error } = await supabase
+      .from('tablero_items')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) await loadItems();
+    return { error: error?.message || null };
+  };
+
+  const deleteItem = async (id: number) => {
+    const { error } = await supabase
+      .from('tablero_items')
+      .delete()
+      .eq('id', id);
+    if (!error) await loadItems();
+    return { error: error?.message || null };
+  };
+
   const getComentariosByItem = (itemId: number) =>
     comentarios.filter(c => c.item_id === itemId);
 
@@ -69,6 +87,8 @@ export function useTablero(app: TableroApp = 'asignaciones') {
     crearItem,
     updateEstado,
     agregarComentario,
+    updateItem,
+    deleteItem,
     getComentariosByItem,
     refresh: loadItems,
   };

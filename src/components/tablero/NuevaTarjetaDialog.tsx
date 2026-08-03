@@ -1,27 +1,34 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { TIPO_CONFIG, TABLERO_USERS } from '@/types/tablero';
-import type { TableroUser, TableroTipo } from '@/types/tablero';
+import type { TableroUser, TableroTipo, TableroItem } from '@/types/tablero';
 
 interface NuevaTarjetaDialogProps {
   open: boolean;
   onClose: () => void;
   currentUser: TableroUser | null;
-  onSubmit: (titulo: string, descripcion: string, tipo: TableroTipo, autor: TableroUser) => Promise<void>;
+  onSubmit?: (titulo: string, descripcion: string, tipo: TableroTipo, autor: TableroUser) => Promise<void>;
+  onSaveEdit?: (id: number, titulo: string, descripcion: string, tipo: TableroTipo) => Promise<void>;
+  editItem?: TableroItem | null;
   dialogTitle?: string;
 }
 
-export function NuevaTarjetaDialog({ open, onClose, currentUser, onSubmit, dialogTitle = 'Nueva tarjeta' }: NuevaTarjetaDialogProps) {
-  const [titulo, setTitulo] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [tipo, setTipo] = useState<TableroTipo>('fallo');
+export function NuevaTarjetaDialog({ open, onClose, currentUser, onSubmit, onSaveEdit, editItem, dialogTitle }: NuevaTarjetaDialogProps) {
+  const isEdit = !!editItem;
+  const [titulo, setTitulo] = useState(isEdit ? editItem!.titulo : '');
+  const [descripcion, setDescripcion] = useState(isEdit ? editItem!.descripcion : '');
+  const [tipo, setTipo] = useState<TableroTipo>(isEdit ? editItem!.tipo : 'fallo');
   const [autor, setAutor] = useState<TableroUser>(currentUser || TABLERO_USERS[0]);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
     if (!titulo.trim() || saving) return;
     setSaving(true);
-    await onSubmit(titulo.trim(), descripcion.trim(), tipo, autor);
+    if (isEdit && onSaveEdit && editItem) {
+      await onSaveEdit(editItem.id, titulo.trim(), descripcion.trim(), tipo);
+    } else if (onSubmit) {
+      await onSubmit(titulo.trim(), descripcion.trim(), tipo, autor);
+    }
     setSaving(false);
     setTitulo('');
     setDescripcion('');
@@ -33,7 +40,7 @@ export function NuevaTarjetaDialog({ open, onClose, currentUser, onSubmit, dialo
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogTitle>{dialogTitle || (isEdit ? 'Editar tarjeta' : 'Nueva tarjeta')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 py-2">
           <div>
@@ -54,7 +61,7 @@ export function NuevaTarjetaDialog({ open, onClose, currentUser, onSubmit, dialo
               ))}
             </div>
           </div>
-          {!currentUser && (
+          {!currentUser && !isEdit && (
             <div>
               <label className="text-xs font-semibold text-muted-foreground mb-1 block">Autor</label>
               <select
@@ -98,7 +105,7 @@ export function NuevaTarjetaDialog({ open, onClose, currentUser, onSubmit, dialo
             disabled={!titulo.trim() || saving}
             className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {saving ? 'Creando...' : 'Crear tarjeta'}
+            {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear tarjeta'}
           </button>
         </DialogFooter>
       </DialogContent>

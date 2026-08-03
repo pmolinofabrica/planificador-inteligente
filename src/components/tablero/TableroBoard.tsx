@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ESTADO_COLUMNS } from '@/types/tablero';
-import type { TableroItem, TableroUser, TableroEstado, TableroComentario } from '@/types/tablero';
+import type { TableroItem, TableroUser, TableroEstado, TableroComentario, TableroTipo } from '@/types/tablero';
 import { TableroColumn } from './TableroColumn';
 import { TarjetaDetailModal } from './TarjetaDetailModal';
 
@@ -10,11 +10,13 @@ interface TableroBoardProps {
   currentUser: TableroUser | null;
   onUpdateEstado: (id: number, estado: TableroEstado) => Promise<void>;
   onAddComment: (itemId: number, contenido: string) => Promise<void>;
+  onUpdateItem: (id: number, titulo: string, descripcion: string, tipo: TableroTipo) => Promise<void>;
+  onDeleteItem: (id: number) => Promise<void>;
   getComentariosByItem: (itemId: number) => TableroComentario[];
 }
 
 export function TableroBoard({
-  items, comentarios, currentUser, onUpdateEstado, onAddComment, getComentariosByItem,
+  items, comentarios, currentUser, onUpdateEstado, onAddComment, onUpdateItem, onDeleteItem, getComentariosByItem,
 }: TableroBoardProps) {
   const [selectedItem, setSelectedItem] = useState<TableroItem | null>(null);
 
@@ -45,6 +47,8 @@ export function TableroBoard({
         comentarios={selectedItem ? getComentariosByItem(selectedItem.id) : []}
         onUpdateEstado={onUpdateEstado}
         onAddComment={onAddComment}
+        onUpdateItem={onUpdateItem}
+        onDeleteItem={onDeleteItem}
       />
     </>
   );
