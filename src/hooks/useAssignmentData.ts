@@ -490,6 +490,46 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         const { data: existingRows, error: existingErr } = await existingQ;
         if (existingErr) throw new Error(`[${table}] Read failed: ${existingErr.message}`);
 
+        // Grupo en menu_semana: si no existe la fila física exacta (numero_grupo = X)
+        // pero el residente ya está asignado en esa celda sin grupo, actualizamos esa
+        // fila para asignarle el grupo, en vez de insertar un duplicado (NULL + X).
+        if (
+          table === 'menu_semana' &&
+          action === 'upsert' &&
+          hasPhysicalGroup &&
+          (!existingRows || existingRows.length === 0) &&
+          cleanPayload?.numero_grupo != null
+        ) {
+          let nullQ: any = supabase.from('menu_semana')
+            .select('*')
+            .eq('id_agente', logicalKey.id_agente)
+            .eq('fecha_asignacion', logicalKey.fecha_asignacion)
+            .eq('id_turno', logicalKey.id_turno)
+            .eq('id_dispositivo', logicalKey.id_dispositivo)
+            .is('numero_grupo', null)
+            .limit(1);
+          const { data: nullRows, error: nullErr } = await nullQ;
+          if (nullErr) throw new Error(`[menu_semana] Group lookup failed: ${nullErr.message}`);
+          if (nullRows && nullRows.length > 0) {
+            const mergePayload: any = { ...cleanPayload };
+            delete mergePayload.id_menu_semana;
+            if (DRAFT_AUDIT_ENABLED) {
+              console.info('[DraftAudit] sql-plan', {
+                table,
+                action,
+                statement: 'merge group into null-grupo row',
+                id_menu_semana: nullRows[0].id_menu_semana,
+                mergePayload,
+              });
+            }
+            const { error: mergeErr } = await supabase.from('menu_semana')
+              .update(mergePayload)
+              .eq('id_menu_semana', nullRows[0].id_menu_semana);
+            if (mergeErr) throw new Error(`[menu_semana] Group merge failed: ${mergeErr.message}`);
+            return;
+          }
+        }
+
         const baseRow = (existingRows && existingRows.length > 0) ? existingRows[0] : {};
         const finalRow = { ...baseRow, ...logicalKey, ...cleanPayload };
         delete finalRow.id_menu;
