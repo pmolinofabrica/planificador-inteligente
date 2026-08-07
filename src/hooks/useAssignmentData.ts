@@ -564,6 +564,37 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         }
 
         if (existingRows && existingRows.length > 0) {
+          // Movimiento de dispositivo: si ya existe una fila física en el
+          // dispositivo destino (misma clave lógica), no se puede actualizar la
+          // fila origen hacia ese destino porque violaría la clave única
+          // uq_menu_agent_device_date. En ese caso se elimina la fila origen:
+          // la fila destino ya representa el estado del agente.
+          const sourceDevice = logicalKey.id_dispositivo;
+          const targetDevice = cleanPayload?.id_dispositivo;
+          if (sourceDevice != null && targetDevice != null && targetDevice !== sourceDevice) {
+            let targetQ: any = supabase.from(table).select('*');
+            for (const [k, v] of Object.entries(logicalKey)) {
+              targetQ = k === 'id_dispositivo' ? targetQ.eq(k, targetDevice) : targetQ.eq(k, v);
+            }
+            const { data: targetRows, error: targetErr } = await targetQ;
+            if (targetErr) throw new Error(`[${table}] Target read failed: ${targetErr.message}`);
+            if (targetRows && targetRows.length > 0) {
+              if (DRAFT_AUDIT_ENABLED) {
+                console.info('[DraftAudit] sql-plan', {
+                  table,
+                  action,
+                  logicalKey,
+                  statement: 'device move collides with existing target row → delete source row',
+                  targetDevice,
+                });
+              }
+              let delQ: any = supabase.from(table).delete();
+              for (const [k, v] of Object.entries(logicalKey)) delQ = delQ.eq(k, v);
+              const { error: delErr } = await delQ;
+              if (delErr) throw new Error(`[${table}] Move-delete failed: ${delErr.message}`);
+              return;
+            }
+          }
           let updQ: any = supabase.from(table).update(finalRow);
           for (const [k, v] of Object.entries(logicalKey)) updQ = updQ.eq(k, v);
           const { error: updErr } = await updQ;
