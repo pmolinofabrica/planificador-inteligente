@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import DashboardRotacion from "./pages/DashboardRotacion";
 import TableroPage from "./pages/TableroPage";
+import IngresosPortal from "./pages/IngresosPortal";
+import IngresosPanel from "./pages/IngresosPanel";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/tablero" element={<TableroPage />} />
+          <Route path="/ingresos" element={<IngresosPortal />} />
+          <Route path="/ingresos/panel" element={<AuthGuard><IngresosPanel /></AuthGuard>} />
           <Route path="/" element={<AuthGuard><Index /></AuthGuard>} />
           <Route path="/dashboard" element={<AuthGuard><DashboardRotacion /></AuthGuard>} />
           <Route path="*" element={<NotFound />} />

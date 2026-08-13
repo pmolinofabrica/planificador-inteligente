@@ -109,7 +109,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           table: 'menu',
           action: 'update',
           matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB },
-          payload: { id_dispositivo: 999, _ui_name: resName },
+          payload: { id_dispositivo: 999, estado_ejecucion: 'pendiente', _ui_name: resName },
           uiDate: date
         });
 
@@ -133,11 +133,11 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
 
         const groupsToMove = selectedGroups.length > 0 ? selectedGroups : [null];
         groupsToMove.forEach((groupNum) => {
-          // Quitar original
+          // Quitar original (mover al baúl 999 como pendiente en lugar de borrar)
           data.addAssignmentDraft({
             id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}-${groupNum ?? 'null'}`,
             table: 'menu_semana',
-            action: 'delete',
+            action: 'update',
             matchParams: {
               id_agente: selectedResident.id,
               id_dispositivo: Number(disp?.id),
@@ -145,7 +145,13 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
               id_turno: turnoId,
               ...(groupNum != null ? { numero_grupo: groupNum } : {}),
             },
-            payload: { tipo_organizacion: orgType, _ui_name: resName },
+            payload: {
+              id_dispositivo: 999,
+              id_turno: turnoId,
+              estado_ejecucion: 'pendiente',
+              tipo_organizacion: orgType,
+              _ui_name: resName,
+            },
             uiDate: date
           });
 
@@ -193,42 +199,32 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
       const orgType = !isApertura
         ? ((tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa')
         : null;
-      const groupsToRemove = !isApertura && selectedGroups.length > 0 ? selectedGroups : [null];
-      groupsToRemove.forEach((groupNum) => {
+
+      if (isApertura) {
+        // Apertura: mover al baúl 999 como pendiente (sigue reasignable)
         data.addAssignmentDraft({
-          id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}-${groupNum ?? 'null'}`,
-          table: isApertura ? 'menu' : 'menu_semana',
-          action: isApertura ? 'update' : 'delete',
+          id: `remove-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
+          table: 'menu',
+          action: 'update',
           matchParams: {
             id_agente: selectedResident.id,
             fecha_asignacion: fechaDB,
             id_dispositivo: Number(disp?.id),
-            ...(isApertura ? {} : { id_turno: turnoId }),
-            ...(!isApertura && groupNum != null ? { numero_grupo: groupNum } : {}),
           },
-          payload: isApertura ? {
+          payload: {
             id_dispositivo: 999,
-            _ui_name: selectedResident.name
-          } : {
-            tipo_organizacion: orgType,
+            estado_ejecucion: 'pendiente',
             _ui_name: selectedResident.name
           },
           uiDate: date
         });
-      });
-
-      if (!isApertura) {
-        console.info('[ResidentRemove] full-device draft', {
-          resId: selectedResident.id,
-          fechaDB,
-          turnoId,
-          deviceId: Number(disp?.id),
-          groupsToRemove,
-        });
+      } else {
+        // T/M: mover TODAS las filas del dispositivo al baúl 999 como pendiente
+        // (no borrar: el residente debe seguir reasignable desde "Ver Vacantes")
         data.addAssignmentDraft({
           id: `remove-device-${selectedResident.id}-${fechaDB}-${disp?.id}-${data.turnoFilter}`,
           table: 'menu_semana',
-          action: 'delete',
+          action: 'update',
           matchParams: {
             id_agente: selectedResident.id,
             fecha_asignacion: fechaDB,
@@ -236,6 +232,9 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
             id_dispositivo: Number(disp?.id),
           },
           payload: {
+            id_dispositivo: 999,
+            id_turno: turnoId,
+            estado_ejecucion: 'pendiente',
             tipo_organizacion: orgType,
             _ui_name: selectedResident.name,
           },

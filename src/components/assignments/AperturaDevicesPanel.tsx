@@ -226,13 +226,13 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
     const turnoId = dateTurnoMap[execDate];
 
     if (isAperturaMode) {
-      if (!confirm(`¿Quitar a ${resName} de este dispositivo (irá al baúl)?`)) return;
+      if (!confirm(`¿Quitar a ${resName} de este dispositivo (irá al baúl como pendiente)?`)) return;
       addAssignmentDraft({
         id: `remove-${resId}-${fechaDB}-${turnoFilter}-${deviceId}`,
         table: 'menu',
         action: 'update',
         matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB },
-        payload: { id_dispositivo: 999, _ui_name: resName },
+        payload: { id_dispositivo: 999, estado_ejecucion: 'pendiente', _ui_name: resName },
         uiDate: execDate
       });
     } else {
@@ -241,13 +241,13 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         return;
       }
       const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
-      if (!confirm(`¿Quitar a ${resName} de este dispositivo?`)) return;
+      if (!confirm(`¿Quitar a ${resName} de este dispositivo (irá al baúl como pendiente)?`)) return;
       addAssignmentDraft({
         id: `remove-${resId}-${fechaDB}-${turnoFilter}-${turnoId}-${deviceId}`,
         table: 'menu_semana',
-        action: 'delete',
+        action: 'update',
         matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, id_turno: turnoId },
-        payload: { tipo_organizacion: orgType, _ui_name: resName },
+        payload: { id_dispositivo: 999, id_turno: turnoId, estado_ejecucion: 'pendiente', tipo_organizacion: orgType, _ui_name: resName },
         uiDate: execDate
       });
     }

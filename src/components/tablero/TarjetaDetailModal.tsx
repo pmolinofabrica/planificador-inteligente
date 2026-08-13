@@ -132,6 +132,7 @@ export function TarjetaDetailModal({
 
     {item && (
       <NuevaTarjetaDialog
+        key={`${item.id}-${editOpen}`}
         open={editOpen}
         onClose={() => setEditOpen(false)}
         currentUser={currentUser}

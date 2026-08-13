@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { generateSchoolYearMonths, getCurrentSchoolYearMonth } from '@/utils/dateUtils';
-import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3, Settings, ClipboardList, MessageSquarePlus } from 'lucide-react';
+import { Calendar, Undo2, LogOut, Lock, Unlock, BarChart3, Settings, ClipboardList, MessageSquarePlus, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -323,6 +323,13 @@ const Index = () => {
               <ClipboardList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
+              onClick={() => navigate('/ingresos/panel')}
+              className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
+              title="Ingresos del día"
+            >
+              <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+            <button
               onClick={() => setNuevaTarjetaOpen(true)}
               className="p-1 sm:p-1.5 rounded-md border transition-all bg-muted border-border text-muted-foreground hover:bg-accent"
               title="Nueva tarjeta"
@@ -573,6 +580,7 @@ const Index = () => {
 
       {/* Nueva Tarjeta Dialog */}
       <NuevaTarjetaDialog
+        key={String(nuevaTarjetaOpen)}
         open={nuevaTarjetaOpen}
         onClose={() => setNuevaTarjetaOpen(false)}
         currentUser={null}

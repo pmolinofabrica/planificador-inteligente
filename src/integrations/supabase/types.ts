@@ -1493,16 +1493,19 @@ export type Database = {
           fecha: string
           id_turno: number
           tipo_organizacion: string
+          tipo_rotacion?: string | null
         }
         Insert: {
           fecha: string
           id_turno: number
           tipo_organizacion?: string
+          tipo_rotacion?: string | null
         }
         Update: {
           fecha?: string
           id_turno?: number
           tipo_organizacion?: string
+          tipo_rotacion?: string | null
         }
         Relationships: [
           {

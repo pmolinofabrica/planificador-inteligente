@@ -16,6 +16,11 @@ const ORG_LABELS: Record<string, string> = {
   'rotacion simple': 'Rot. Simple',
   'rotacion completa': 'Rot. Completa',
 };
+const ROT_TYPES = ['dispositivo fijo', 'rotacion simple'] as const;
+const ROT_LABELS: Record<string, string> = {
+  'dispositivo fijo': 'Fija',
+  'rotacion simple': 'Rot. Simple',
+};
 
 export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
   const {
@@ -23,6 +28,7 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
     convocadosCountDb, dateTurnoMap, inasistenciasDb,
     isLoading, setIsLoading, refresh,
     turnoFilter, tipoOrganizacionMap, setTipoOrganizacionMap,
+    tipoRotacionMap, setTipoRotacionMap, tipoRotacionSuggestionMap,
     visitasByDate,
   } = data;
 
@@ -31,14 +37,17 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
 
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
-  const handleOrgTypeChange = async (date: string, newType: string) => {
-    const [d, m] = date.split('/');
-    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  const getTurnoId = (date: string) => {
     let defaultTurnoId = 4;
     if (turnoFilter === 'manana') defaultTurnoId = 3;
     if (turnoFilter === 'apertura') defaultTurnoId = 45;
+    return dateTurnoMap[date] || defaultTurnoId;
+  };
 
-    const turnoId = dateTurnoMap[date] || defaultTurnoId;
+  const handleOrgTypeChange = async (date: string, newType: string) => {
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = getTurnoId(date);
     const prev = tipoOrganizacionMap[date] || 'dispositivos fijos';
 
     setTipoOrganizacionMap((old: Record<string, string>) => ({ ...old, [date]: newType }));
@@ -49,12 +58,37 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
         .upsert({ 
           fecha: fechaDB, 
           id_turno: turnoId, 
-          tipo_organizacion: newType 
+          tipo_organizacion: newType,
+          tipo_rotacion: tipoRotacionMap[date] ?? null,
         });
       if (error) throw error;
     } catch (err) {
       console.error('Error updating org type:', err);
       setTipoOrganizacionMap((old: Record<string, string>) => ({ ...old, [date]: prev }));
+    }
+  };
+
+  const handleRotacionTypeChange = async (date: string, newType: string) => {
+    const [d, m] = date.split('/');
+    const fechaDB = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const turnoId = getTurnoId(date);
+    const prev = tipoRotacionMap[date] || tipoRotacionSuggestionMap[date] || 'rotacion simple';
+
+    setTipoRotacionMap((old: Record<string, string>) => ({ ...old, [date]: newType }));
+
+    try {
+      const { error } = await supabase
+        .from('configuracion_turnos')
+        .upsert({
+          fecha: fechaDB,
+          id_turno: turnoId,
+          tipo_organizacion: tipoOrganizacionMap[date] || 'dispositivos fijos',
+          tipo_rotacion: newType,
+        });
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error updating rotacion type:', err);
+      setTipoRotacionMap((old: Record<string, string>) => ({ ...old, [date]: prev }));
     }
   };
 
@@ -248,6 +282,39 @@ export const DevicesTab: React.FC<DevicesTabProps> = ({ data, year }) => {
                                 }`}
                               >
                                 {ORG_LABELS[type]}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  <td className="p-2 border-border" />
+                </tr>
+                {/* ── Tipo Rotación Row — sugerida automáticamente ── */}
+                <tr className="border-b-2 border-primary/20 bg-blue-50/40">
+                  <td className="sticky left-0 bg-blue-50/60 px-4 py-3 border-r border-border font-bold text-xs text-blue-700 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    🔄 Tipo Rotación
+                  </td>
+                    {activeDates.map((date: string) => {
+                      const rotacionType = tipoRotacionMap?.[date] || tipoRotacionSuggestionMap?.[date] || 'rotacion simple';
+                      const isSuggested = !tipoRotacionMap?.[date];
+                      return (
+                        <td key={date} className="px-1 py-2 border-r border-border text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            {ROT_TYPES.map(type => (
+                              <button
+                                key={type}
+                                onClick={() => handleRotacionTypeChange(date, type)}
+                                className={`w-full px-1 py-0.5 text-[9px] font-bold rounded transition-all whitespace-nowrap ${
+                                  rotacionType === type
+                                    ? type === 'rotacion simple'
+                                      ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      : 'bg-card text-foreground border border-border shadow-sm'
+                                    : 'text-muted-foreground/60 hover:text-foreground border border-transparent hover:border-border'
+                                }`}
+                                title={isSuggested ? 'Valor sugerido automáticamente' : ''}
+                              >
+                                {ROT_LABELS[type]}{isSuggested && rotacionType === type ? ' ✨' : ''}
                               </button>
                             ))}
                           </div>

@@ -32,6 +32,122 @@ interface StaticCache {
 
 const DRAFT_AUDIT_ENABLED = true;
 
+// Función pura: mezcla una nueva mutación en la cola existente, devolviendo la
+// lista resultante. Es la fuente de verdad síncrona usada por pendingMutationsRef.
+function computeNextMutations(
+  prev: PendingMutation[],
+  mutation: PendingMutation,
+  allowMultiDispositivoApertura: boolean
+): PendingMutation[] {
+  // Intentamos encontrar una mutación previa para el mismo "espacio lógico"
+  // Para menu/menu_semana el espacio es (tabla, agente, fecha, turno)
+  const isAssignment = mutation.table === 'menu' || mutation.table === 'menu_semana';
+  const isRotationMultiDevice =
+    (mutation.table === 'menu' && allowMultiDispositivoApertura) ||
+    (mutation.table === 'menu_semana' &&
+      (
+        String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
+        (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
+      ));
+  let existingIndex = -1;
+
+  if (isAssignment && mutation.matchParams?.id_agente) {
+    existingIndex = prev.findIndex(m => 
+      m.table === mutation.table && 
+      m.matchParams?.id_agente === mutation.matchParams.id_agente &&
+      m.matchParams?.fecha_asignacion === mutation.matchParams.fecha_asignacion &&
+      m.matchParams?.id_turno === mutation.matchParams.id_turno &&
+      (
+        !isRotationMultiDevice ||
+        (
+          (m.matchParams?.id_dispositivo ?? m.payload?.id_dispositivo ?? null) ===
+            (mutation.matchParams?.id_dispositivo ?? mutation.payload?.id_dispositivo ?? null) &&
+          (m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? null) ===
+            (mutation.matchParams?.numero_grupo ?? mutation.payload?.numero_grupo ?? null)
+        )
+      )
+    );
+  } else {
+    existingIndex = prev.findIndex(m => m.id === mutation.id);
+  }
+
+  if (existingIndex !== -1) {
+    const existing = prev[existingIndex];
+    const next = [...prev];
+    const payloadKeys = Object.keys(mutation.payload || {});
+    const existingPayloadKeys = Object.keys(existing.payload || {});
+    const isAcompanaOnlyUpdate =
+      mutation.action === 'update' &&
+      payloadKeys.length === 1 &&
+      payloadKeys[0] === 'acompaña_grupo';
+    const existingIsAcompanaOnlyUpdate =
+      existing.action === 'update' &&
+      existingPayloadKeys.length === 1 &&
+      existingPayloadKeys[0] === 'acompaña_grupo';
+
+    // Lógica de mezcla simplificada:
+    // Si el nuevo es un 'remove' (dispositivo 999) y el anterior era un 'insert', simplemente eliminamos ambos
+    if (mutation.payload?.id_dispositivo === 999 && existing.action === 'insert') {
+      next.splice(existingIndex, 1);
+      if (DRAFT_AUDIT_ENABLED) {
+        console.info('[DraftAudit] merge-cancel', {
+          key: buildMutationKey(mutation),
+          removedExistingId: existing.id,
+          incomingId: mutation.id,
+        });
+      }
+      return next;
+    }
+
+    if (isAcompanaOnlyUpdate || existingIsAcompanaOnlyUpdate) {
+      next[existingIndex] = {
+        ...existing,
+        ...mutation,
+        action: existing.action === 'insert' ? 'insert' : mutation.action,
+        matchParams: { ...existing.matchParams, ...mutation.matchParams },
+        payload: { ...existing.payload, ...mutation.payload },
+      };
+      if (DRAFT_AUDIT_ENABLED) {
+        console.info('[DraftAudit] merge-partial-update', {
+          key: buildMutationKey(mutation),
+          replacedId: existing.id,
+          incomingId: mutation.id,
+          finalAction: next[existingIndex].action,
+        });
+      }
+      return next;
+    }
+
+    // De lo contrario, el nuevo sobreescribe al viejo (manteniendo la acción original si era insert)
+    next[existingIndex] = {
+      ...mutation,
+      action: existing.action === 'insert' ? 'insert' : mutation.action
+    };
+    if (DRAFT_AUDIT_ENABLED) {
+      console.info('[DraftAudit] merge-replace', {
+        key: buildMutationKey(mutation),
+        replacedId: existing.id,
+        incomingId: mutation.id,
+        finalAction: next[existingIndex].action,
+      });
+    }
+    return next;
+  }
+
+  if (DRAFT_AUDIT_ENABLED) {
+    console.info('[DraftAudit] enqueue', {
+      id: mutation.id,
+      key: buildMutationKey(mutation),
+      table: mutation.table,
+      action: mutation.action,
+      uiDate: mutation.uiDate,
+      matchParams: mutation.matchParams,
+      payload: mutation.payload,
+    });
+  }
+  return [...prev, mutation];
+}
+
 export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false, motorAsignacionEnabled = false }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string; fecha_nacimiento: string | null }[]>([]);
@@ -49,6 +165,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
   const [agentConvocatoriaMap, setAgentConvocatoriaMap] = useState<Record<string, Record<number, number>>>({});
   const [agentConvocatoriaStatusMap, setAgentConvocatoriaStatusMap] = useState<Record<string, Record<number, string>>>({});
   const [tipoOrganizacionMap, setTipoOrganizacionMap] = useState<Record<string, string>>({});
+  const [tipoRotacionMap, setTipoRotacionMap] = useState<Record<string, string>>({});
+  const [tipoRotacionSuggestionMap, setTipoRotacionSuggestionMap] = useState<Record<string, string>>({});
   const [refuerzosDb, setRefuerzosDb] = useState<AssignmentsMatrix>({});
   const [visitasByDate, setVisitasByDate] = useState<VisitasByDateMap>({});
   const [llamadosByAsignacion, setLlamadosByAsignacion] = useState<Record<number, LlamadoInfo[]>>({});
@@ -59,6 +177,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>([]);
+  // Fuente de verdad síncrona de la cola: permite guardar de inmediato
+  // (p. ej. "Guardar fixture") sin esperar el re-render de React.
+  const pendingMutationsRef = useRef<PendingMutation[]>([]);
   const hasLoadedStatic = useRef(false);
   const staticCache = useRef<StaticCache | null>(null);
   const isSavingRef = useRef(false);
@@ -96,115 +217,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
       }
     }
     
-    setPendingMutations(prev => {
-      // Intentamos encontrar una mutación previa para el mismo "espacio lógico"
-      // Para menu/menu_semana el espacio es (tabla, agente, fecha, turno)
-      const isAssignment = mutation.table === 'menu' || mutation.table === 'menu_semana';
-      const isRotationMultiDevice =
-        (mutation.table === 'menu' && allowMultiDispositivoApertura) ||
-        (mutation.table === 'menu_semana' &&
-          (
-            String(mutation.payload?.tipo_organizacion || '').toLowerCase().includes('rotacion') ||
-            (mutation.matchParams?.id_dispositivo != null && mutation.matchParams?.id_dispositivo !== 999)
-          ));
-      let existingIndex = -1;
-
-      if (isAssignment && mutation.matchParams?.id_agente) {
-        existingIndex = prev.findIndex(m => 
-          m.table === mutation.table && 
-          m.matchParams?.id_agente === mutation.matchParams.id_agente &&
-          m.matchParams?.fecha_asignacion === mutation.matchParams.fecha_asignacion &&
-          m.matchParams?.id_turno === mutation.matchParams.id_turno &&
-          (
-            !isRotationMultiDevice ||
-            (
-              (m.matchParams?.id_dispositivo ?? m.payload?.id_dispositivo ?? null) ===
-                (mutation.matchParams?.id_dispositivo ?? mutation.payload?.id_dispositivo ?? null) &&
-              (m.matchParams?.numero_grupo ?? m.payload?.numero_grupo ?? null) ===
-                (mutation.matchParams?.numero_grupo ?? mutation.payload?.numero_grupo ?? null)
-            )
-          )
-        );
-      } else {
-        existingIndex = prev.findIndex(m => m.id === mutation.id);
-      }
-
-      if (existingIndex !== -1) {
-        const existing = prev[existingIndex];
-        const next = [...prev];
-        const payloadKeys = Object.keys(mutation.payload || {});
-        const existingPayloadKeys = Object.keys(existing.payload || {});
-        const isAcompanaOnlyUpdate =
-          mutation.action === 'update' &&
-          payloadKeys.length === 1 &&
-          payloadKeys[0] === 'acompaña_grupo';
-        const existingIsAcompanaOnlyUpdate =
-          existing.action === 'update' &&
-          existingPayloadKeys.length === 1 &&
-          existingPayloadKeys[0] === 'acompaña_grupo';
-
-        // Lógica de mezcla simplificada:
-        // Si el nuevo es un 'remove' (dispositivo 999) y el anterior era un 'insert', simplemente eliminamos ambos
-        if (mutation.payload?.id_dispositivo === 999 && existing.action === 'insert') {
-          next.splice(existingIndex, 1);
-          if (DRAFT_AUDIT_ENABLED) {
-            console.info('[DraftAudit] merge-cancel', {
-              key: buildMutationKey(mutation),
-              removedExistingId: existing.id,
-              incomingId: mutation.id,
-            });
-          }
-          return next;
-        }
-
-        if (isAcompanaOnlyUpdate || existingIsAcompanaOnlyUpdate) {
-          next[existingIndex] = {
-            ...existing,
-            ...mutation,
-            action: existing.action === 'insert' ? 'insert' : mutation.action,
-            matchParams: { ...existing.matchParams, ...mutation.matchParams },
-            payload: { ...existing.payload, ...mutation.payload },
-          };
-          if (DRAFT_AUDIT_ENABLED) {
-            console.info('[DraftAudit] merge-partial-update', {
-              key: buildMutationKey(mutation),
-              replacedId: existing.id,
-              incomingId: mutation.id,
-              finalAction: next[existingIndex].action,
-            });
-          }
-          return next;
-        }
-
-        // De lo contrario, el nuevo sobreescribe al viejo (manteniendo la acción original si era insert)
-        next[existingIndex] = {
-          ...mutation,
-          action: existing.action === 'insert' ? 'insert' : mutation.action
-        };
-        if (DRAFT_AUDIT_ENABLED) {
-          console.info('[DraftAudit] merge-replace', {
-            key: buildMutationKey(mutation),
-            replacedId: existing.id,
-            incomingId: mutation.id,
-            finalAction: next[existingIndex].action,
-          });
-        }
-        return next;
-      }
-
-      if (DRAFT_AUDIT_ENABLED) {
-        console.info('[DraftAudit] enqueue', {
-          id: mutation.id,
-          key: buildMutationKey(mutation),
-          table: mutation.table,
-          action: mutation.action,
-          uiDate: mutation.uiDate,
-          matchParams: mutation.matchParams,
-          payload: mutation.payload,
-        });
-      }
-      return [...prev, mutation];
-    });
+    const next = computeNextMutations(pendingMutationsRef.current, mutation, allowMultiDispositivoApertura);
+    pendingMutationsRef.current = next;
+    setPendingMutations(next);
 
     // Actualización inmediata del estado local para la UI
     if (mutation.table === 'menu' || mutation.table === 'menu_semana') {
@@ -338,11 +353,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
   };
 
   const saveDrafts = async () => {
-    if (pendingMutations.length === 0) return { success: true };
+    const pendingToSave = pendingMutationsRef.current;
+    if (pendingToSave.length === 0) return { success: true };
     if (isSavingRef.current) return { success: false, error: 'Ya hay un guardado en curso' };
     isSavingRef.current = true;
     setIsLoading(true);
-    const mutationsToSave = compactPendingMutations(pendingMutations);
+    const mutationsToSave = compactPendingMutations(pendingToSave);
     const processedMutationIds = new Set<string>();
     try {
       const persistMenuLike = async (
@@ -535,6 +551,15 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         delete finalRow.id_menu;
         delete finalRow.id_menu_semana;
 
+        // Varias filas en la celda (rotación multi-grupo) y el payload no trae grupo:
+        // el UPDATE por clave lógica barre TODAS las filas. Si dejamos numero_grupo en
+        // finalRow (heredado del baseRow), aplana todos los grupos al del primero (y con
+        // el índice único (…, dispositivo, grupo) lanzaría 23505). Al quitarlo del payload,
+        // cada fila conserva su propio grupo y solo se actualizan los demás campos.
+        if (existingRows && existingRows.length > 1 && cleanPayload?.numero_grupo == null) {
+          delete finalRow.numero_grupo;
+        }
+
         if (table === 'menu_semana' && (finalRow.id_convocatoria == null)) {
           const resolvedConvId = await resolveConvocatoriaId(
             Number(finalRow.id_agente),
@@ -705,6 +730,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         processedMutationIds.add(m.id);
       }
       setPendingMutations([]);
+      pendingMutationsRef.current = [];
       setRefreshCounter(c => c + 1);
       setIsLoading(false);
       if (DRAFT_AUDIT_ENABLED) {
@@ -718,7 +744,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         console.error('[DraftAudit] save-failed', err);
         console.groupEnd();
       }
-      setPendingMutations(mutationsToSave.filter((m) => !processedMutationIds.has(m.id)));
+      const remaining = mutationsToSave.filter((m) => !processedMutationIds.has(m.id));
+      setPendingMutations(remaining);
+      pendingMutationsRef.current = remaining;
       setIsLoading(false);
       return { success: false, error: err.message };
     } finally {
@@ -728,6 +756,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
   const discardDrafts = useCallback(() => {
     setPendingMutations([]);
+    pendingMutationsRef.current = [];
     setRefreshCounter(c => c + 1); // Forzamos recarga para limpiar cambios locales no guardados
   }, []);
 
@@ -757,6 +786,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
   const formatUiDate = (d: string | number, m: string | number) => {
     return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
   };
+
+  const uiToSortKey = (y: string, m: string, d: string) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
   useEffect(() => {
     async function loadInitialData() {
@@ -937,6 +968,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         
         // Build tipo_organizacion map from configuracion_turnos
         const orgTypeMap: Record<string, string> = {};
+        const rotacionTypeMap: Record<string, string> = {};
         configData.forEach(cfg => {
           if (!cfg.fecha) return;
           const tipoTurno = turnoTypeMap[cfg.id_turno] || '';
@@ -945,8 +977,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           if (fy === yFilt && fm === mmFilt) {
             const uiDate = formatUiDate(fd, fm);
             orgTypeMap[uiDate] = cfg.tipo_organizacion;
+            if (cfg.tipo_rotacion) rotacionTypeMap[uiDate] = cfg.tipo_rotacion;
           }
         });
+        setTipoRotacionMap(rotacionTypeMap);
 
         menuSemanaData.forEach(ms => {
           if (!ms.fecha_asignacion) return;
@@ -956,6 +990,38 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           grupoMap[key] = ms.numero_grupo;
         });
         setTipoOrganizacionMap(orgTypeMap);
+
+        // Sugerencia de tipo_rotacion: desde la primera fecha en que un residente
+        // aparece en dispositivos en adelante = 'rotacion simple'; hacia atrás = 'dispositivo fijo'.
+        const isAperturaForSuggestion = turnoFilter === 'apertura';
+        const firstAppearanceDates = new Set<string>();
+        const collectFirstAppearance = (fecha: string | null, idDispositivo: number | null) => {
+          if (!fecha || idDispositivo === 999) return;
+          const [y, m, d] = fecha.split('-');
+          if (y !== yFilt || m !== mmFilt) return;
+          firstAppearanceDates.add(uiToSortKey(y, m, d));
+        };
+        (isAperturaForSuggestion ? menuData : menuSemanaData).forEach((row: { fecha_asignacion?: string | null; id_dispositivo?: number | null; id_turno?: number | null }) => {
+          if (isAperturaForSuggestion) {
+            collectFirstAppearance(row.fecha_asignacion, row.id_dispositivo);
+          } else {
+            const tipo = turnoTypeMap[row.id_turno] || '';
+            if (!matchesTurnoFilter(tipo)) return;
+            collectFirstAppearance(row.fecha_asignacion, row.id_dispositivo);
+          }
+        });
+        const sortedAppearance = Array.from(firstAppearanceDates).sort();
+        const firstDeviceSortKey = sortedAppearance[0] || null;
+        const rotacionSuggestionMap: Record<string, string> = {};
+        if (firstDeviceSortKey) {
+          const lastDay = new Date(Number(yFilt), Number(mmFilt), 0).getDate();
+          for (let day = 1; day <= lastDay; day++) {
+            const uiDate = formatUiDate(day, mmFilt);
+            const sortKey = uiToSortKey(yFilt, mmFilt, String(day).padStart(2, '0'));
+            rotacionSuggestionMap[uiDate] = sortKey >= firstDeviceSortKey ? 'rotacion simple' : 'dispositivo fijo';
+          }
+        }
+        setTipoRotacionSuggestionMap(rotacionSuggestionMap);
 
         if (resiData) {
           const matrix: AssignmentsMatrix = {};
@@ -1466,6 +1532,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     dateTurnoMap, agentTipoTurnoMap, inasistenciasDb, agentConvocatoriaMap,
     agentConvocatoriaStatusMap, // Export the new map just in case
     tipoOrganizacionMap, setTipoOrganizacionMap, turnoFilter,
+    tipoRotacionMap, setTipoRotacionMap, tipoRotacionSuggestionMap,
     visitasByDate, refuerzosDb,
     llamadosByAsignacion,
     annualMetricsDb, // export anual metrics

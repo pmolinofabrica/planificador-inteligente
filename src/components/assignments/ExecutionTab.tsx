@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Users, AlertCircle, X as XIcon, Monitor, Search } from 'lucide-react';
+import { Users, AlertCircle, X as XIcon, Monitor, Search, Route, CheckCircle2 } from 'lucide-react';
 import { getPisoFromDeviceName, getGroupColor, getFloorColor } from '@/lib/floor-utils';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
 import { AperturaDevicesPanel } from './AperturaDevicesPanel';
@@ -29,6 +29,14 @@ const floorNames: Record<string, { label: string; bgClass: string; borderClass: 
   '4': { label: 'P4', bgClass: 'bg-muted-foreground', borderClass: 'border-muted-foreground' },
 };
 
+const fmtHora = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+};
+
 export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   data, execDate, setExecDate,
   selectedResident, setSelectedResident,
@@ -37,7 +45,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   setSelectedDevice, setSelectedDateFilter,
   showCapacitadosColors = true, showPisoColors = false,
 }) => {
-  const { activeDates, allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, tipoOrganizacionMap, turnoFilter, agentConvocatoriaMap, addAssignmentDraft, annualMetricsDb, aperturaMetricsDb, tardeMananaMetricsDb } = data;
+  const { activeDates, allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, tipoOrganizacionMap, turnoFilter, agentConvocatoriaMap, saveDrafts, refresh, dateTurnoMap, annualMetricsDb, aperturaMetricsDb, tardeMananaMetricsDb, allowMultiDispositivoApertura } = data;
   const dbResidents = (data as any).dbResidents || [];
 
   const fechaDB = (() => {
@@ -54,6 +62,10 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   const [fixturePickerSearch, setFixturePickerSearch] = useState<Record<string, string>>({});
   const [isSavingFixture, setIsSavingFixture] = useState(false);
   const [selectedAutoCards, setSelectedAutoCards] = useState<Set<string>>(new Set());
+  const [autoConvocados, setAutoConvocados] = useState<Set<number>>(new Set());
+  const [presentes, setPresentes] = useState<Set<number>>(new Set());
+  const [ingresoHoras, setIngresoHoras] = useState<Record<number, string>>({});
+  const [showRecorrido, setShowRecorrido] = useState(false);
   const savedFixtureData = useRef<Record<string, string>>({}); // devId -> JSON snapshot of last saved slot
   const fixtureLoadedRef = useRef<string>(''); // key to prevent re-initialization
   const [criteriosConfig, setCriteriosConfig] = useState<{ id: string; label: string; abrev: string; active: boolean; showInCards: boolean; order: number }[]>(
@@ -124,6 +136,31 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     });
     return ids;
   }, [fixtureData]);
+
+  // Fixed apertura: residentes que ya tienen fila en otro dispositivo el mismo día
+  // (assignmentsDb excluye el baúl 999). Se usan para bloquear en el picker y
+  // evitar que el fixture deje al residente en 2 dispositivos.
+  const residentsByDevice = useMemo(() => {
+    const map: Record<string, Set<number>> = {};
+    Object.entries(assignmentsDb?.[execDate] || {}).forEach(([devId, residents]: [string, any]) => {
+      map[devId] = new Set((residents || []).map((r: any) => Number(r.id)));
+    });
+    return map;
+  }, [assignmentsDb, execDate]);
+
+  const placedElsewhereByDevice = useMemo(() => {
+    const map: Record<string, Set<number>> = {};
+    Object.keys(residentsByDevice).forEach(tgt => {
+      const s = new Set<number>();
+      Object.entries(residentsByDevice).forEach(([dId, ids]) => {
+        if (dId !== tgt) ids.forEach(id => s.add(id));
+      });
+      map[tgt] = s;
+    });
+    return map;
+  }, [residentsByDevice]);
+
+  const isFixedApertura = turnoFilter === 'apertura' && !allowMultiDispositivoApertura;
 
   // Cards with pending changes (dirty) — used for save button display
   const fixtureDirtyCount = useMemo(() => {
@@ -224,6 +261,33 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     });
   }, [activeGroups]);
 
+  // Load check-ins (ingresos) for the current day — poll every 30s (no realtime)
+  useEffect(() => {
+    const loadIngresos = async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from('ingresos_residentes')
+          .select('id_agente, hora_ingreso')
+          .eq('fecha', fechaDB);
+        const rows = (data as { id_agente: number; hora_ingreso: string }[]) || [];
+        const set = new Set<number>();
+        const horas: Record<number, string> = {};
+        rows.forEach(r => {
+          set.add(r.id_agente);
+          horas[r.id_agente] = r.hora_ingreso;
+        });
+        setPresentes(set);
+        setIngresoHoras(horas);
+      } catch (e) {
+        console.error('Error cargando ingresos', e);
+      }
+    };
+    loadIngresos();
+    const id = setInterval(loadIngresos, 30000);
+    return () => clearInterval(id);
+  }, [fechaDB]);
+
   const convocadoIds = new Set(convocadosDb[execDate] || []);
 
   const isRotation = turnoFilter !== 'apertura' && (tipoOrganizacionMap?.[execDate] || '').includes('rotacion');
@@ -256,6 +320,28 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
       }))
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [allResidentsDb, convocadoIds, assignmentsDb, execDate, dbDevices, isAgentAbsent]);
+
+  // Recorrido: residentes presentes + dispositivos asignados en el fixture
+  const recorrido = useMemo(() => {
+    const byId: Record<number, { id: number; nombre: string; hora: string; dispositivos: { name: string; piso: string; slot: string }[] }> = {};
+    (allResidentsDb || [])
+      .filter((r: { id: number }) => presentes.has(r.id))
+      .forEach((r: { id: number; name: string }) => {
+        byId[r.id] = { id: r.id, nombre: r.name, hora: fmtHora(ingresoHoras[r.id] || ''), dispositivos: [] };
+      });
+    Object.entries(fixtureData).forEach(([devId, slot]) => {
+      const dev = dbDevices.find((d: { id: string }) => d.id === devId);
+      if (!dev) return;
+      const piso = getPisoFromDeviceName(dev.name);
+      const add = (rid: number | null, slotLabel: 'R1' | 'R2') => {
+        if (rid == null || !byId[rid]) return;
+        byId[rid].dispositivos.push({ name: dev.name, piso, slot: slotLabel });
+      };
+      add(slot.residente1, 'R1');
+      add(slot.residente2, 'R2');
+    });
+    return Object.values(byId).sort((a, b) => (a.hora || '99:99').localeCompare(b.hora || '99:99'));
+  }, [allResidentsDb, presentes, ingresoHoras, fixtureData, dbDevices]);
 
   return (
     <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6">
@@ -312,7 +398,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     if (s.residente2 != null) allPlaced.add(s.residente2);
                   });
                   const pool = (allResidentsDb || [])
-                    .filter((r: any) => convocadoIds.has(r.id) && !allPlaced.has(r.id) && !isAgentAbsent?.(r.id, execDate));
+                    .filter((r: any) => convocadoIds.has(r.id) && (autoConvocados.has(r.id) || presentes.has(r.id)) && !allPlaced.has(r.id) && !isAgentAbsent?.(r.id, execDate));
                   const shuffled = [...pool].sort(() => Math.random() - 0.5);
                   const used = new Set<number>();
                   setFixtureData(prev => {
@@ -493,68 +579,152 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 Criterios
               </button>
               <button
+                onClick={() => setShowRecorrido(true)}
+                className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all bg-card text-foreground border-border hover:border-primary/40 hover:text-primary"
+              >
+                <Route className="w-3.5 h-3.5" />
+                Recorrido
+              </button>
+              <button
                 onClick={async () => {
-                  setIsSavingFixture(true);
-                  try {
+                  const isApertura = turnoFilter === 'apertura';
+                  const turnoId = isApertura ? undefined : dateTurnoMap?.[execDate];
+                  if (!isApertura && !turnoId) {
+                    alert(`No se pudo resolver id_turno para ${execDate}. Sin ese dato no se guarda para evitar inconsistencias.`);
+                    return;
+                  }
+                  const menuTable = isApertura ? 'menu' : 'menu_semana';
+                  const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
+                  const changedDevIds: string[] = [];
+                  const plansToUpsert: any[] = [];
+                  const menuOps: any[] = [];
+
+                  // Fixed apertura (un residente = un dispositivo por día): pre-calculamos el
+                  // dispositivo actual de cada ganador para MOVERLO ahí (igual que el flujo
+                  // normal) en vez de insertar una fila nueva y dejarlo en 2 dispositivos.
+                  const fixedWinnerSources: Record<number, number> = {};
+                  if (isApertura && !allowMultiDispositivoApertura) {
+                    const winners = new Set<number>();
                     Object.entries(fixtureData).forEach(([devId, slot]) => {
-                      const oldSnapshotStr = savedFixtureData.current[devId];
-                      const snapshot = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad });
-                      if (oldSnapshotStr === snapshot) return;
-
-                      // 1. Upsert fixture_plan when changed (even if cleared — clears the row)
-                      addAssignmentDraft({
-                        id: `fixture-plan-${devId}-${fechaDB}`,
-                        table: 'fixture_plan',
-                        action: 'upsert',
-                        matchParams: { id_dispositivo: parseInt(devId), fecha: fechaDB, tipo_turno: turnoFilter },
-                        payload: {
-                          id_dispositivo: parseInt(devId),
-                          fecha: fechaDB,
-                          tipo_turno: turnoFilter,
-                          prioridad: slot.prioridad,
-                          residente1: slot.residente1,
-                          residente2: slot.residente2,
-                          asignado: slot.asignado || null,
-                        },
-                        uiDate: execDate,
+                      if (savedFixtureData.current[devId] === JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad })) return;
+                      const w = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
+                      if (w != null) winners.add(w);
+                    });
+                    if (winners.size > 0) {
+                      const { data: winnerRows } = await supabase.from('menu')
+                        .select('id_agente, id_dispositivo')
+                        .in('id_agente', Array.from(winners))
+                        .eq('fecha_asignacion', fechaDB);
+                      (winnerRows || []).forEach((r: any) => {
+                        const id = Number(r.id_agente);
+                        if (fixedWinnerSources[id] === undefined) fixedWinnerSources[id] = Number(r.id_dispositivo);
                       });
-                      savedFixtureData.current[devId] = snapshot;
+                    }
+                  }
 
-                      // 2. Handle winner menu assignment changes
-                      const oldWinner = oldSnapshotStr ? (() => { const s = JSON.parse(oldSnapshotStr); return s.asignado === 'R1' ? s.residente1 : s.asignado === 'R2' ? s.residente2 : null; })() : null;
-                      const newWinner = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
-                      if (oldWinner != null && oldWinner !== newWinner) {
-                        addAssignmentDraft({
-                          id: `fixture-del-${oldWinner}-${fechaDB}-${devId}`,
-                          table: 'menu',
-                          action: 'delete',
-                          matchParams: { id_agente: oldWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId) },
-                          uiDate: execDate,
-                        });
-                      }
-                      if (newWinner != null) {
-                        const res = (allResidentsDb || []).find((r: any) => r.id === newWinner);
-                        const convId = agentConvocatoriaMap?.[execDate]?.[newWinner];
-                        if (convId && res) {
-                          addAssignmentDraft({
-                            id: `fixture-${newWinner}-${fechaDB}-${devId}`,
+                  Object.entries(fixtureData).forEach(([devId, slot]) => {
+                    const oldSnapshotStr = savedFixtureData.current[devId];
+                    const snapshot = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad });
+                    if (oldSnapshotStr === snapshot) return;
+                    changedDevIds.push(devId);
+
+                    // 1. Batch fixture_plan (una sola llamada upsert con onConflict
+                    //    al final en vez de una mutación + SELECT por dispositivo).
+                    plansToUpsert.push({
+                      id_dispositivo: parseInt(devId),
+                      fecha: fechaDB,
+                      tipo_turno: turnoFilter,
+                      prioridad: slot.prioridad,
+                      residente1: slot.residente1,
+                      residente2: slot.residente2,
+                      asignado: slot.asignado || null,
+                    });
+
+                    // 2. Winner menu assignment changes: se acumulan como descriptores
+                    //    y se persisten en UNA llamada RPC transaccional (rpc_fixture_save_menu)
+                    //    en vez de una mutación por-dispositivo en la cola.
+                    const oldWinner = oldSnapshotStr ? (() => { const s = JSON.parse(oldSnapshotStr); return s.asignado === 'R1' ? s.residente1 : s.asignado === 'R2' ? s.residente2 : null; })() : null;
+                    const newWinner = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
+                    if (oldWinner != null && oldWinner !== newWinner) {
+                      menuOps.push({
+                        table: menuTable,
+                        action: 'delete',
+                        match: {
+                          id_agente: oldWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
+                          ...(isApertura ? {} : { id_turno: turnoId }),
+                        },
+                        payload: {},
+                      });
+                    }
+                    if (newWinner != null) {
+                      const res = (allResidentsDb || []).find((r: any) => r.id === newWinner);
+                      const convId = agentConvocatoriaMap?.[execDate]?.[newWinner];
+                      if (convId && res) {
+                        const srcDev = fixedWinnerSources[newWinner];
+                        const shouldMove = fixedWinnerSources.hasOwnProperty(newWinner) && srcDev !== parseInt(devId);
+                        if (shouldMove) {
+                          menuOps.push({
                             table: 'menu',
+                            action: 'update',
+                            match: {
+                              id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: srcDev,
+                            },
+                            payload: {
+                              id_dispositivo: parseInt(devId), estado_ejecucion: 'planificado',
+                            },
+                          });
+                        } else {
+                          menuOps.push({
+                            table: menuTable,
                             action: 'upsert',
-                            matchParams: { id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId) },
+                            match: {
+                              id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
+                              ...(isApertura ? {} : { id_turno: turnoId }),
+                            },
                             payload: {
                               id_agente: newWinner, id_dispositivo: parseInt(devId),
                               fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
                               id_convocatoria: convId, prioridad: slot.prioridad,
-                              _ui_name: res.name,
+                              ...(isApertura ? {} : { id_turno: turnoId, tipo_organizacion: orgType }),
                             },
-                            uiDate: execDate,
                           });
                         }
                       }
+                    }
+                  });
+
+                  if (changedDevIds.length === 0) return;
+
+                  setIsSavingFixture(true);
+                  try {
+                    if (plansToUpsert.length > 0) {
+                      const { error: batchErr } = await supabase.from('fixture_plan')
+                        .upsert(plansToUpsert, { onConflict: 'id_dispositivo,fecha,tipo_turno' });
+                      if (batchErr) throw new Error(`[fixture_plan] Batch upsert falló: ${batchErr.message}`);
+                    }
+                    if (menuOps.length > 0) {
+                      const { data: rpcRes, error: menuErr } = await supabase.rpc('rpc_fixture_save_menu', {
+                        p_fecha: fechaDB,
+                        p_ops: menuOps,
+                      });
+                      if (menuErr) throw new Error(`[rpc_fixture_save_menu] ${menuErr.message}`);
+                      if (rpcRes && rpcRes.ok === false) throw new Error(rpcRes.error || '[rpc_fixture_save_menu] Fallo sin detalle');
+                    }
+                    const saveRes = await saveDrafts();
+                    if (!saveRes.success) throw new Error(saveRes.error || 'Error al guardar');
+                    // Recién ahora marcamos como guardados los slots persistidos
+                    changedDevIds.forEach(devId => {
+                      const slot = fixtureData[devId];
+                      if (!slot) return;
+                      savedFixtureData.current[devId] = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado ?? null, prioridad: slot.prioridad });
                     });
-                    setIsSavingFixture(false);
+                    // El RPC escribe menu/menu_semana fuera de la cola: forzamos el
+                    // refetch para que la matriz muestre el resultado real.
+                    refresh();
                   } catch (err: any) {
                     console.error('Error saving fixture:', err);
+                    alert(`Error al guardar el fixture: ${err.message || err}`);
+                  } finally {
                     setIsSavingFixture(false);
                   }
                 }}
@@ -570,7 +740,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <div className="w-56 shrink-0 bg-card rounded-lg border border-border overflow-hidden self-start sticky top-0 max-h-[calc(100vh-12rem)] flex flex-col">
                 <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
                   <span className="text-[10px] font-bold text-foreground uppercase tracking-wider">Residentes</span>
-                  <span className="text-[9px] font-mono text-muted-foreground">{assignedResidentIds.size}/{convocadoIds.size}</span>
+                  <span className="text-[9px] font-mono text-muted-foreground">{assignedResidentIds.size}/{convocadoIds.size} · auto {autoConvocados.size} · ✓ {presentes.size}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto text-[11px]">
                   {(allResidentsDb || [])
@@ -590,8 +760,9 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                       return (
                         <React.Fragment key={r.id}>
                           {showHeader && (
-                            <div className="px-3 py-1 text-[8px] font-bold text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-b border-border/20">
-                              {isConvocado ? 'Convocados' : 'Descanso / Otro turno'}
+                            <div className="px-3 py-1 text-[8px] font-bold text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-b border-border/20 flex items-center justify-between">
+                              <span>{isConvocado ? 'Convocados' : 'Descanso / Otro turno'}</span>
+                              {isConvocado && <span className="shrink-0">auto</span>}
                             </div>
                           )}
                           <div className={`px-3 py-1.5 border-b border-border/10 flex items-center gap-1.5 transition-all ${
@@ -605,6 +776,29 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                             } ${isAusente ? 'line-through text-stone-400' : ''}`}>
                               {isAusente ? '🚫 ' : ''}{r.name}
                             </span>
+                            {presentes.has(r.id) && (
+                              <span className="ml-auto shrink-0 text-emerald-600" title="Marcó su ingreso">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                            {isConvocado && (
+                              <label className={`shrink-0 cursor-pointer ${presentes.has(r.id) ? '' : 'ml-auto'}`} title="Usar en autocompletar">
+                                <input
+                                  type="checkbox"
+                                  checked={autoConvocados.has(r.id)}
+                                  onChange={() => {
+                                    setAutoConvocados(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(r.id)) next.delete(r.id);
+                                      else next.add(r.id);
+                                      return next;
+                                    });
+                                  }}
+                                  disabled={isAusente}
+                                  className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
+                                />
+                              </label>
+                            )}
                           </div>
                         </React.Fragment>
                       );
@@ -620,6 +814,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   const dev = dbDevices.find((d: any) => d.id === devId);
                   if (!dev) return null;
                   const piso = getPisoFromDeviceName(dev.name);
+                  const hasAssigned = slot.residente1 != null || slot.residente2 != null;
                   const convocados = (allResidentsDb || [])
                     .filter((r: any) => convocadoIds.has(r.id) && !isAgentAbsent?.(r.id, execDate))
                     .sort((a: any, b: any) => a.name.localeCompare(b.name));
@@ -674,8 +869,15 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                     ? convocados.filter((r: any) => r.name.toLowerCase().includes(s.toLowerCase()))
                                     : convocados;
                                   // Filter out the resident already selected in the other slot
+                                  // En 'dispositivos fijos' (apertura) además bloqueamos a los ya asignados
+                                  // a otro dispositivo; en rotación se permite multi-dispositivo.
                                   const otherKey = label === 'R1' ? 'residente2' : 'residente1';
-                                  const available = filtered.filter((r: any) => r.id !== slot[otherKey]);
+                                  const elsewhere = placedElsewhereByDevice[devId];
+                                  const available = filtered.filter((r: any) =>
+                                    r.id !== slot[otherKey] &&
+                                    (isRotation || !assignedResidentIds.has(r.id) || r.id === residentId) &&
+                                    (!isFixedApertura || !(elsewhere && elsewhere.has(r.id)) || r.id === residentId)
+                                  );
                                   if (available.length === 0) return <div className="px-2 py-1.5 text-[10px] text-muted-foreground">Sin resultados</div>;
                                   return available.map((r: any) => (
                                     <button
@@ -769,13 +971,20 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   };
 
                   return (
-                    <div key={devId} className={`p-3 rounded-lg border bg-card shadow-sm border-l-[3px] ${
+                    <div key={devId} className={`p-3 rounded-lg border shadow-sm border-l-[3px] ${
+                      hasAssigned
+                        ? piso === '1' ? 'bg-[hsl(var(--floor-1-bg))]'
+                          : piso === '2' ? 'bg-[hsl(var(--floor-2-bg))]'
+                          : piso === '3' ? 'bg-[hsl(var(--floor-3-bg))]'
+                          : 'bg-card'
+                        : 'bg-card'
+                    } ${
                       selectedAutoCards.has(devId) ? 'ring-2 ring-blue-400 border-blue-300' : 'border-border'
                     }`} style={{
                       borderLeftColor: piso === '1' ? 'hsl(var(--floor-1-border))' : piso === '2' ? 'hsl(var(--floor-2-border))' : piso === '3' ? 'hsl(var(--floor-3-border))' : undefined
                     }}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <input
                             type="checkbox"
                             checked={selectedAutoCards.has(devId)}
@@ -787,9 +996,9 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                 return next;
                               });
                             }}
-                            className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
+                            className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer shrink-0"
                           />
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
                             piso === '1' ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
                             : piso === '2' ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
                             : piso === '3' ? 'bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]'
@@ -797,14 +1006,14 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                           }`}>
                             P{piso}
                           </span>
-                          <span className="text-xs font-bold truncate">{dev.name}</span>
+                          <span className="text-xs font-bold truncate min-w-0 flex-1" title={dev.name}>{dev.name}</span>
                           {modifiedExternally.has(devId) && (
-                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-300 whitespace-nowrap" title="Modificado externamente">
+                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-300 whitespace-nowrap shrink-0" title="Modificado externamente">
                               ⚠ Modificado
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] font-mono font-bold text-muted-foreground">#{slot.prioridad}</span>
+                        <span className="text-[10px] font-mono font-bold text-muted-foreground shrink-0">#{slot.prioridad}</span>
                       </div>
                       <div className="space-y-2">
                         {renderRow('R1')}
@@ -847,7 +1056,60 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             )}
             </div>
 
-            {/* Sidebar for priority ordering only */}
+            {/* Sidebar: recorrido del día */}
+            {showRecorrido && (
+              <div className="fixed right-0 top-0 h-full w-80 bg-card border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+                  <h3 className="text-sm font-bold">Recorrido del día</h3>
+                  <button onClick={() => setShowRecorrido(false)}
+                    className="p-1 rounded-md hover:bg-muted transition-colors">
+                    <XIcon className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    Residentes que marcaron ingreso y su recorrido por dispositivos ({recorrido.length}).
+                  </p>
+                  {recorrido.length === 0 && (
+                    <div className="px-2 py-6 text-center text-[11px] text-muted-foreground">
+                      Aún no hay ingresos registrados para este día.
+                    </div>
+                  )}
+                  {recorrido.map(r => (
+                    <div key={r.id} className="p-2.5 rounded-lg border border-border bg-muted/20">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold truncate">{r.nombre}</span>
+                        <span className="text-[10px] font-mono font-bold text-emerald-700 shrink-0">{r.hora || '—'}</span>
+                      </div>
+                      {r.dispositivos.length > 0 ? (
+                        <div className="mt-1.5 space-y-1">
+                          {r.dispositivos.map((d, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                d.piso === '1' ? 'bg-[hsl(var(--floor-1-accent))]'
+                                : d.piso === '2' ? 'bg-[hsl(var(--floor-2-accent))]'
+                                : d.piso === '3' ? 'bg-[hsl(var(--floor-3-accent))]'
+                                : 'bg-muted-foreground'
+                              }`} />
+                              <span className="font-mono font-bold text-muted-foreground shrink-0">{d.slot}</span>
+                              <span className="font-medium truncate">{d.name}</span>
+                              <span className={`text-[9px] font-bold px-1 rounded border shrink-0 ${
+                                d.piso === '1' ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
+                                : d.piso === '2' ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
+                                : d.piso === '3' ? 'bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]'
+                                : 'bg-muted text-muted-foreground border-border'
+                              }`}>P{d.piso}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-[10px] text-muted-foreground/60 font-medium">Sin dispositivo asignado</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {showFixtureSidebar && (
               <div className="fixed right-0 top-0 h-full w-80 bg-card border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
@@ -865,17 +1127,17 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                       if (!dev) return null;
                       const spiso = getPisoFromDeviceName(dev.name);
                       return (
-                        <div key={devId} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 border-l-[3px]" style={{
+                        <div key={devId} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 border-l-[3px] min-w-0" style={{
                           borderLeftColor: spiso === '1' ? 'hsl(var(--floor-1-border))' : spiso === '2' ? 'hsl(var(--floor-2-border))' : spiso === '3' ? 'hsl(var(--floor-3-border))' : undefined
                         }}>
-                          <span className="text-[10px] font-mono font-bold text-muted-foreground w-6 text-center">{slot.prioridad}</span>
-                          <span className={`text-[8px] font-bold px-1 rounded border ${
+                          <span className="text-[10px] font-mono font-bold text-muted-foreground w-6 text-center shrink-0">{slot.prioridad}</span>
+                          <span className={`text-[8px] font-bold px-1 rounded border shrink-0 ${
                             spiso === '1' ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
                             : spiso === '2' ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
                             : spiso === '3' ? 'bg-[hsl(var(--floor-3-bg))] text-[hsl(var(--floor-3-text))] border-[hsl(var(--floor-3-border))]'
                             : 'bg-muted text-muted-foreground border-border'
                           }`}>P{spiso}</span>
-                          <span className="text-[11px] font-medium truncate flex-1">{dev.name}</span>
+                          <span className="text-[11px] font-medium truncate flex-1 min-w-0" title={dev.name}>{dev.name}</span>
                           <input
                             type="number"
                             min={1}
@@ -888,7 +1150,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                 [devId]: { ...prev[devId], prioridad: Math.max(1, Math.min(dbDevices.length, val)) }
                               }));
                             }}
-                            className="w-12 text-[11px] text-center font-bold py-1 rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            className="w-12 text-[11px] text-center font-bold py-1 rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
                           />
                         </div>
                       );

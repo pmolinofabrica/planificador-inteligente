@@ -129,7 +129,8 @@ export default function TableroPage() {
             onUpdateEstado={updateEstado}
             onAddComment={async (itemId, contenido) => {
               if (!currentUser) return;
-              await agregarComentario(itemId, currentUser, contenido);
+              const { error } = await agregarComentario(itemId, currentUser, contenido);
+              if (error) alert(`Error al comentar: ${error}`);
             }}
             onUpdateItem={handleUpdateItem}
             onDeleteItem={handleDeleteItem}
@@ -151,6 +152,7 @@ export default function TableroPage() {
       )}
 
       <NuevaTarjetaDialog
+        key={`${currentUser}-${showNewDialog}`}
         open={showNewDialog}
         onClose={() => setShowNewDialog(false)}
         currentUser={currentUser}
