@@ -47,6 +47,10 @@ export default function DashboardRotacion() {
   const [selectedDate, setSelectedDate] = useState<string>("all");
   const [showDiversidadModal, setShowDiversidadModal] = useState(false);
 
+  const year = new Date().getFullYear();
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -54,7 +58,7 @@ export default function DashboardRotacion() {
       const { data: resData, error: err1 } = await supabase
         .from("datos_personales")
         .select("id_agente, nombre, apellido")
-        .eq("cohorte", 2026)
+        .eq("cohorte", year)
         .eq("activo", true);
       if (err1) throw err1;
       
@@ -78,8 +82,8 @@ export default function DashboardRotacion() {
       const { data: asigData, error: err3 } = await supabase
         .from("menu")
         .select("id_agente, id_dispositivo, fecha_asignacion")
-        .gte("fecha_asignacion", "2026-01-01")
-        .lte("fecha_asignacion", "2026-12-31")
+        .gte("fecha_asignacion", yearStart)
+        .lte("fecha_asignacion", yearEnd)
         .not("id_dispositivo", "is", null);
       if (err3) throw err3;
 
@@ -98,8 +102,8 @@ export default function DashboardRotacion() {
           .from("menu_semana")
           .select("id_agente, id_dispositivo, fecha_asignacion")
           .in("id_turno", tmIds)
-          .gte("fecha_asignacion", "2026-01-01")
-          .lte("fecha_asignacion", "2026-12-31")
+          .gte("fecha_asignacion", yearStart)
+          .lte("fecha_asignacion", yearEnd)
           .not("id_dispositivo", "is", null);
         tmAsignaciones = (tmRaw || [])
           .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
@@ -120,9 +124,9 @@ export default function DashboardRotacion() {
           fecha_capacitacion: c.fecha_capacitacion 
         }));
 
-      // 5. Cargar estados (Inasistencias, Convocatorias) para FDS 2026
-      const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").eq("6ta_tardanza", false).gte("fecha_inasistencia", "2026-01-01").lte("fecha_inasistencia", "2026-12-31");
-      const { data: convData } = await supabase.from("vista_convocatoria_completa").select("id_agente, fecha_turno, tipo_turno").eq("anio", 2026).neq("estado", "cancelada");
+      // 5. Cargar estados (Inasistencias, Convocatorias) para FDS {year}
+      const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").eq("6ta_tardanza", false).gte("fecha_inasistencia", yearStart).lte("fecha_inasistencia", yearEnd);
+      const { data: convData } = await supabase.from("vista_convocatoria_completa").select("id_agente, fecha_turno, tipo_turno").eq("anio", year).neq("estado", "cancelada");
 
       const addStatus = (map: StatusMap, dateStr: string, agent: number, status: string) => {
         const date = dateStr.split("T")[0]; // Evitar diferencias por huso horario (timestamps)
@@ -151,8 +155,8 @@ export default function DashboardRotacion() {
 
       // 6. Cargar datos de acompaña_grupo (menu + menu_semana)
       const [acompMenu, acompSemana] = await Promise.all([
-        supabase.from("menu").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", "2026-01-01").lte("fecha_asignacion", "2026-12-31"),
-        supabase.from("menu_semana").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", "2026-01-01").lte("fecha_asignacion", "2026-12-31"),
+        supabase.from("menu").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
+        supabase.from("menu_semana").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
       ]);
       const acompanaList: AcompanaEntry[] = [];
       const seen = new Set<string>();
@@ -397,7 +401,7 @@ export default function DashboardRotacion() {
               Rotaciones dispositivos
             </h1>
             <p className="text-muted-foreground mt-1">
-              Cohorte 2026 - {turnoMode === 'apertura' ? 'Asignaciones Apertura (FDS)' : turnoMode === 'tm' ? 'Asignaciones Turno Mañana/Tarde' : 'Asignaciones Totales (Ap + T/M)'}
+              Cohorte {year} - {turnoMode === 'apertura' ? 'Asignaciones Apertura (FDS)' : turnoMode === 'tm' ? 'Asignaciones Turno Mañana/Tarde' : 'Asignaciones Totales (Ap + T/M)'}
             </p>
           </div>
         </div>
@@ -448,7 +452,7 @@ export default function DashboardRotacion() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{globalMetrics?.totalAsignaciones || 0}</div>
-            <p className="text-xs text-muted-foreground">En el año 2026</p>
+            <p className="text-xs text-muted-foreground">En el año {year}</p>
           </CardContent>
         </Card>
         
@@ -474,7 +478,7 @@ export default function DashboardRotacion() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{globalMetrics?.totalResidentes || 0}</div>
-            <p className="text-xs text-muted-foreground">Cohorte 2026 Activos</p>
+            <p className="text-xs text-muted-foreground">Cohorte {year} Activos</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm border-l-4 border-l-orange-500">
@@ -809,7 +813,7 @@ export default function DashboardRotacion() {
             if (ranking.length === 0) {
               return (
                 <div className="p-12 text-center text-muted-foreground">
-                  No hay registros de "acompaña grupo" en 2026.
+                  No hay registros de "acompaña grupo" en {year}.
                 </div>
               );
             }
