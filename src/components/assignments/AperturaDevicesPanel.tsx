@@ -232,7 +232,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         table: 'menu',
         action: 'update',
         matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB },
-        payload: { id_dispositivo: 999, estado_ejecucion: 'pendiente', _ui_name: resName },
+        payload: { id_dispositivo: 999, estado_ejecucion: 'planificado', _ui_name: resName },
         uiDate: execDate
       });
     } else {
@@ -247,7 +247,7 @@ export const AperturaDevicesPanel: React.FC<AperturaDevicesPanelProps> = ({
         table: 'menu_semana',
         action: 'update',
         matchParams: { id_agente: resId, id_dispositivo: parseInt(deviceId), fecha_asignacion: fechaDB, id_turno: turnoId },
-        payload: { id_dispositivo: 999, id_turno: turnoId, estado_ejecucion: 'pendiente', tipo_organizacion: orgType, _ui_name: resName },
+        payload: { id_dispositivo: 999, id_turno: turnoId, estado_ejecucion: 'planificado', tipo_organizacion: orgType, _ui_name: resName },
         uiDate: execDate
       });
     }

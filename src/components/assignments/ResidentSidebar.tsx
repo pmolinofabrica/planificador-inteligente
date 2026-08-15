@@ -109,7 +109,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           table: 'menu',
           action: 'update',
           matchParams: { id_agente: selectedResident.id, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB },
-          payload: { id_dispositivo: 999, estado_ejecucion: 'pendiente', _ui_name: resName },
+          payload: { id_dispositivo: 999, estado_ejecucion: 'planificado', _ui_name: resName },
           uiDate: date
         });
 
@@ -148,7 +148,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
             payload: {
               id_dispositivo: 999,
               id_turno: turnoId,
-              estado_ejecucion: 'pendiente',
+              estado_ejecucion: 'planificado',
               tipo_organizacion: orgType,
               _ui_name: resName,
             },
@@ -213,7 +213,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           },
           payload: {
             id_dispositivo: 999,
-            estado_ejecucion: 'pendiente',
+            estado_ejecucion: 'planificado',
             _ui_name: selectedResident.name
           },
           uiDate: date
@@ -234,7 +234,7 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
           payload: {
             id_dispositivo: 999,
             id_turno: turnoId,
-            estado_ejecucion: 'pendiente',
+            estado_ejecucion: 'planificado',
             tipo_organizacion: orgType,
             _ui_name: selectedResident.name,
           },
