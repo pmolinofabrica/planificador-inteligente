@@ -493,7 +493,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                         {absent && <span className="mr-1">🚫</span>}{isAperturaB(date, res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}{res.name}
                                       </span>
                                       {/* No-cap indicator */}
-                                      {!absent && (() => {
+                                      {!absent && showCapacitadosColors && (() => {
                                         const [dd, mm] = date.split('/');
                                         const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
                                         const caps = capsMap[String(res.id)];

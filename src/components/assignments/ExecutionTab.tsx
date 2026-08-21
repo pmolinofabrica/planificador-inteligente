@@ -20,6 +20,7 @@ interface ExecutionTabProps {
   setSelectedDateFilter: (d: string | null) => void;
   showCapacitadosColors?: boolean;
   showPisoColors?: boolean;
+  embedded?: boolean;
 }
 
 const floorNames: Record<string, { label: string; bgClass: string; borderClass: string }> = {
@@ -43,7 +44,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   selectedVacant, setSelectedVacant,
   setShowVacantsSidebar, pushUndo, year,
   setSelectedDevice, setSelectedDateFilter,
-  showCapacitadosColors = true, showPisoColors = false,
+  showCapacitadosColors = true, showPisoColors = false, embedded = false,
 }) => {
   const { activeDates, allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, visitasByDate, tipoOrganizacionMap, turnoFilter, agentConvocatoriaMap, saveDrafts, refresh, dateTurnoMap, annualMetricsDb, aperturaMetricsDb, tardeMananaMetricsDb, allowMultiDispositivoApertura } = data;
   const dbResidents = (data as any).dbResidents || [];
@@ -55,7 +56,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
 
   const [showConvocados, setShowConvocados] = useState(false);
   const [visibleGroups, setVisibleGroups] = useState<Record<number, boolean>>({});
-  const [modalidad, setModalidad] = useState<'default' | 'fixture'>('default');
+  const [modalidad, setModalidad] = useState<'default' | 'fixture'>(embedded ? 'fixture' : 'default');
   const [showFixtureSidebar, setShowFixtureSidebar] = useState(false);
   const [fixtureData, setFixtureData] = useState<Record<string, { prioridad: number; residente1: number | null; residente2: number | null; asignado?: 'R1' | 'R2' | null }>>({});
   const [fixturePickerOpen, setFixturePickerOpen] = useState<string | null>(null); // "devId-R1" or "devId-R2"
@@ -66,18 +67,19 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   const [presentes, setPresentes] = useState<Set<number>>(new Set());
   const [ingresoHoras, setIngresoHoras] = useState<Record<number, string>>({});
   const [showRecorrido, setShowRecorrido] = useState(false);
+  const [showResidentsSidebar, setShowResidentsSidebar] = useState(false);
   const savedFixtureData = useRef<Record<string, string>>({}); // devId -> JSON snapshot of last saved slot
   const fixtureLoadedRef = useRef<string>(''); // key to prevent re-initialization
-  const [criteriosConfig, setCriteriosConfig] = useState<{ id: string; label: string; abrev: string; active: boolean; showInCards: boolean; order: number }[]>(
+  const [criteriosConfig, setCriteriosConfig] = useState<{ id: string; label: string; abrev: string; desc: string; active: boolean; showInCards: boolean; order: number }[]>(
     [
-      { id: 'coord_disp_total', label: 'Coord. Disp. (Total)', abrev: 'D.Tot.', active: true, showInCards: true, order: 1 },
-      { id: 'coord_disp_apertura', label: 'Coord. Disp. (Apertura)', abrev: 'D.Ap.', active: false, showInCards: true, order: 2 },
-      { id: 'coord_disp_tm', label: 'Coord. Disp. (T/M)', abrev: 'D.T/M', active: false, showInCards: true, order: 3 },
-      { id: 'coord_piso_total', label: 'Coord. Piso (Total)', abrev: 'P.Tot.', active: false, showInCards: true, order: 4 },
-      { id: 'coord_piso_apertura', label: 'Coord. Piso (Apertura)', abrev: 'P.Ap.', active: false, showInCards: true, order: 5 },
-      { id: 'coord_piso_tm', label: 'Coord. Piso (T/M)', abrev: 'P.T/M', active: false, showInCards: true, order: 6 },
-      { id: 'diversidad', label: 'Diversidad (%)', abrev: 'DIV', active: false, showInCards: true, order: 7 },
-      { id: 'cumpleanos', label: 'Cumpleaños', abrev: 'CMP', active: false, showInCards: true, order: 8 },
+      { id: 'coord_disp_total', label: 'Coord. Disp. (Total)', abrev: 'D.Tot.', desc: 'Cantidad total de veces que coordinó el dispositivo', active: true, showInCards: true, order: 1 },
+      { id: 'coord_disp_apertura', label: 'Coord. Disp. (Apertura)', abrev: 'D.Ap.', desc: 'Cantidad total de veces que coordinó el dispositivo en fin de semana', active: false, showInCards: true, order: 2 },
+      { id: 'coord_disp_tm', label: 'Coord. Disp. (T/M)', abrev: 'D.T/M', desc: 'Cantidad total de veces que coordinó el dispositivo en visitas de grupos', active: false, showInCards: true, order: 3 },
+      { id: 'coord_piso_total', label: 'Coord. Piso (Total)', abrev: 'P.Tot.', desc: 'Cantidad total de veces que coordinó en el piso', active: false, showInCards: true, order: 4 },
+      { id: 'coord_piso_apertura', label: 'Coord. Piso (Apertura)', abrev: 'P.Ap.', desc: 'Cantidad total de veces que coordinó en el piso en fin de semana', active: false, showInCards: true, order: 5 },
+      { id: 'coord_piso_tm', label: 'Coord. Piso (T/M)', abrev: 'P.T/M', desc: 'Cantidad total de veces que coordinó en el piso en visitas de grupos', active: false, showInCards: true, order: 6 },
+      { id: 'diversidad', label: 'Diversidad (%)', abrev: 'DIV', desc: '% de cantidad de dispositivos coordinados respecto del total', active: false, showInCards: true, order: 7 },
+      { id: 'cumpleanos', label: 'Cumpleaños', abrev: 'CMP', desc: 'Días que faltan para el cumpleaños', active: false, showInCards: true, order: 8 },
     ]
   );
   const [showCriteriosSidebar, setShowCriteriosSidebar] = useState(false);
@@ -343,12 +345,78 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     return Object.values(byId).sort((a, b) => (a.hora || '99:99').localeCompare(b.hora || '99:99'));
   }, [allResidentsDb, presentes, ingresoHoras, fixtureData, dbDevices]);
 
+  const renderResidentsList = () => (
+    <div className="flex-1 overflow-y-auto text-[11px]">
+      {(allResidentsDb || [])
+        .slice()
+        .sort((a: any, b: any) => {
+          const aConv = convocadoIds.has(a.id);
+          const bConv = convocadoIds.has(b.id);
+          if (aConv && !bConv) return -1;
+          if (!aConv && bConv) return 1;
+          return a.name.localeCompare(b.name);
+        })
+        .map((r: any, idx: number, arr: any[]) => {
+          const isConvocado = convocadoIds.has(r.id);
+          const isAssigned = assignedResidentIds.has(r.id);
+          const isAusente = isAgentAbsent ? isAgentAbsent(r.id, execDate) : false;
+          const showHeader = idx === 0 || convocadoIds.has(arr[idx-1].id) !== isConvocado;
+          return (
+            <React.Fragment key={r.id}>
+              {showHeader && (
+                <div className="px-3 py-1 text-[8px] font-bold text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-b border-border/20 flex items-center justify-between">
+                  <span>{isConvocado ? 'Convocados' : 'Descanso / Otro turno'}</span>
+                  {isConvocado && <span className="shrink-0">auto</span>}
+                </div>
+              )}
+              <div className={`px-3 py-1.5 border-b border-border/10 flex items-center gap-1.5 transition-all ${
+                isAssigned ? 'bg-emerald-50' : isConvocado ? '' : 'opacity-40'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isAssigned ? 'bg-emerald-500' : isAusente ? 'bg-red-400' : isConvocado ? 'bg-blue-400' : 'bg-stone-300'
+                }`} />
+                <span className={`font-medium truncate ${
+                  isAssigned ? 'text-emerald-700 font-bold' : ''
+                } ${isAusente ? 'line-through text-stone-400' : ''}`}>
+                  {isAusente ? '🚫 ' : ''}{r.name}
+                </span>
+                {presentes.has(r.id) && (
+                  <span className="ml-auto shrink-0 text-emerald-600" title="Marcó su ingreso">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </span>
+                )}
+                {isConvocado && (
+                  <label className={`shrink-0 cursor-pointer ${presentes.has(r.id) ? '' : 'ml-auto'}`} title="Usar en autocompletar">
+                    <input
+                      type="checkbox"
+                      checked={autoConvocados.has(r.id)}
+                      onChange={() => {
+                        setAutoConvocados(prev => {
+                          const next = new Set(prev);
+                          if (next.has(r.id)) next.delete(r.id);
+                          else next.add(r.id);
+                          return next;
+                        });
+                      }}
+                      disabled={isAusente}
+                      className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
+                    />
+                  </label>
+                )}
+              </div>
+            </React.Fragment>
+          );
+        })}
+    </div>
+  );
+
   return (
-    <main className="flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6">
+    <main className={embedded ? "w-full" : "flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6"}>
       <div className="max-w-7xl mx-auto">
+        {!embedded && (
+          <>
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
+        <div className="flex justify-between items-center mb-6">          <div>
             <h2 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-3">
               <Users className="w-8 h-8 text-destructive" />
               Esquema
@@ -389,58 +457,6 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <AlertCircle className="w-3.5 h-3.5" />
               Ver Vacantes / Sin Asignar
             </button>
-            {selectedAutoCards.size > 0 && (
-              <button
-                onClick={() => {
-                  const allPlaced = new Set<number>();
-                  Object.values(fixtureData).forEach(s => {
-                    if (s.residente1 != null) allPlaced.add(s.residente1);
-                    if (s.residente2 != null) allPlaced.add(s.residente2);
-                  });
-                  const pool = (allResidentsDb || [])
-                    .filter((r: any) => convocadoIds.has(r.id) && (autoConvocados.has(r.id) || presentes.has(r.id)) && !allPlaced.has(r.id) && !isAgentAbsent?.(r.id, execDate));
-                  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-                  const used = new Set<number>();
-                  setFixtureData(prev => {
-                    const next = { ...prev };
-                    selectedAutoCards.forEach(devId => {
-                      const slot = next[devId];
-                      if (!slot) return;
-                      const candidates = shuffled.filter(r => !used.has(r.id));
-                      let ci = 0;
-                      const updates: any = {};
-                      if (slot.residente1 == null) {
-                        while (ci < candidates.length && updates.residente1 == null) {
-                          const r = candidates[ci++];
-                          if (r.id !== slot.residente2) {
-                            updates.residente1 = r.id;
-                            used.add(r.id);
-                          }
-                        }
-                      }
-                      if (slot.residente2 == null) {
-                        while (ci < candidates.length && updates.residente2 == null) {
-                          const r = candidates[ci++];
-                          if (r.id !== (updates.residente1 ?? slot.residente1)) {
-                            updates.residente2 = r.id;
-                            used.add(r.id);
-                          }
-                        }
-                      }
-                      if (updates.residente1 != null || updates.residente2 != null) {
-                        next[devId] = { ...slot, ...updates };
-                      }
-                    });
-                    return next;
-                  });
-                  setSelectedAutoCards(new Set());
-                }}
-                className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-600 transition-all shadow-sm"
-              >
-                <Users className="w-3.5 h-3.5" />
-                Autocompletar ({selectedAutoCards.size})
-              </button>
-            )}
             <select
               className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
               value={execDate}
@@ -474,6 +490,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             Fixture
           </button>
         </div>
+          </>
+        )}
 
         {/* Convocados overlay */}
         {showConvocados && (
@@ -579,12 +597,71 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 Criterios
               </button>
               <button
+                onClick={() => setShowResidentsSidebar(true)}
+                className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all bg-card text-foreground border-border hover:border-primary/40 hover:text-primary"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Residentes
+              </button>
+              <button
                 onClick={() => setShowRecorrido(true)}
                 className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all bg-card text-foreground border-border hover:border-primary/40 hover:text-primary"
               >
                 <Route className="w-3.5 h-3.5" />
                 Recorrido
               </button>
+              {selectedAutoCards.size > 0 && (
+                <button
+                  onClick={() => {
+                    const winners = new Set<number>();
+                    Object.values(fixtureData).forEach(s => {
+                      if (s.asignado === 'R1' && s.residente1 != null) winners.add(s.residente1);
+                      else if (s.asignado === 'R2' && s.residente2 != null) winners.add(s.residente2);
+                    });
+                    const pool = (allResidentsDb || [])
+                      .filter((r: any) => convocadoIds.has(r.id) && (autoConvocados.has(r.id) || presentes.has(r.id)) && !winners.has(r.id) && !isAgentAbsent?.(r.id, execDate));
+                    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+                    const used = new Set<number>();
+                    setFixtureData(prev => {
+                      const next = { ...prev };
+                      selectedAutoCards.forEach(devId => {
+                        const slot = next[devId];
+                        if (!slot) return;
+                        const candidates = shuffled.filter(r => !used.has(r.id));
+                        let ci = 0;
+                        const updates: any = {};
+                        if (slot.residente1 == null) {
+                          while (ci < candidates.length && updates.residente1 == null) {
+                            const r = candidates[ci++];
+                            if (r.id !== slot.residente2) {
+                              updates.residente1 = r.id;
+                              used.add(r.id);
+                            }
+                          }
+                        }
+                        if (slot.residente2 == null) {
+                          while (ci < candidates.length && updates.residente2 == null) {
+                            const r = candidates[ci++];
+                            if (r.id !== (updates.residente1 ?? slot.residente1)) {
+                              updates.residente2 = r.id;
+                              used.add(r.id);
+                            }
+                          }
+                        }
+                        if (updates.residente1 != null || updates.residente2 != null) {
+                          next[devId] = { ...slot, ...updates };
+                        }
+                      });
+                      return next;
+                    });
+                    setSelectedAutoCards(new Set());
+                  }}
+                  className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-600 transition-all shadow-sm"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Autocompletar ({selectedAutoCards.size})
+                </button>
+              )}
               <button
                 onClick={async () => {
                   const isApertura = turnoFilter === 'apertura';
@@ -736,78 +813,36 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
             </div>
 
             <div className="flex gap-4">
-              {/* Left panel: resident list */}
-              <div className="w-56 shrink-0 bg-card rounded-lg border border-border overflow-hidden self-start sticky top-0 max-h-[calc(100vh-12rem)] flex flex-col">
-                <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
+              {/* Left panel: resident list (sidebar-only when embedded in locked view) */}
+            {!embedded && (
+            <div className="hidden xl:flex w-56 shrink-0 bg-card rounded-lg border border-border overflow-hidden self-start sticky top-0 max-h-[calc(100vh-12rem)] flex-col">
+                <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold text-foreground uppercase tracking-wider">Residentes</span>
-                  <span className="text-[9px] font-mono text-muted-foreground">{assignedResidentIds.size}/{convocadoIds.size} · auto {autoConvocados.size} · ✓ {presentes.size}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {assignedResidentIds.size > 0 && (
+                      <button
+                        onClick={() => {
+                          setAutoConvocados(prev => {
+                            const next = new Set(prev);
+                            assignedResidentIds.forEach(id => next.delete(id));
+                            return next;
+                          });
+                        }}
+                        title="Quitar del pool a todos los que ya ganaron su duelo"
+                        className="text-[8px] font-bold px-1.5 py-0.5 rounded border border-border text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                      >
+                        ✕ pool ganadores
+                      </button>
+                    )}
+                    <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">{assignedResidentIds.size}/{convocadoIds.size} · auto {autoConvocados.size} · ✓ {presentes.size}</span>
+                  </span>
                 </div>
-                <div className="flex-1 overflow-y-auto text-[11px]">
-                  {(allResidentsDb || [])
-                    .slice()
-                    .sort((a: any, b: any) => {
-                      const aConv = convocadoIds.has(a.id);
-                      const bConv = convocadoIds.has(b.id);
-                      if (aConv && !bConv) return -1;
-                      if (!aConv && bConv) return 1;
-                      return a.name.localeCompare(b.name);
-                    })
-                    .map((r: any, idx: number, arr: any[]) => {
-                      const isConvocado = convocadoIds.has(r.id);
-                      const isAssigned = assignedResidentIds.has(r.id);
-                      const isAusente = isAgentAbsent ? isAgentAbsent(r.id, execDate) : false;
-                      const showHeader = idx === 0 || convocadoIds.has(arr[idx-1].id) !== isConvocado;
-                      return (
-                        <React.Fragment key={r.id}>
-                          {showHeader && (
-                            <div className="px-3 py-1 text-[8px] font-bold text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-b border-border/20 flex items-center justify-between">
-                              <span>{isConvocado ? 'Convocados' : 'Descanso / Otro turno'}</span>
-                              {isConvocado && <span className="shrink-0">auto</span>}
-                            </div>
-                          )}
-                          <div className={`px-3 py-1.5 border-b border-border/10 flex items-center gap-1.5 transition-all ${
-                            isAssigned ? 'bg-emerald-50' : isConvocado ? '' : 'opacity-40'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              isAssigned ? 'bg-emerald-500' : isAusente ? 'bg-red-400' : isConvocado ? 'bg-blue-400' : 'bg-stone-300'
-                            }`} />
-                            <span className={`font-medium truncate ${
-                              isAssigned ? 'text-emerald-700 font-bold' : ''
-                            } ${isAusente ? 'line-through text-stone-400' : ''}`}>
-                              {isAusente ? '🚫 ' : ''}{r.name}
-                            </span>
-                            {presentes.has(r.id) && (
-                              <span className="ml-auto shrink-0 text-emerald-600" title="Marcó su ingreso">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                              </span>
-                            )}
-                            {isConvocado && (
-                              <label className={`shrink-0 cursor-pointer ${presentes.has(r.id) ? '' : 'ml-auto'}`} title="Usar en autocompletar">
-                                <input
-                                  type="checkbox"
-                                  checked={autoConvocados.has(r.id)}
-                                  onChange={() => {
-                                    setAutoConvocados(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(r.id)) next.delete(r.id);
-                                      else next.add(r.id);
-                                      return next;
-                                    });
-                                  }}
-                                  disabled={isAusente}
-                                  className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
-                                />
-                              </label>
-                            )}
-                          </div>
-                        </React.Fragment>
-                      );
-                    })}
-                </div>
+                {renderResidentsList()}
               </div>
+            )}
 
               {/* Fixture grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
               {Object.entries(fixtureData)
                 .sort(([, a], [, b]) => a.prioridad - b.prioridad)
                 .map(([devId, slot]) => {
@@ -1024,9 +1059,9 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 })}
             </div>
 
-            {/* Active criteria panel on the right */}
-            {activeCriterios.length > 0 && (
-              <div className="w-44 shrink-0 bg-card rounded-lg border border-border overflow-hidden self-start sticky top-0 max-h-[calc(100vh-12rem)] flex flex-col">
+            {/* Active criteria panel on the right (sidebar-only when embedded in locked view) */}
+            {!embedded && activeCriterios.length > 0 && (
+              <div className="hidden xl:flex w-44 shrink-0 bg-card rounded-lg border border-border overflow-hidden self-start sticky top-0 max-h-[calc(100vh-12rem)] flex-col">
                 <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
                   <span className="text-[10px] font-bold text-foreground uppercase tracking-wider">Criterios</span>
                   <span className="text-[9px] font-mono text-muted-foreground">{activeCriterios.length}</span>
@@ -1169,43 +1204,89 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-3">
                   <p className="text-[10px] text-muted-foreground mb-2">Los criterios activos se muestran debajo del nombre de cada residente en las tarjetas de dispositivos.</p>
-                  {criteriosConfig
-                    .sort((a, b) => a.order - b.order)
-                    .map((c, idx) => (
-                      <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-muted/20">
-                        <span className="text-[10px] font-mono font-bold text-muted-foreground w-5 text-center">{idx + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold font-mono text-foreground">{c.abrev}</span>
-                            <span className="text-[10px] text-muted-foreground truncate">{c.label}</span>
+                  {(() => {
+                    const sorted = [...criteriosConfig].sort((a, b) => a.order - b.order);
+                    const segments: { title: string; items: typeof sorted }[] = [
+                      { title: 'Por dispositivo', items: sorted.filter(c => c.id.startsWith('coord_disp')) },
+                      { title: 'Por piso', items: sorted.filter(c => c.id.startsWith('coord_piso')) },
+                      { title: 'Otros', items: sorted.filter(c => !c.id.startsWith('coord_disp') && !c.id.startsWith('coord_piso')) },
+                    ];
+                    return segments.filter(s => s.items.length > 0).map(seg => (
+                      <div key={seg.title} className="space-y-2">
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                          {seg.title}
+                        </div>
+                        {seg.items.map(c => (
+                          <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-muted/20">
+                            <span className="text-[10px] font-mono font-bold text-muted-foreground w-5 text-center">{c.order}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold font-mono text-foreground">{c.abrev}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{c.label}</span>
+                              </div>
+                              <div className="text-[9px] text-muted-foreground/80 leading-tight mt-0.5">{c.desc}</div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <input
+                                type="number"
+                                min={1}
+                                max={criteriosConfig.length}
+                                value={c.order}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 1;
+                                  setCriteriosConfig(prev => prev.map(cf => cf.id === c.id ? { ...cf, order: Math.max(1, Math.min(criteriosConfig.length, val)) } : cf));
+                                }}
+                                className="w-10 text-[10px] text-center font-bold py-0.5 rounded border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              />
+                              <button
+                                onClick={() => setCriteriosConfig(prev => prev.map(cf => cf.id === c.id ? { ...cf, active: !cf.active } : cf))}
+                                className={`relative w-8 h-4 rounded-full transition-all border ${
+                                  c.active ? 'bg-emerald-400 border-emerald-500' : 'bg-muted border-border'
+                                }`}
+                              >
+                                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${
+                                  c.active ? 'left-[18px]' : 'left-0.5'
+                                }`} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <input
-                            type="number"
-                            min={1}
-                            max={criteriosConfig.length}
-                            value={c.order}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 1;
-                              setCriteriosConfig(prev => prev.map(cf => cf.id === c.id ? { ...cf, order: Math.max(1, Math.min(criteriosConfig.length, val)) } : cf));
-                            }}
-                            className="w-10 text-[10px] text-center font-bold py-0.5 rounded border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
-                          />
-                          <button
-                            onClick={() => setCriteriosConfig(prev => prev.map(cf => cf.id === c.id ? { ...cf, active: !cf.active } : cf))}
-                            className={`relative w-8 h-4 rounded-full transition-all border ${
-                              c.active ? 'bg-emerald-400 border-emerald-500' : 'bg-muted border-border'
-                            }`}
-                          >
-                            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${
-                              c.active ? 'left-[18px]' : 'left-0.5'
-                            }`} />
-                          </button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    ));
+                  })()}
                 </div>
+              </div>
+            )}
+            {showResidentsSidebar && (
+              <div className="fixed right-0 top-0 h-full w-80 bg-card border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden">
+                <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="text-sm font-bold">Residentes</h3>
+                    <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">{assignedResidentIds.size}/{convocadoIds.size} · auto {autoConvocados.size} · ✓ {presentes.size}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {assignedResidentIds.size > 0 && (
+                      <button
+                        onClick={() => {
+                          setAutoConvocados(prev => {
+                            const next = new Set(prev);
+                            assignedResidentIds.forEach(id => next.delete(id));
+                            return next;
+                          });
+                        }}
+                        title="Quitar del pool a todos los que ya ganaron su duelo"
+                        className="text-[8px] font-bold px-1.5 py-0.5 rounded border border-border text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                      >
+                        ✕ pool ganadores
+                      </button>
+                    )}
+                    <button onClick={() => setShowResidentsSidebar(false)}
+                      className="p-1 rounded-md hover:bg-muted transition-colors">
+                      <XIcon className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+                {renderResidentsList()}
               </div>
             )}
           </>

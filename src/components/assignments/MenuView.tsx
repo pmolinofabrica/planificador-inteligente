@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Menu, LayoutGrid } from 'lucide-react';
 import { Lock, Unlock } from 'lucide-react';
 import { getFloorColor, getGroupColor, computeLeastFloors, getFloorTextClass, getFloorLightBg, getPisoFromDeviceName } from '@/lib/floor-utils';
 import { normalizeStr } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { AssignmentEntry } from '@/types/assignments';
+import type { AssignmentEntry, SelectedResident, SelectedVacant } from '@/types/assignments';
 import { VisitBlock } from './VisitBadge';
+import { ExecutionTab } from './ExecutionTab';
 
 interface MenuViewProps {
   data: any;
@@ -15,6 +16,15 @@ interface MenuViewProps {
   showCapacitadosColors?: boolean;
   showPisoColors?: boolean;
   showRefuerzos?: boolean;
+  fixtureEnabled?: boolean;
+  selectedResident?: SelectedResident | null;
+  setSelectedResident?: (r: SelectedResident | null) => void;
+  selectedVacant?: SelectedVacant | null;
+  setSelectedVacant?: (v: SelectedVacant | null) => void;
+  setShowVacantsSidebar?: (v: boolean) => void;
+  pushUndo?: (entry: any) => void;
+  setSelectedDevice?: (d: { id: string; name: string; date: string } | null) => void;
+  setSelectedDateFilter?: (d: string | null) => void;
 }
 
 const pisoNames: Record<number, string> = { 1: 'Piso 1 — Papel', 2: 'Piso 2 — Madera', 3: 'Piso 3 — Textil' };
@@ -27,7 +37,7 @@ const piso4Banners = [
   '/banners/banner4'
 ];
 
-export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock, showCapacitadosColors = true, showPisoColors = false, showRefuerzos = false }) => {
+export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false, onLock, showCapacitadosColors = true, showPisoColors = false, showRefuerzos = false, fixtureEnabled = false, selectedResident = null, setSelectedResident, selectedVacant = null, setSelectedVacant, setShowVacantsSidebar, pushUndo, setSelectedDevice, setSelectedDateFilter }) => {
   const { dbDevices, assignmentsDb, activeDates, convocadosDb, convocadosCountDb, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, agentGroups, tipoOrganizacionMap, setTipoOrganizacionMap, calendarDb, allResidentsDb, turnoFilter, dateTurnoMap, setIsLoading, refresh, visitasByDate, agentTipoTurnoMap } = data;
 
   const isAperturaB = (date: string, agentId: number) => normalizeStr(agentTipoTurnoMap[date]?.[agentId] || '') === 'apertura al publico b';
@@ -55,6 +65,13 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
   const isNonApertura = turnoFilter === 'tarde' || turnoFilter === 'manana';
 
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
+
+  const [vista, setVista] = useState<'menu' | 'fixture'>('menu');
+
+  // Si el fixture está deshabilitado, siempre mostrar el menú
+  React.useEffect(() => {
+    if (!fixtureEnabled && vista === 'fixture') setVista('menu');
+  }, [fixtureEnabled, vista]);
 
   const currentDate = activeDates[selectedDateIdx] || activeDates[0] || '';
   const orgType = tipoOrganizacionMap[currentDate] || 'dispositivos fijos';
@@ -258,6 +275,35 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
               </span>
             )}
           </div>
+          {fixtureEnabled && (
+          <div
+            className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border shadow-inner shrink-0"
+            title="Vista: menú / fixture"
+          >
+            <button
+              onClick={() => setVista('menu')}
+              className={`p-1.5 rounded-md transition-all ${
+                vista === 'menu'
+                  ? 'bg-card shadow-warm border border-border/50 text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Ver menú"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setVista('fixture')}
+              className={`p-1.5 rounded-md transition-all ${
+                vista === 'fixture'
+                  ? 'bg-card shadow-warm border border-border/50 text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Ver fixture"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+          )}
           <button onClick={nextDate} disabled={selectedDateIdx >= activeDates.length - 1 || (isLocked && !canSelectDate(activeDates[selectedDateIdx + 1]))}
             className="p-1.5 sm:p-2 rounded-lg hover:bg-accent disabled:opacity-30 transition-colors border border-border flex-shrink-0">
             <ChevronRight className="w-4 h-4" />
@@ -285,6 +331,8 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
           })}
         </div>
 
+        {vista === 'menu' ? (
+          <>
         {/* ══════ VISITAS GRUPALES ══════ */}
         {(visitasByDate?.[currentDate] || []).length > 0 && (
           <div className="mb-4 sm:mb-6">
@@ -580,6 +628,31 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
               <span className="font-black text-xs sm:text-sm tracking-wide text-muted-foreground">Descanso / Otro turno ({restingCount})</span>
             </div>
           </div>
+        )}
+          </>
+        ) : (
+          pushUndo && setSelectedDevice && setSelectedDateFilter && setSelectedResident && setSelectedVacant && setShowVacantsSidebar ? (
+            <ExecutionTab
+              data={data}
+              execDate={currentDate}
+              setExecDate={(d: string) => {
+                const idx = activeDates.indexOf(d);
+                if (idx >= 0) setSelectedDateIdx(idx);
+              }}
+              selectedResident={selectedResident ?? null}
+              setSelectedResident={setSelectedResident}
+              selectedVacant={selectedVacant ?? null}
+              setSelectedVacant={setSelectedVacant}
+              setShowVacantsSidebar={setShowVacantsSidebar}
+              pushUndo={pushUndo}
+              year={year}
+              setSelectedDevice={setSelectedDevice}
+              setSelectedDateFilter={setSelectedDateFilter}
+              showCapacitadosColors={showCapacitadosColors}
+              showPisoColors={showPisoColors}
+              embedded
+            />
+          ) : null
         )}
       </div>
 

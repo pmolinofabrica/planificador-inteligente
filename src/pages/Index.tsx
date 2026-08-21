@@ -53,7 +53,7 @@ const Index = () => {
   const [nuevaTarjetaOpen, setNuevaTarjetaOpen] = useState(false);
 
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, syncNow, syncing } = useUserPreferences();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, fixtureEnabled, setFixtureEnabled, syncNow, syncing } = useUserPreferences();
   const { crearItem } = useTablero();
   const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
@@ -296,6 +296,19 @@ const Index = () => {
                   <p className="text-[10px] text-muted-foreground/60 leading-tight">
                     Muestra el botón para ejecutar el motor de asignación automática.
                   </p>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="fixture" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      Fixture
+                    </label>
+                    <Switch
+                      id="fixture"
+                      checked={fixtureEnabled}
+                      onCheckedChange={setFixtureEnabled}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    En la vista bloqueada habilita el selector para cambiar entre menú y fixture.
+                  </p>
                   <div className="pt-2">
                     <button
                       onClick={async () => {
@@ -486,6 +499,7 @@ const Index = () => {
             data={data}
             pushUndo={pushUndo}
             year={year}
+            showCapacitadosColors={showCapacitadosColors}
           />
         )}
 
@@ -517,6 +531,7 @@ const Index = () => {
             setSelectedResident={setSelectedResident}
             setShowVacantsSidebar={setShowVacantsSidebar}
             year={year}
+            showCapacitadosColors={showCapacitadosColors}
           />
         )}
 
@@ -548,7 +563,12 @@ const Index = () => {
         )}
 
         {activeTab === 'menu' && (
-          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} showCapacitadosColors={showCapacitadosColors} showPisoColors={showPisoColors} showRefuerzos={showRefuerzos} />
+          <MenuView data={data} year={year} isLocked={menuLocked} onLock={setMenuLocked} showCapacitadosColors={showCapacitadosColors} showPisoColors={showPisoColors} showRefuerzos={showRefuerzos}
+            fixtureEnabled={fixtureEnabled}
+            selectedResident={selectedResident} setSelectedResident={setSelectedResident}
+            selectedVacant={selectedVacant} setSelectedVacant={setSelectedVacant}
+            setShowVacantsSidebar={setShowVacantsSidebar} pushUndo={pushUndo}
+            setSelectedDevice={setSelectedDevice} setSelectedDateFilter={setSelectedDateFilter} />
         )}
 
         {activeTab === 'exec' && (

@@ -8,6 +8,7 @@ type Preferences = {
   allowMultiDispositivoApertura: boolean;
   motorAsignacionEnabled: boolean;
   showRefuerzos: boolean;
+  fixtureEnabled: boolean;
 };
 
 const DEFAULTS: Preferences = {
@@ -16,6 +17,7 @@ const DEFAULTS: Preferences = {
   allowMultiDispositivoApertura: false,
   motorAsignacionEnabled: false,
   showRefuerzos: false,
+  fixtureEnabled: false,
 };
 
 const LS_KEYS: Record<keyof Preferences, string> = {
@@ -24,6 +26,7 @@ const LS_KEYS: Record<keyof Preferences, string> = {
   allowMultiDispositivoApertura: 'settings_allow_multi_dispositivo_apertura',
   motorAsignacionEnabled: 'settings_motor_asignacion_enabled',
   showRefuerzos: 'settings_show_refuerzos',
+  fixtureEnabled: 'settings_fixture_enabled',
 };
 
 function loadLocal(): Preferences {
@@ -118,6 +121,7 @@ export function useUserPreferences() {
     setAllowMultiDispositivoApertura: useCallback((v: boolean) => updatePreference('allowMultiDispositivoApertura', v), [updatePreference]),
     setMotorAsignacionEnabled: useCallback((v: boolean) => updatePreference('motorAsignacionEnabled', v), [updatePreference]),
     setShowRefuerzos: useCallback((v: boolean) => updatePreference('showRefuerzos', v), [updatePreference]),
+    setFixtureEnabled: useCallback((v: boolean) => updatePreference('fixtureEnabled', v), [updatePreference]),
   };
 
   return {

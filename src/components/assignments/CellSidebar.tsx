@@ -14,11 +14,12 @@ interface CellSidebarProps {
   data: AssignmentDataContext;
   pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
+  showCapacitadosColors?: boolean;
 }
 
 export const CellSidebar: React.FC<CellSidebarProps> = ({
   selectedDevice, selectedDate, setSelectedDevice, setSelectedDateFilter,
-  setSelectedResident, data, pushUndo, year,
+  setSelectedResident, data, pushUndo, year, showCapacitadosColors = true,
 }) => {
   const { allResidentsDb, convocadosDb, assignmentsDb, dbDevices, isAgentAbsent, isAgentCanceled, isLoading, setIsLoading, refresh, agentConvocatoriaMap, turnoFilter, dateTurnoMap, agentTipoTurnoMap, tipoOrganizacionMap } = data;
   const deviceId = selectedDevice.id;
@@ -445,7 +446,7 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
                   {isAperturaB(res.id) && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
                   {res.name}
                   {/* No-cap indicator */}
-                  {(() => {
+                  {showCapacitadosColors && (() => {
                     const resInfo = allResidentsDb.find((r: any) => r.id === res.id);
                     const [dd, mm] = selectedDate.split('/');
                     const fechaDB = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;

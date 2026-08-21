@@ -12,10 +12,11 @@ interface VacantsSidebarProps {
   setSelectedResident: (r: SelectedResident | null) => void;
   setShowVacantsSidebar: (v: boolean) => void;
   year: string;
+  showCapacitadosColors?: boolean;
 }
 
 export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
-  data, selectedVacant, setSelectedVacant, setSelectedDevice, setSelectedResident, setShowVacantsSidebar, year,
+  data, selectedVacant, setSelectedVacant, setSelectedDevice, setSelectedResident, setShowVacantsSidebar, year, showCapacitadosColors = true,
 }) => {
   const { activeDates, assignmentsDb, convocadosDb, allResidentsDb, dbDevices, isAgentAbsent, isAgentCanceled, agentTipoTurnoMap } = data;
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
@@ -126,7 +127,7 @@ export const VacantsSidebar: React.FC<VacantsSidebarProps> = ({
                         }
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                          {Object.keys(pisosCap).length === 0
+                          {showCapacitadosColors && Object.keys(pisosCap).length === 0
                             ? <span className="bg-muted text-destructive px-1.5 py-0.5 text-[9px] rounded font-bold border border-destructive/20">Sin caps</span>
                             : Object.entries(pisosCap).map(([piso, count]) => (
                               <span key={piso} className={`${getPisoBadgeColor(piso)} shadow-sm px-1.5 py-0.5 text-[9px] rounded font-bold border`}>
