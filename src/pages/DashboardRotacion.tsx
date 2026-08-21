@@ -22,7 +22,7 @@ interface Dispositivo { id_dispositivo: number; nombre_dispositivo: string; piso
 interface Asignacion { id_agente: number; id_dispositivo: number; fecha_asignacion: string; }
 interface Capacitacion { id_agente: number; id_dispositivo: number; fecha_capacitacion: string; }
 
-interface AcompanaEntry { id_agente: number; fecha_asignacion: string; }
+interface AcompanaEntry { id_agente: number; fecha_asignacion: string; segundo: boolean; }
 
 // Status Maps
 type StatusMap = Record<string, Record<number, string>>; // { "YYYY-MM-DD": { agenteId: "descanso" | "inasistencia" | "convocatoria" } }
@@ -155,19 +155,19 @@ export default function DashboardRotacion() {
 
       // 6. Cargar datos de acompaña_grupo (menu + menu_semana)
       const [acompMenu, acompSemana] = await Promise.all([
-        supabase.from("menu").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
-        supabase.from("menu_semana").select("id_agente, fecha_asignacion").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
+        supabase.from("menu").select("id_agente, fecha_asignacion, \"2do_semestre\"").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
+        supabase.from("menu_semana").select("id_agente, fecha_asignacion, \"2do_semestre\"").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
       ]);
       const acompanaList: AcompanaEntry[] = [];
       const seen = new Set<string>();
-      const dedup = (row: { id_agente: number; fecha_asignacion: string | null }) => {
+      const dedup = (row: { id_agente: number; fecha_asignacion: string | null; "2do_semestre": boolean | null }) => {
         if (!row.fecha_asignacion) return;
         const date = row.fecha_asignacion.split("T")[0];
         if (!resIds.has(row.id_agente)) return;
         const key = `${row.id_agente}-${date}`;
         if (seen.has(key)) return;
         seen.add(key);
-        acompanaList.push({ id_agente: row.id_agente, fecha_asignacion: date });
+        acompanaList.push({ id_agente: row.id_agente, fecha_asignacion: date, segundo: row["2do_semestre"] === true });
       };
       (acompMenu?.data || []).forEach(dedup);
       (acompSemana?.data || []).forEach(dedup);
@@ -233,12 +233,16 @@ export default function DashboardRotacion() {
   const resMap = useMemo(() => new Map(residentes.map(r => [r.id_agente, r])), [residentes]);
 
   const acompanaMap = useMemo(() => {
-    const map = new Map<number, { count: number; dates: string[] }>();
+    const map = new Map<number, { count: number; dates: string[]; count2S: number; dates2S: string[] }>();
     acompanaList.forEach(a => {
-      if (!map.has(a.id_agente)) map.set(a.id_agente, { count: 0, dates: [] });
+      if (!map.has(a.id_agente)) map.set(a.id_agente, { count: 0, dates: [], count2S: 0, dates2S: [] });
       const entry = map.get(a.id_agente)!;
       entry.count++;
       if (!entry.dates.includes(a.fecha_asignacion)) entry.dates.push(a.fecha_asignacion);
+      if (a.segundo) {
+        entry.count2S++;
+        entry.dates2S.push(a.fecha_asignacion);
+      }
     });
     return map;
   }, [acompanaList]);
@@ -330,8 +334,10 @@ export default function DashboardRotacion() {
     const acomp = acompanaMap.get(rId);
     const acompanaCount = acomp?.count || 0;
     const acompanaDates = acomp?.dates ? [...acomp.dates].sort() : [];
+    const acompanaCount2S = acomp?.count2S || 0;
+    const acompanaDates2S = acomp?.dates2S ? [...acomp.dates2S].sort() : [];
 
-    return { chartPorPiso, chartPorPisoSplit, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad, acompanaCount, acompanaDates };
+    return { chartPorPiso, chartPorPisoSplit, listaTop, capNoCoordPorPiso, totalAsig: misAsig.length, unicos: dispCoordinados.size, diversidad, acompanaCount, acompanaDates, acompanaCount2S, acompanaDates2S };
   }, [selectedResidenteId, turnoMode, aperturaAsignaciones, tmAsignaciones, capacitaciones, dispMap, dispositivos.length, acompanaMap]);
 
   // --- Capa 2: Dispositivo ---
@@ -523,7 +529,7 @@ export default function DashboardRotacion() {
 
             {residenteStats ? (
               <CardContent className="p-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                    <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex flex-col justify-center items-center text-center">
                       <span className="text-sm font-semibold text-blue-600 mb-1">Total Asignaciones</span>
                       <span className="text-3xl font-bold text-blue-900">{residenteStats.totalAsig}</span>
@@ -542,6 +548,15 @@ export default function DashboardRotacion() {
                       {residenteStats.acompanaCount > 0 && (
                         <span className="text-[10px] text-pink-500 mt-1">
                           {residenteStats.acompanaDates.length} fechas
+                        </span>
+                      )}
+                   </div>
+                   <div className="bg-fuchsia-50/50 p-4 rounded-lg border border-fuchsia-100 flex flex-col justify-center items-center text-center" title="Acompañantes con 2do_semestre = true (agosto a diciembre)">
+                      <span className="text-sm font-semibold text-fuchsia-600 mb-1">🏫 Acompaña 2do Sem.</span>
+                      <span className="text-3xl font-bold text-fuchsia-900">{residenteStats.acompanaCount2S}</span>
+                      {residenteStats.acompanaCount2S > 0 && (
+                        <span className="text-[10px] text-fuchsia-500 mt-1">
+                          {residenteStats.acompanaDates2S.length} fechas
                         </span>
                       )}
                    </div>
@@ -804,6 +819,7 @@ export default function DashboardRotacion() {
                 return {
                   residente: r.nombre_completo,
                   count: a?.count || 0,
+                  count2S: a?.count2S || 0,
                   lastDate: a?.dates?.length ? [...a.dates].sort().pop()! : null,
                 };
               })
@@ -826,6 +842,7 @@ export default function DashboardRotacion() {
                       <TableHead className="w-12 text-center">#</TableHead>
                       <TableHead>Residente</TableHead>
                       <TableHead className="text-center">Cantidad</TableHead>
+                      <TableHead className="text-center" title="Registros con 2do_semestre = true (agosto a diciembre)">2do Sem.</TableHead>
                       <TableHead className="text-right">Última Fecha</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -837,6 +854,11 @@ export default function DashboardRotacion() {
                         <TableCell className="text-center">
                           <Badge className="bg-pink-100 text-pink-800 hover:bg-pink-200 min-w-[32px] justify-center text-sm px-3">
                             {item.count}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className="bg-fuchsia-100 text-fuchsia-800 hover:bg-fuchsia-200 min-w-[32px] justify-center text-sm px-3">
+                            {item.count2S}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right text-sm text-muted-foreground">

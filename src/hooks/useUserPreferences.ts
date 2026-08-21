@@ -9,6 +9,7 @@ type Preferences = {
   motorAsignacionEnabled: boolean;
   showRefuerzos: boolean;
   fixtureEnabled: boolean;
+  acompanaSolo2doSemestre: boolean;
 };
 
 const DEFAULTS: Preferences = {
@@ -18,6 +19,7 @@ const DEFAULTS: Preferences = {
   motorAsignacionEnabled: false,
   showRefuerzos: false,
   fixtureEnabled: false,
+  acompanaSolo2doSemestre: false,
 };
 
 const LS_KEYS: Record<keyof Preferences, string> = {
@@ -27,6 +29,7 @@ const LS_KEYS: Record<keyof Preferences, string> = {
   motorAsignacionEnabled: 'settings_motor_asignacion_enabled',
   showRefuerzos: 'settings_show_refuerzos',
   fixtureEnabled: 'settings_fixture_enabled',
+  acompanaSolo2doSemestre: 'settings_acompana_solo_2do_semestre',
 };
 
 function loadLocal(): Preferences {
@@ -122,6 +125,7 @@ export function useUserPreferences() {
     setMotorAsignacionEnabled: useCallback((v: boolean) => updatePreference('motorAsignacionEnabled', v), [updatePreference]),
     setShowRefuerzos: useCallback((v: boolean) => updatePreference('showRefuerzos', v), [updatePreference]),
     setFixtureEnabled: useCallback((v: boolean) => updatePreference('fixtureEnabled', v), [updatePreference]),
+    setAcompanaSolo2doSemestre: useCallback((v: boolean) => updatePreference('acompanaSolo2doSemestre', v), [updatePreference]),
   };
 
   return {

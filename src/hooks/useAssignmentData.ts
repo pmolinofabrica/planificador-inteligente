@@ -16,6 +16,7 @@ interface UseAssignmentDataProps {
   turnoFilter?: string;
   allowMultiDispositivoApertura?: boolean;
   motorAsignacionEnabled?: boolean;
+  acompanaSolo2doSemestre?: boolean;
 }
 
 interface StaticCache {
@@ -148,7 +149,7 @@ function computeNextMutations(
   return [...prev, mutation];
 }
 
-export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false, motorAsignacionEnabled = false }: UseAssignmentDataProps) {
+export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', allowMultiDispositivoApertura = false, motorAsignacionEnabled = false, acompanaSolo2doSemestre = false }: UseAssignmentDataProps) {
   const [dbDevices, setDbDevices] = useState<DeviceInfo[]>([]);
   const [dbResidents, setDbResidents] = useState<{ id_agente: number; nombre: string; apellido: string; fecha_nacimiento: string | null }[]>([]);
   const [allResidentsDb, setAllResidentsDb] = useState<ResidentInfo[]>([]);
@@ -1354,7 +1355,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
             p_turno: 'turno'
           });
           const acompanaPromise = supabase.rpc('rpc_metricas_acompana_anual', {
-            p_year: parseInt(yFilt)
+            p_year: parseInt(yFilt),
+            p_2do_semestre: acompanaSolo2doSemestre ? true : null
           });
 
           const [aperturaRes, tardeMananaRes, acompanaRes] = await Promise.all([
@@ -1510,7 +1512,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     }
 
     loadInitialData();
-  }, [selectedMonth, refreshCounter, getMonthParts, turnoFilter]);
+  }, [selectedMonth, refreshCounter, getMonthParts, turnoFilter, acompanaSolo2doSemestre]);
 
   const isAgentAbsent = useCallback((agentId: number, uiDate: string): boolean => {
     return (inasistenciasDb[uiDate] || []).some(x => x.id_agente === agentId);

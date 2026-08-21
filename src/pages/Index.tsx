@@ -53,9 +53,9 @@ const Index = () => {
   const [nuevaTarjetaOpen, setNuevaTarjetaOpen] = useState(false);
 
   const { signOut } = useAuth();
-  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, fixtureEnabled, setFixtureEnabled, syncNow, syncing } = useUserPreferences();
+  const { showCapacitadosColors, setShowCapacitadosColors, showPisoColors, setShowPisoColors, allowMultiDispositivoApertura, setAllowMultiDispositivoApertura, motorAsignacionEnabled, setMotorAsignacionEnabled, showRefuerzos, setShowRefuerzos, fixtureEnabled, setFixtureEnabled, acompanaSolo2doSemestre, setAcompanaSolo2doSemestre, syncNow, syncing } = useUserPreferences();
   const { crearItem } = useTablero();
-  const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled });
+  const data = useAssignmentData({ selectedMonth, turnoFilter, allowMultiDispositivoApertura, motorAsignacionEnabled, acompanaSolo2doSemestre });
   const { undoStack, pushUndo, handleUndo } = useUndoStack(data.refresh);
 
   // Selection states
@@ -308,6 +308,19 @@ const Index = () => {
                   </div>
                   <p className="text-[10px] text-muted-foreground/60 leading-tight">
                     En la vista bloqueada habilita el selector para cambiar entre menú y fixture.
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="acompana-2do-semestre" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                      2do semestre
+                    </label>
+                    <Switch
+                      id="acompana-2do-semestre"
+                      checked={acompanaSolo2doSemestre}
+                      onCheckedChange={setAcompanaSolo2doSemestre}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight">
+                    El conteo de acompañantes (🏫) cuenta solo registros del 2do semestre (ago-dic).
                   </p>
                   <div className="pt-2">
                     <button
