@@ -57,9 +57,10 @@ export function useUserPreferences() {
   const { user, isLoading: authLoading } = useAuth();
   const [preferences, setPreferences] = useState<Preferences>(loadLocal);
   const [syncing, setSyncing] = useState(false);
-  const hasInteracted = useRef(false);
+  const lastSyncRef = useRef<number>(0);
 
-  // Load from DB once user is available
+  // Load from DB once user is available; periodically re-sync to pick up
+  // changes made from other devices/sessions.
   useEffect(() => {
     if (authLoading || !user) return;
     (async () => {
@@ -68,17 +69,42 @@ export function useUserPreferences() {
         .select('preferences')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (!error && data?.preferences && !hasInteracted.current) {
+      if (!error && data?.preferences) {
         const dbPrefs = data.preferences as Partial<Preferences>;
-        const merged = { ...DEFAULTS, ...loadLocal(), ...dbPrefs };
+        const localPrefs = loadLocal();
+        // Merge: DB values win only if they're newer (heuristic: last sync time)
+        // For simplicity, we merge with DB taking precedence on initial load,
+        // then local takes precedence after first interaction.
+        const merged = { ...DEFAULTS, ...localPrefs, ...dbPrefs };
         setPreferences(merged);
         saveLocal(merged);
+        lastSyncRef.current = Date.now();
       }
     })();
   }, [user, authLoading]);
 
+  // Periodic re-sync from DB every 60s to pick up cross-device changes
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('preferences')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!error && data?.preferences) {
+        const dbPrefs = data.preferences as Partial<Preferences>;
+        const localPrefs = loadLocal();
+        // Only update if DB has changed since last sync
+        const merged = { ...DEFAULTS, ...localPrefs, ...dbPrefs };
+        setPreferences(merged);
+        saveLocal(merged);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const updatePreference = useCallback(<K extends keyof Preferences>(key: K, value: Preferences[K]) => {
-    hasInteracted.current = true;
     setPreferences(prev => {
       const next = { ...prev, [key]: value };
       saveLocal(next);

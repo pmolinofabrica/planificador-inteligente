@@ -119,10 +119,12 @@ function computeNextMutations(
       return next;
     }
 
-    // De lo contrario, el nuevo sobreescribe al viejo (manteniendo la acción original si era insert)
+    // De lo contrario, el nuevo sobreescribe al viejo.
+    // Un 'delete' SIEMPRE toma precedencia sobre 'insert' (salvo el caso especial
+    // de dispositivo 999 que se maneja arriba).
     next[existingIndex] = {
       ...mutation,
-      action: existing.action === 'insert' ? 'insert' : mutation.action
+      action: mutation.action === 'delete' ? 'delete' : (existing.action === 'insert' ? 'insert' : mutation.action)
     };
     if (DRAFT_AUDIT_ENABLED) {
       console.info('[DraftAudit] merge-replace', {
@@ -360,6 +362,11 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     isSavingRef.current = true;
     setIsLoading(true);
     const mutationsToSave = compactPendingMutations(pendingToSave);
+    // IDs de las mutaciones que estaban en la cola al iniciar el save.
+    // El compactado puede mezclar/renombrar IDs, así que nunca filtramos por
+    // IDs compactados, sino por el set original para preservar mutaciones
+    // agregadas DURANTE el save (p.ej. edits de usuario).
+    const originalIds = new Set(pendingToSave.map(m => m.id));
     const processedMutationIds = new Set<string>();
     try {
       const persistMenuLike = async (
@@ -730,8 +737,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         }
         processedMutationIds.add(m.id);
       }
-      setPendingMutations([]);
-      pendingMutationsRef.current = [];
+      // Solo quitar las mutaciones que estaban en la cola al iniciar el save.
+      // Mutaciones agregadas DURANTE el save se preservan (sus IDs no están
+      // en `originalIds`).
+      const remaining = pendingMutationsRef.current.filter(m => !originalIds.has(m.id));
+      setPendingMutations(remaining);
+      pendingMutationsRef.current = remaining;
       setRefreshCounter(c => c + 1);
       setIsLoading(false);
       if (DRAFT_AUDIT_ENABLED) {
@@ -769,6 +780,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
   const refresh = useCallback(() => setRefreshCounter(c => c + 1), []);
 
+
   const getMonthParts = useCallback(() => {
     const smParts = (selectedMonth || getCurrentSchoolYearMonth()).split(" ");
     const yFilt = smParts[1] || new Date().getFullYear().toString();
@@ -783,6 +795,114 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     const endOfMonth = `${yFilt}-${mmFilt}-${lastDay}`;
     return { yFilt, mmFilt, startOfMonth, endOfMonth };
   }, [selectedMonth]);
+
+  // Refresh ligero: recarga y reconstruye assignmentsDb con datos frescos,
+  // sin re-fetch de datos estáticos del mes. Replica la lógica de construcción
+  // de la matriz (menu/menu_semana) del loader completo.
+  const refreshLight = useCallback(async () => {
+    const { yFilt, mmFilt, startOfMonth, endOfMonth } = getMonthParts();
+    const isApertura = turnoFilter === 'apertura';
+    const matchesTurnoFilter = (tipo: string): boolean => {
+      const t = tipo.toLowerCase();
+      if (turnoFilter === 'apertura') return t.includes('apertura');
+      if (turnoFilter === 'tarde') return t.includes('turno tarde');
+      if (turnoFilter === 'manana') return t.includes('turno mañana') || t.includes('turno manana');
+      return t.includes('apertura');
+    };
+    const fmtUi = (d: string | number, m: string | number) => `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+    const ttMap: Record<number, string> = staticCache.current?.turnoTypeMap || {};
+    try {
+      const [menuRes, menuSemanaRes] = await Promise.all([
+        supabase.from('menu')
+          .select('*')
+          .gte('fecha_asignacion', startOfMonth)
+          .lte('fecha_asignacion', endOfMonth),
+        supabase.from('menu_semana')
+          .select('*')
+          .gte('fecha_asignacion', startOfMonth)
+          .lte('fecha_asignacion', endOfMonth),
+      ]);
+      const menuData = menuRes.data || [];
+      const menuSemanaData = menuSemanaRes.data || [];
+
+      const nameDict: Record<number, string> = {};
+      (dbResidents || []).forEach(r => nameDict[r.id_agente] = `${r.apellido} ${r.nombre}`);
+
+      const grupoMap: Record<string, number | null> = {};
+      menuSemanaData.forEach((ms: any) => {
+        if (!ms.fecha_asignacion) return;
+        const tipo = ttMap[ms.id_turno] || '';
+        if (!matchesTurnoFilter(tipo)) return;
+        grupoMap[`${ms.id_agente}-${ms.fecha_asignacion}-${ms.id_dispositivo}`] = ms.numero_grupo ?? null;
+      });
+
+      const matrix: AssignmentsMatrix = {};
+      if (isApertura) {
+        menuData.forEach((a: any) => {
+          if (!a.fecha_asignacion) return;
+          const [y, m, d] = a.fecha_asignacion.split('-');
+          if (y !== yFilt || m !== mmFilt) return;
+          const uiDate = fmtUi(d, m);
+          if (a.id_dispositivo && a.id_dispositivo !== 999) {
+            const dId = String(a.id_dispositivo);
+            if (!matrix[uiDate]) matrix[uiDate] = {};
+            if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
+            const existingResident = matrix[uiDate][dId].find((r: any) => r.id === a.id_agente);
+            if (existingResident) {
+              existingResident.acompana_grupo = existingResident.acompana_grupo || !!(a as any)['acompa\u00f1a_grupo'];
+            } else {
+              const grupoKey = `${a.id_agente}-${a.fecha_asignacion}-${a.id_dispositivo}`;
+              matrix[uiDate][dId].push({
+                id: a.id_agente,
+                name: nameDict[a.id_agente] || 'Desconocido',
+                score: a.orden || 1000,
+                numero_grupo: grupoMap[grupoKey] ?? null,
+                acompana_grupo: !!(a as any)['acompa\u00f1a_grupo'],
+              });
+            }
+          }
+        });
+      } else {
+        menuSemanaData.forEach((ms: any) => {
+          if (!ms.fecha_asignacion) return;
+          const tipo = ttMap[ms.id_turno] || '';
+          if (!matchesTurnoFilter(tipo)) return;
+          const [y, m, d] = ms.fecha_asignacion.split('-');
+          if (y !== yFilt || m !== mmFilt) return;
+          const uiDate = fmtUi(d, m);
+          if (ms.id_dispositivo && ms.id_dispositivo !== 999) {
+            const dId = String(ms.id_dispositivo);
+            if (!matrix[uiDate]) matrix[uiDate] = {};
+            if (!matrix[uiDate][dId]) matrix[uiDate][dId] = [];
+            const existingResident = matrix[uiDate][dId].find((r: any) => r.id === ms.id_agente);
+            if (existingResident) {
+              const incomingGroup = ms.numero_grupo ?? null;
+              const groupSet = new Set<number>();
+              if (existingResident.numero_grupo != null) groupSet.add(existingResident.numero_grupo);
+              (existingResident.numero_grupos || []).forEach((g: number) => groupSet.add(g));
+              if (incomingGroup != null) groupSet.add(incomingGroup);
+              existingResident.numero_grupos = Array.from(groupSet).sort((a, b) => a - b);
+              if (existingResident.numero_grupo == null && incomingGroup != null) existingResident.numero_grupo = incomingGroup;
+              existingResident.acompana_grupo = existingResident.acompana_grupo || !!(ms as any)['acompa\u00f1a_grupo'];
+            } else {
+              const primaryGroup = ms.numero_grupo ?? null;
+              matrix[uiDate][dId].push({
+                id: ms.id_agente,
+                name: nameDict[ms.id_agente] || 'Desconocido',
+                score: ms.orden || 1000,
+                numero_grupo: primaryGroup,
+                numero_grupos: primaryGroup != null ? [primaryGroup] : [],
+                acompana_grupo: !!(ms as any)['acompa\u00f1a_grupo'],
+              });
+            }
+          }
+        });
+      }
+      setAssignmentsDb(matrix);
+    } catch (err) {
+      console.error('refreshLight error:', err);
+    }
+  }, [getMonthParts, turnoFilter, dbResidents]);
 
   const formatUiDate = (d: string | number, m: string | number) => {
     return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
@@ -1541,7 +1661,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
     aperturaMetricsDb, // export apertura metrics
     tardeMananaMetricsDb, // export tarde/manana metrics
     acompanaMetricsDb, // export acompana metrics
-    refresh, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
+    refresh, refreshLight, isAgentAbsent, isAgentCanceled, getAbsenceMotivo, getMonthParts,
     setAssignmentsDb,
     pendingMutations, addAssignmentDraft, removeAssignmentDraft, saveDrafts, discardDrafts, hardRefresh,
     allowMultiDispositivoApertura,

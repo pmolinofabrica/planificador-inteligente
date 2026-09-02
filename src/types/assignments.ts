@@ -143,6 +143,7 @@ export interface AssignmentDataContext {
   isLoading: boolean;
   setIsLoading: (v: boolean) => void;
   refresh: () => void;
+  refreshLight: () => Promise<void>;
   // Turno y fechas
   turnoFilter: string;
   dateTurnoMap: Record<string, number>;
