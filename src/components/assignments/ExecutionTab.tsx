@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Users, AlertCircle, X as XIcon, Monitor, Search, CheckCircle2, Eraser } from 'lucide-react';
+import { Users, AlertCircle, X as XIcon, Monitor, Search, CheckCircle2, Eraser, Calendar } from 'lucide-react';
 import { getPisoFromDeviceName, getGroupColor, getFloorColor } from '@/lib/floor-utils';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
 import { AperturaDevicesPanel } from './AperturaDevicesPanel';
@@ -51,6 +51,19 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   })();
 
+  // Etiquetas de fecha para el bloque de confirmación del fixture
+  const weekdayLabel = fechaDB ? (() => {
+    const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    return names[new Date(`${fechaDB}T00:00:00`).getDay()];
+  })() : '';
+  const fmtFullDate = fechaDB ? `${fechaDB.slice(8, 10)}/${fechaDB.slice(5, 7)}/${fechaDB.slice(0, 4)}` : '';
+  const todayStr = (() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  })();
+  const isToday = fechaDB === todayStr;
+  const isPastDate = fechaDB ? fechaDB < todayStr : false;
+
   const [showConvocados, setShowConvocados] = useState(false);
   const [visibleGroups, setVisibleGroups] = useState<Record<number, boolean>>({});
   const [modalidad, setModalidad] = useState<'default' | 'fixture'>(embedded ? 'fixture' : 'default');
@@ -84,7 +97,14 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
 
   // Initialize fixtureData when entering fixture mode or changing date
   useEffect(() => {
-    if (modalidad !== 'fixture' || !dbDevices?.length || !fechaDB) return;
+    if (modalidad !== 'fixture') {
+      // Al salir de fixture, se descarta el bloqueo de carga para que al
+      // volver se recargue SIEMPRE desde la DB el orden guardado de ese
+      // día y turno (cada día/turno puede tener su propio orden).
+      fixtureLoadedRef.current = '';
+      return;
+    }
+    if (!dbDevices?.length || !fechaDB) return;
     const deviceIds = dbDevices.map((d: any) => d.id).join(',');
     const loadKey = `${fechaDB}-${turnoFilter}-${deviceIds}`;
     if (fixtureLoadedRef.current === loadKey) return;
@@ -437,13 +457,15 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               <AlertCircle className="w-3.5 h-3.5" />
               Ver Vacantes / Sin Asignar
             </button>
-            <select
-              className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
-              value={execDate}
-              onChange={(e) => setExecDate(e.target.value)}
-            >
-              {activeDates.map((d: string) => <option key={d} value={d}>{d}</option>)}
-            </select>
+            {modalidad !== 'fixture' && (
+              <select
+                className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground"
+                value={execDate}
+                onChange={(e) => setExecDate(e.target.value)}
+              >
+                {activeDates.map((d: string) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
           </div>
         </div>
 
@@ -672,6 +694,21 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   const fixtureUpserts: any[] = [];
                   const menuOps: any[] = [];
 
+                  // Persistir SIEMPRE el estado completo del fixture (orden incluido)
+                  // para este día y tipo de turno, así el orden guardado coincide con
+                  // el mostrado al recargar (cada día/turno tiene su propio orden).
+                  Object.entries(fixtureData).forEach(([devId, slot]) => {
+                    fixtureUpserts.push({
+                      id_dispositivo: parseInt(devId),
+                      fecha: fechaDB,
+                      tipo_turno: turnoFilter,
+                      prioridad: slot.prioridad,
+                      residente1: slot.residente1,
+                      residente2: slot.residente2,
+                      asignado: slot.asignado || null,
+                    });
+                  });
+
                   // Fixed apertura (un residente = un dispositivo por día): pre-calculamos el
                   // dispositivo actual de cada ganador para MOVERLO ahí (igual que el flujo
                   // normal) en vez de insertar una fila nueva y dejarlo en 2 dispositivos.
@@ -701,18 +738,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     if (oldSnapshotStr === snapshot) return;
                     changedDevIds.push(devId);
 
-                    // 1. Batch fixture_plan upserts (se envían al RPC atómico)
-                    fixtureUpserts.push({
-                      id_dispositivo: parseInt(devId),
-                      fecha: fechaDB,
-                      tipo_turno: turnoFilter,
-                      prioridad: slot.prioridad,
-                      residente1: slot.residente1,
-                      residente2: slot.residente2,
-                      asignado: slot.asignado || null,
-                    });
-
-                    // 2. Winner menu assignment changes: se acumulan como descriptores
+                    // Winner menu assignment changes: se acumulan como descriptores
                     //    y se persisten en UNA llamada RPC transaccional (rpc_fixture_save_atomic)
                     const oldWinner = oldSnapshotStr ? (() => { const s = JSON.parse(oldSnapshotStr); return s.asignado === 'R1' ? s.residente1 : s.asignado === 'R2' ? s.residente2 : null; })() : null;
                     const newWinner = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
@@ -756,7 +782,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                             payload: {
                               id_agente: newWinner, id_dispositivo: parseInt(devId),
                               fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
-                              id_convocatoria: convId, prioridad: slot.prioridad,
+                              id_convocatoria: convId,
                               ...(isApertura ? {} : { id_turno: turnoId, tipo_organizacion: orgType }),
                             },
                           });
@@ -778,12 +804,10 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     if (rpcErr) throw new Error(`[rpc_fixture_save_atomic] ${rpcErr.message}`);
                     if (rpcRes && rpcRes.ok === false) throw new Error(rpcRes.error || '[rpc_fixture_save_atomic] Fallo sin detalle');
 
-                    // Recién ahora marcamos como guardados los slots persistidos.
+                    // Recién ahora marcamos como guardados TODOS los slots (persistimos el fixture completo).
                     // Usamos fixtureDataRef.current para evitar closure stale.
                     const currentFixture = fixtureDataRef.current;
-                    changedDevIds.forEach(devId => {
-                      const slot = currentFixture[devId];
-                      if (!slot) return;
+                    Object.entries(currentFixture).forEach(([devId, slot]) => {
                       savedFixtureData.current[devId] = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado ?? null, prioridad: slot.prioridad });
                     });
                     // El RPC escribe menu/menu_semana: refetch ligero de assignments.
@@ -831,8 +855,40 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               </div>
             )}
 
-              {/* Fixture grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+              {/* Date confirmation block: se muestra solo fuera de la vista bloqueada,
+              que ya trae su propio selector de fecha */}
+              <div className="flex-1 flex flex-col gap-3 min-w-0">
+                {!embedded && (
+                <div className="bg-card rounded-xl border border-border p-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 bg-primary/10 text-primary">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Fecha a modificar</div>
+                      <div className="text-sm font-bold text-foreground leading-tight truncate">
+                        {weekdayLabel}, {fmtFullDate}
+                      </div>
+                    </div>
+                    {isToday ? (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-300">HOY</span>
+                    ) : isPastDate ? (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-300">FECHA PASADA</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="bg-orange-500 text-white border-orange-600 rounded-lg px-3 py-1.5 text-xs font-bold shadow-sm hover:bg-orange-600 transition-colors"
+                      value={execDate}
+                      onChange={(e) => setExecDate(e.target.value)}
+                    >
+                      {activeDates.map((d: string) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {Object.entries(fixtureData)
                 .sort(([, a], [, b]) => a.prioridad - b.prioridad)
                 .map(([devId, slot]) => {
@@ -1049,6 +1105,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     </div>
                   );
                 })}
+              </div>
             </div>
 
             {/* Active criteria panel on the right (sidebar-only when embedded in locked view) */}
