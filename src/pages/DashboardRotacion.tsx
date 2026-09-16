@@ -93,7 +93,11 @@ export default function DashboardRotacion() {
       const dispositivos = dispData || [];
       const dispIds = new Set(dispositivos.map(d => d.id_dispositivo));
 
-      // 3. Cargar Asignaciones (Filtrado en JS para FDS para no ahogar Supabase con filtros complejos)
+      // 3. Cargar Asignaciones de apertura (tabla `menu`).
+      // Se incluyen TODOS los días: además de sábados/domingos, la tabla `menu`
+      // registra los feriados (apretura al público en días de semana), que deben
+      // contar igual que un finde. (Supabase no permite filtros de DOW cómodos:
+      // se valida en JS solo para residente/dispositivo activo.)
       const { data: asigData, error: err3 } = await supabase
         .from("menu")
         .select("id_agente, id_dispositivo, fecha_asignacion")
@@ -104,8 +108,7 @@ export default function DashboardRotacion() {
 
       const asignaciones = dedupAsignaciones((asigData || []).filter(a => {
         if (!a.fecha_asignacion || !resIds.has(a.id_agente) || !dispIds.has(a.id_dispositivo)) return false;
-        const dow = new Date(a.fecha_asignacion).getUTCDay();
-        return dow === 0 || dow === 6;
+        return true;
       }).map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] })));
 
       // 3b. Cargar datos T/M (Turno Mañana/Tarde) - consulta optimizada con filtro por id_turno
