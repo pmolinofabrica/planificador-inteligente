@@ -47,6 +47,21 @@ export default function DashboardRotacion() {
   const [selectedDate, setSelectedDate] = useState<string>("all");
   const [showDiversidadModal, setShowDiversidadModal] = useState(false);
 
+  // Una coordinación = (id_agente, id_dispositivo, fecha). En menu_semana un
+  // residente puede tener una fila por grupo (hasta 3) del mismo día/dispositivo:
+  // esas deben contar como UNA coordinación, no como filas separadas.
+  const dedupAsignaciones = (rows: Asignacion[]): Asignacion[] => {
+    const seen = new Set<string>();
+    const out: Asignacion[] = [];
+    rows.forEach(a => {
+      const key = `${a.id_agente}|${a.id_dispositivo}|${a.fecha_asignacion}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(a);
+    });
+    return out;
+  };
+
   const year = new Date().getFullYear();
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year}-12-31`;
@@ -87,11 +102,11 @@ export default function DashboardRotacion() {
         .not("id_dispositivo", "is", null);
       if (err3) throw err3;
 
-      const asignaciones = (asigData || []).filter(a => {
+      const asignaciones = dedupAsignaciones((asigData || []).filter(a => {
         if (!a.fecha_asignacion || !resIds.has(a.id_agente) || !dispIds.has(a.id_dispositivo)) return false;
         const dow = new Date(a.fecha_asignacion).getUTCDay();
         return dow === 0 || dow === 6;
-      }).map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] }));
+      }).map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] })));
 
       // 3b. Cargar datos T/M (Turno Mañana/Tarde) - consulta optimizada con filtro por id_turno
       const { data: turnosAll } = await supabase.from("turnos").select("id_turno, tipo_turno");
@@ -105,9 +120,9 @@ export default function DashboardRotacion() {
           .gte("fecha_asignacion", yearStart)
           .lte("fecha_asignacion", yearEnd)
           .not("id_dispositivo", "is", null);
-        tmAsignaciones = (tmRaw || [])
+        tmAsignaciones = dedupAsignaciones((tmRaw || [])
           .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
-          .map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] }));
+          .map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] })));
       }
 
       // 4. Cargar Capacitaciones

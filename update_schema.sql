@@ -11,11 +11,11 @@ AS $$
         m.id_dispositivo,
         COUNT(*) as repeticiones
     FROM (
-        SELECT id_agente, id_dispositivo, fecha_asignacion, 'apertura' as tipo_turno
+        SELECT DISTINCT id_agente, id_dispositivo, fecha_asignacion, 'apertura' as tipo_turno
         FROM menu
         WHERE id_dispositivo IS NOT NULL AND id_dispositivo != 999
         UNION ALL
-        SELECT ms.id_agente, ms.id_dispositivo, ms.fecha_asignacion, t.tipo_turno
+        SELECT DISTINCT ms.id_agente, ms.id_dispositivo, ms.fecha_asignacion, t.tipo_turno
         FROM menu_semana ms
         JOIN turnos t ON ms.id_turno = t.id_turno
         WHERE ms.id_dispositivo IS NOT NULL AND ms.id_dispositivo != 999
