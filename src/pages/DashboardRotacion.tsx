@@ -39,6 +39,7 @@ export default function DashboardRotacion() {
     statusMap: StatusMap;
     tmStatusMap: StatusMap;
     acompanaList: AcompanaEntry[];
+    debugRaw: { menu: number; tm: number };
   } | null>(null);
 
   const [turnoMode, setTurnoMode] = useState<'apertura' | 'tm' | 'total'>('apertura');
@@ -106,6 +107,7 @@ export default function DashboardRotacion() {
         .not("id_dispositivo", "is", null);
       if (err3) throw err3;
 
+      const debugMenuRaw = (asigData || []).length;
       const asignaciones = dedupAsignaciones((asigData || []).filter(a => {
         if (!a.fecha_asignacion || !resIds.has(a.id_agente) || !dispIds.has(a.id_dispositivo)) return false;
         return true;
@@ -115,6 +117,7 @@ export default function DashboardRotacion() {
       const { data: turnosAll } = await supabase.from("turnos").select("id_turno, tipo_turno");
       const tmIds = (turnosAll || []).filter(t => t.tipo_turno?.toLowerCase().includes('turno')).map(t => t.id_turno);
       let tmAsignaciones: Asignacion[] = [];
+      let debugTmRaw = 0;
       if (tmIds.length > 0) {
         const { data: tmRaw } = await supabase
           .from("menu_semana")
@@ -123,6 +126,7 @@ export default function DashboardRotacion() {
           .gte("fecha_asignacion", yearStart)
           .lte("fecha_asignacion", yearEnd)
           .not("id_dispositivo", "is", null);
+        debugTmRaw = (tmRaw || []).length;
         tmAsignaciones = dedupAsignaciones((tmRaw || [])
           .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
           .map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] })));
@@ -190,7 +194,7 @@ export default function DashboardRotacion() {
       (acompMenu?.data || []).forEach(dedup);
       (acompSemana?.data || []).forEach(dedup);
 
-      setData({ residentes, dispositivos, asignaciones, tmAsignaciones, capacitaciones, statusMap, tmStatusMap, acompanaList });
+      setData({ residentes, dispositivos, asignaciones, tmAsignaciones, capacitaciones, statusMap, tmStatusMap, acompanaList, debugRaw: { menu: debugMenuRaw, tm: debugTmRaw } });
       toast.success("Datos actualizados correctamente desde Supabase.");
     } catch (error: any) {
       console.error(error);
@@ -213,8 +217,8 @@ export default function DashboardRotacion() {
     }
   };
 
-  const { residentes, dispositivos, asignaciones: aperturaAsignaciones, tmAsignaciones, capacitaciones, statusMap: aperturaStatusMap, tmStatusMap, acompanaList } = data || {
-    residentes: [], dispositivos: [], asignaciones: [], tmAsignaciones: [], capacitaciones: [], statusMap: {}, tmStatusMap: {}, acompanaList: []
+  const { residentes, dispositivos, asignaciones: aperturaAsignaciones, tmAsignaciones, capacitaciones, statusMap: aperturaStatusMap, tmStatusMap, acompanaList, debugRaw } = data || {
+    residentes: [], dispositivos: [], asignaciones: [], tmAsignaciones: [], capacitaciones: [], statusMap: {}, tmStatusMap: {}, acompanaList: [], debugRaw: { menu: 0, tm: 0 }
   };
 
   const asignaciones = useMemo(() => {
@@ -656,6 +660,9 @@ export default function DashboardRotacion() {
                   <div className="border rounded-xl p-0 bg-white shadow-sm overflow-hidden flex flex-col h-[500px]">
                     <div className="bg-slate-50 p-4 border-b border-slate-100 font-semibold text-slate-800">
                       Top Dispositivos Coordinados
+                      <span className="block text-[11px] font-normal text-muted-foreground mt-0.5">
+                        DEBUG: menu crudo = {debugRaw.menu} filas · menu_semana crudo = {debugRaw.tm} filas
+                      </span>
                     </div>
                     <ScrollArea className="flex-1">
                       <Table>
