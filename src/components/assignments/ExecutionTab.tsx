@@ -104,6 +104,11 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   const [fixtureData, setFixtureData] = useState<Record<string, { prioridad: number; residente1: number | null; residente2: number | null; asignado?: 'R1' | 'R2' | null }>>({});
   const [fixturePickerOpen, setFixturePickerOpen] = useState<string | null>(null); // "devId-R1" or "devId-R2"
   const [fixturePickerSearch, setFixturePickerSearch] = useState<Record<string, string>>({});
+  // Cierra el selector de residentes SIN aplicar ningún cambio (click fuera, Escape, etc.)
+  const closeFixturePicker = () => {
+    setFixturePickerOpen(null);
+    setFixturePickerSearch({});
+  };
   const [isSavingFixture, setIsSavingFixture] = useState(false);
   const [selectedAutoCards, setSelectedAutoCards] = useState<Set<string>>(new Set());
   const [autoConvocados, setAutoConvocados] = useState<Set<number>>(new Set());
@@ -949,7 +954,11 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            if (!residentId) return;
+                            if (!residentId) {
+                              setFixturePickerOpen(`${devId}-${label}`);
+                              setFixturePickerSearch(prev => ({ ...prev, [`${devId}-${label}`]: '' }));
+                              return;
+                            }
                             setFixtureData(prev => ({
                               ...prev,
                               [devId]: { ...prev[devId], asignado: prev[devId].asignado === label ? null : label }
@@ -960,7 +969,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                               ? isAsignado
                                 ? 'border-emerald-500 bg-emerald-500'
                                 : 'border-muted-foreground hover:border-emerald-400'
-                              : 'border-muted-foreground/30 cursor-not-allowed'
+                              : 'border-muted-foreground/30 hover:border-primary/40'
                           }`}
                         >
                           {isAsignado && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -976,11 +985,12 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                   placeholder="Buscar..."
                                   value={search}
                                   onChange={(e) => setFixturePickerSearch(prev => ({ ...prev, [fixturePickerOpen!]: e.target.value }))}
+                                  onKeyDown={(e) => { if (e.key === 'Escape') closeFixturePicker(); }}
                                   autoFocus
                                   className="w-full text-[11px] pl-7 pr-2 py-1.5 rounded-md border border-border bg-muted/30 font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
                                 />
                               </div>
-                              <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                              <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
                                 {(() => {
                                   const s = search;
                                   const filtered = s
@@ -1001,9 +1011,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                     <button
                                       key={r.id}
                                       onClick={() => {
-                                        setFixtureData(prev => ({ ...prev, [devId]: { ...prev[devId], [rKey]: r.id } }));
-                                        setFixturePickerOpen(null);
-                                        setFixturePickerSearch(prev => ({ ...prev, [`${devId}-${label}`]: '' }));
+                                        setFixtureData(prev => ({ ...prev, [devId]: { ...prev[devId], [rKey]: r.id, asignado: prev[devId].asignado ?? label } }));
+                                        closeFixturePicker();
                                       }}
                                       className={`w-full text-left px-2 py-1.5 text-[11px] font-medium hover:bg-accent transition-colors ${
                                         residentId === r.id ? 'bg-primary/10 text-primary' : ''
@@ -1143,6 +1152,9 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   );
                 })}
               </div>
+              {fixturePickerOpen != null && (
+                <div className="fixed inset-0 z-20" onClick={closeFixturePicker} />
+              )}
             </div>
 
             {/* Active criteria panel on the right (sidebar-only when embedded in locked view) */}
@@ -1186,6 +1198,21 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     <XIcon className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </div>
+                <div className="p-3 border-b border-border bg-muted/30">
+                  <button
+                    onClick={async () => {
+                      const ok = await handleSaveFixture();
+                      if (ok) setShowFixtureSidebar(false);
+                    }}
+                    disabled={isSavingFixture || fixtureDirtyCount === 0}
+                    className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {isSavingFixture ? '⏳' : '💾'} Guardar orden {fixtureDirtyCount > 0 ? `(${fixtureDirtyCount} cambios)` : ''}
+                  </button>
+                  <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                    Editá todos los números y presioná Guardar para enviarlos a la base de datos.
+                  </p>
+                </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {Object.entries(fixtureData)
                     .sort(([, a], [, b]) => a.prioridad - b.prioridad)
@@ -1212,21 +1239,6 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                         </div>
                       );
                     })}
-                </div>
-                <div className="p-3 border-t border-border bg-muted/30">
-                  <button
-                    onClick={async () => {
-                      const ok = await handleSaveFixture();
-                      if (ok) setShowFixtureSidebar(false);
-                    }}
-                    disabled={isSavingFixture || fixtureDirtyCount === 0}
-                    className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    {isSavingFixture ? '⏳' : '💾'} Guardar orden {fixtureDirtyCount > 0 ? `(${fixtureDirtyCount} cambios)` : ''}
-                  </button>
-                  <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                    Editá todos los números y presioná Guardar para enviarlos a la base de datos.
-                  </p>
                 </div>
               </div>
             )}
