@@ -303,7 +303,12 @@ export default function DashboardRotacion() {
     const misAsigTm = tmAsignaciones.filter(a => a.id_agente === rId);
     const misAsig = turnoMode === 'apertura' ? misAsigApertura : turnoMode === 'tm' ? misAsigTm : [...misAsigApertura, ...misAsigTm];
     const conteoPorDisp = new Map<number, number>();
-    misAsig.forEach(a => conteoPorDisp.set(a.id_dispositivo, (conteoPorDisp.get(a.id_dispositivo) || 0) + 1));
+    const fechasPorDisp = new Map<number, string[]>();
+    misAsig.forEach(a => {
+      conteoPorDisp.set(a.id_dispositivo, (conteoPorDisp.get(a.id_dispositivo) || 0) + 1);
+      if (!fechasPorDisp.has(a.id_dispositivo)) fechasPorDisp.set(a.id_dispositivo, []);
+      if (!fechasPorDisp.get(a.id_dispositivo)!.includes(a.fecha_asignacion)) fechasPorDisp.get(a.id_dispositivo)!.push(a.fecha_asignacion);
+    });
 
     const porPisoObj: Record<string, number> = {};
     conteoPorDisp.forEach((count, dId) => {
@@ -329,7 +334,7 @@ export default function DashboardRotacion() {
       : undefined;
 
     const listaTop = Array.from(conteoPorDisp.entries())
-      .map(([dId, count]) => ({ dispositivo: dispMap.get(dId)?.nombre_dispositivo || "Desc.", cantidad: count }))
+      .map(([dId, count]) => ({ dispositivo: dispMap.get(dId)?.nombre_dispositivo || "Desc.", cantidad: count, fechas: [...(fechasPorDisp.get(dId) || [])].sort() }))
       .sort((a, b) => b.cantidad - a.cantidad);
 
     const misCaps = new Set(capacitaciones.filter(c => c.id_agente === rId).map(c => c.id_dispositivo));
@@ -663,7 +668,10 @@ export default function DashboardRotacion() {
                         <TableBody>
                           {residenteStats.listaTop.length > 0 ? residenteStats.listaTop.map((item, idx) => (
                             <TableRow key={idx}>
-                              <TableCell className="font-medium">{item.dispositivo}</TableCell>
+                              <TableCell className="font-medium">
+                                <div>{item.dispositivo}</div>
+                                <div className="text-xs text-muted-foreground font-normal">{item.fechas.map(d => formatDate(d)).join(" · ")}</div>
+                              </TableCell>
                               <TableCell className="text-right"><Badge variant="secondary">{item.cantidad}</Badge></TableCell>
                             </TableRow>
                           )) : (
