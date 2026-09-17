@@ -27,6 +27,22 @@ interface AcompanaEntry { id_agente: number; fecha_asignacion: string; segundo: 
 // Status Maps
 type StatusMap = Record<string, Record<number, string>>; // { "YYYY-MM-DD": { agenteId: "descanso" | "inasistencia" | "convocatoria" } }
 
+// PostgREST limita a 1000 filas por request. El dashboard consulta el año entero
+// (menu 2026 = 1584 filas, menu_semana = 1163), superando el tope y dejando fechas
+// fuera. Este helper pagina con .range() (páginas inclusivas de 1000) hasta agotar.
+async function fetchAllRows<Row = any>(q: any): Promise<Row[]> {
+  const out: Row[] = [];
+  const step = 1000;
+  for (let start = 0; ; start += step) {
+    const { data, error } = await q.range(start, start + step - 1);
+    if (error) throw error;
+    if (!data) break;
+    out.push(...(data as Row[]));
+    if (data.length < step) break;
+  }
+  return out;
+}
+
 export default function DashboardRotacion() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -99,13 +115,13 @@ export default function DashboardRotacion() {
       // registra los feriados (apretura al público en días de semana), que deben
       // contar igual que un finde. (Supabase no permite filtros de DOW cómodos:
       // se valida en JS solo para residente/dispositivo activo.)
-      const { data: asigData, error: err3 } = await supabase
-        .from("menu")
-        .select("id_agente, id_dispositivo, fecha_asignacion")
-        .gte("fecha_asignacion", yearStart)
-        .lte("fecha_asignacion", yearEnd)
-        .not("id_dispositivo", "is", null);
-      if (err3) throw err3;
+      const asigData = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_asignacion: string }>(
+        supabase.from("menu")
+          .select("id_agente, id_dispositivo, fecha_asignacion")
+          .gte("fecha_asignacion", yearStart)
+          .lte("fecha_asignacion", yearEnd)
+          .not("id_dispositivo", "is", null)
+      );
 
       const debugMenuRaw = (asigData || []).length;
       const asignaciones = dedupAsignaciones((asigData || []).filter(a => {
@@ -119,24 +135,25 @@ export default function DashboardRotacion() {
       let tmAsignaciones: Asignacion[] = [];
       let debugTmRaw = 0;
       if (tmIds.length > 0) {
-        const { data: tmRaw } = await supabase
-          .from("menu_semana")
-          .select("id_agente, id_dispositivo, fecha_asignacion")
-          .in("id_turno", tmIds)
-          .gte("fecha_asignacion", yearStart)
-          .lte("fecha_asignacion", yearEnd)
-          .not("id_dispositivo", "is", null);
+        const tmRaw = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_asignacion: string }>(
+          supabase.from("menu_semana")
+            .select("id_agente, id_dispositivo, fecha_asignacion")
+            .in("id_turno", tmIds)
+            .gte("fecha_asignacion", yearStart)
+            .lte("fecha_asignacion", yearEnd)
+            .not("id_dispositivo", "is", null)
+        );
         debugTmRaw = (tmRaw || []).length;
         tmAsignaciones = dedupAsignaciones((tmRaw || [])
           .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
           .map(a => ({ id_agente: a.id_agente, id_dispositivo: a.id_dispositivo, fecha_asignacion: a.fecha_asignacion.split("T")[0] })));
       }
 
-      // 4. Cargar Capacitaciones
-      const { data: capData, error: err4 } = await supabase
-        .from("vista_agentes_capacitados")
-        .select("id_agente, id_dispositivo, fecha_capacitacion");
-      if (err4) throw err4;
+      // 4. Cargar Capacitaciones (paginado: la vista anual también puede superar 1000 filas)
+      const capData = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_capacitacion: string }>(
+        supabase.from("vista_agentes_capacitados")
+          .select("id_agente, id_dispositivo, fecha_capacitacion")
+      );
       
       const capacitaciones = (capData || [])
         .filter(c => resIds.has(c.id_agente) && dispIds.has(c.id_dispositivo))
