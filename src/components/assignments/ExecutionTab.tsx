@@ -30,6 +30,39 @@ const floorNames: Record<string, { label: string; bgClass: string; borderClass: 
   '4': { label: 'P4', bgClass: 'bg-muted-foreground', borderClass: 'border-muted-foreground' },
 };
 
+// Input de prioridad con edición natural: mantiene un borrador en texto mientras se
+// edita y recién se confirma (clamp 1..max + onChange) al salir del campo o con Enter.
+// Así se puede reemplazar "12" por "1" sin borrar digito por digito (problema típico
+// de <input type="number"> controlado, que revierte el valor en cada render).
+const PriorityInput: React.FC<{ value: number; max: number; onCommit: (v: number) => void }> = ({ value, max, onCommit }) => {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commit = () => {
+    if (draft == null) return;
+    const parsed = parseInt(draft, 10);
+    if (isNaN(parsed)) {
+      onCommit(value);
+    } else {
+      onCommit(Math.max(1, Math.min(max, parsed)));
+    }
+    setDraft(null);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={draft ?? String(value)}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => { setDraft(String(value)); e.target.select(); }}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+      className="w-12 text-[11px] text-center font-bold py-1 rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
+      title="Número de orden. Editá y confirmá con Enter o al salir."
+    />
+  );
+};
+
 export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   data, execDate, setExecDate,
   selectedResident, setSelectedResident,
@@ -410,6 +443,151 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     </div>
   );
 
+  const handleSaveFixture = async (): Promise<boolean> => {
+    const isApertura = turnoFilter === 'apertura';
+    const turnoId = isApertura ? undefined : dateTurnoMap?.[execDate];
+    if (!isApertura && !turnoId) {
+      alert(`No se pudo resolver id_turno para ${execDate}. Sin ese dato no se guarda para evitar inconsistencias.`);
+      return false;
+    }
+    if (!fechaDB) {
+      alert('Fecha inválida. No se puede guardar.');
+      return false;
+    }
+    const menuTable = isApertura ? 'menu' : 'menu_semana';
+    const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
+    const changedDevIds: string[] = [];
+    const fixtureUpserts: any[] = [];
+    const menuOps: any[] = [];
+
+    // Persistir SIEMPRE el estado completo del fixture (orden incluido)
+    // para este día y tipo de turno, así el orden guardado coincide con
+    // el mostrado al recargar (cada día/turno tiene su propio orden).
+    Object.entries(fixtureData).forEach(([devId, slot]) => {
+      fixtureUpserts.push({
+        id_dispositivo: parseInt(devId),
+        fecha: fechaDB,
+        tipo_turno: turnoFilter,
+        prioridad: slot.prioridad,
+        residente1: slot.residente1,
+        residente2: slot.residente2,
+        asignado: slot.asignado || null,
+      });
+    });
+
+    // Fixed apertura (un residente = un dispositivo por día): pre-calculamos el
+    // dispositivo actual de cada ganador para MOVERLO ahí (igual que el flujo
+    // normal) en vez de insertar una fila nueva y dejarlo en 2 dispositivos.
+    const fixedWinnerSources: Record<number, number> = {};
+    if (isApertura && !allowMultiDispositivoApertura) {
+      const winners = new Set<number>();
+      Object.entries(fixtureData).forEach(([devId, slot]) => {
+        if (savedFixtureData.current[devId] === JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad })) return;
+        const w = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
+        if (w != null) winners.add(w);
+      });
+      if (winners.size > 0) {
+        const { data: winnerRows } = await supabase.from('menu')
+          .select('id_agente, id_dispositivo')
+          .in('id_agente', Array.from(winners))
+          .eq('fecha_asignacion', fechaDB);
+        (winnerRows || []).forEach((r: any) => {
+          const id = Number(r.id_agente);
+          if (fixedWinnerSources[id] === undefined) fixedWinnerSources[id] = Number(r.id_dispositivo);
+        });
+      }
+    }
+
+    Object.entries(fixtureData).forEach(([devId, slot]) => {
+      const oldSnapshotStr = savedFixtureData.current[devId];
+      const snapshot = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad });
+      if (oldSnapshotStr === snapshot) return;
+      changedDevIds.push(devId);
+
+      // Winner menu assignment changes: se acumulan como descriptores
+      //    y se persisten en UNA llamada RPC transaccional (rpc_fixture_save_atomic)
+      const oldWinner = oldSnapshotStr ? (() => { const s = JSON.parse(oldSnapshotStr); return s.asignado === 'R1' ? s.residente1 : s.asignado === 'R2' ? s.residente2 : null; })() : null;
+      const newWinner = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
+      if (oldWinner != null && oldWinner !== newWinner) {
+        menuOps.push({
+          table: menuTable,
+          action: 'delete',
+          match: {
+            id_agente: oldWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
+            ...(isApertura ? {} : { id_turno: turnoId }),
+          },
+          payload: {},
+        });
+      }
+      if (newWinner != null) {
+        const res = (allResidentsDb || []).find((r: any) => r.id === newWinner);
+        const convId = agentConvocatoriaMap?.[execDate]?.[newWinner];
+        if (convId && res) {
+          const srcDev = fixedWinnerSources[newWinner];
+          const shouldMove = fixedWinnerSources.hasOwnProperty(newWinner) && srcDev !== parseInt(devId);
+          if (shouldMove) {
+            menuOps.push({
+              table: menuTable,
+              action: 'update',
+              match: {
+                id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: srcDev,
+                ...(isApertura ? {} : { id_turno: turnoId }),
+              },
+              payload: {
+                id_dispositivo: parseInt(devId), estado_ejecucion: 'planificado',
+              },
+            });
+          } else {
+            menuOps.push({
+              table: menuTable,
+              action: 'upsert',
+              match: {
+                id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
+                ...(isApertura ? {} : { id_turno: turnoId }),
+              },
+              payload: {
+                id_agente: newWinner, id_dispositivo: parseInt(devId),
+                fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
+                id_convocatoria: convId,
+                ...(isApertura ? {} : { id_turno: turnoId, tipo_organizacion: orgType }),
+              },
+            });
+          }
+        }
+      }
+    });
+
+    if (changedDevIds.length === 0) return false;
+
+    setIsSavingFixture(true);
+    try {
+      // Una sola llamada transaccional: fixture_plan + menu/menu_semana
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_fixture_save_atomic', {
+        p_fecha: fechaDB,
+        p_ops: menuOps,
+        p_fixture_upserts: fixtureUpserts,
+      });
+      if (rpcErr) throw new Error(`[rpc_fixture_save_atomic] ${rpcErr.message}`);
+      if (rpcRes && rpcRes.ok === false) throw new Error(rpcRes.error || '[rpc_fixture_save_atomic] Fallo sin detalle');
+
+      // Recién ahora marcamos como guardados TODOS los slots (persistimos el fixture completo).
+      // Usamos fixtureDataRef.current para evitar closure stale.
+      const currentFixture = fixtureDataRef.current;
+      Object.entries(currentFixture).forEach(([devId, slot]) => {
+        savedFixtureData.current[devId] = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado ?? null, prioridad: slot.prioridad });
+      });
+      // El RPC escribe menu/menu_semana: refetch ligero de assignments.
+      (refreshLight || refresh)();
+      return true;
+    } catch (err: any) {
+      console.error('Error saving fixture:', err);
+      alert(`Error al guardar el fixture: ${err.message || err}`);
+      return false;
+    } finally {
+      setIsSavingFixture(false);
+    }
+  };
+
   return (
     <main className={embedded ? "w-full" : "flex-1 overflow-auto bg-muted/30 absolute inset-0 p-6"}>
       <div className="max-w-7xl mx-auto">
@@ -677,148 +855,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 </button>
               )}
               <button
-                onClick={async () => {
-                  const isApertura = turnoFilter === 'apertura';
-                  const turnoId = isApertura ? undefined : dateTurnoMap?.[execDate];
-                  if (!isApertura && !turnoId) {
-                    alert(`No se pudo resolver id_turno para ${execDate}. Sin ese dato no se guarda para evitar inconsistencias.`);
-                    return;
-                  }
-                  if (!fechaDB) {
-                    alert('Fecha inválida. No se puede guardar.');
-                    return;
-                  }
-                  const menuTable = isApertura ? 'menu' : 'menu_semana';
-                  const orgType = tipoOrganizacionMap?.[execDate] || 'dispositivos fijos';
-                  const changedDevIds: string[] = [];
-                  const fixtureUpserts: any[] = [];
-                  const menuOps: any[] = [];
-
-                  // Persistir SIEMPRE el estado completo del fixture (orden incluido)
-                  // para este día y tipo de turno, así el orden guardado coincide con
-                  // el mostrado al recargar (cada día/turno tiene su propio orden).
-                  Object.entries(fixtureData).forEach(([devId, slot]) => {
-                    fixtureUpserts.push({
-                      id_dispositivo: parseInt(devId),
-                      fecha: fechaDB,
-                      tipo_turno: turnoFilter,
-                      prioridad: slot.prioridad,
-                      residente1: slot.residente1,
-                      residente2: slot.residente2,
-                      asignado: slot.asignado || null,
-                    });
-                  });
-
-                  // Fixed apertura (un residente = un dispositivo por día): pre-calculamos el
-                  // dispositivo actual de cada ganador para MOVERLO ahí (igual que el flujo
-                  // normal) en vez de insertar una fila nueva y dejarlo en 2 dispositivos.
-                  const fixedWinnerSources: Record<number, number> = {};
-                  if (isApertura && !allowMultiDispositivoApertura) {
-                    const winners = new Set<number>();
-                    Object.entries(fixtureData).forEach(([devId, slot]) => {
-                      if (savedFixtureData.current[devId] === JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad })) return;
-                      const w = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
-                      if (w != null) winners.add(w);
-                    });
-                    if (winners.size > 0) {
-                      const { data: winnerRows } = await supabase.from('menu')
-                        .select('id_agente, id_dispositivo')
-                        .in('id_agente', Array.from(winners))
-                        .eq('fecha_asignacion', fechaDB);
-                      (winnerRows || []).forEach((r: any) => {
-                        const id = Number(r.id_agente);
-                        if (fixedWinnerSources[id] === undefined) fixedWinnerSources[id] = Number(r.id_dispositivo);
-                      });
-                    }
-                  }
-
-                  Object.entries(fixtureData).forEach(([devId, slot]) => {
-                    const oldSnapshotStr = savedFixtureData.current[devId];
-                    const snapshot = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado, prioridad: slot.prioridad });
-                    if (oldSnapshotStr === snapshot) return;
-                    changedDevIds.push(devId);
-
-                    // Winner menu assignment changes: se acumulan como descriptores
-                    //    y se persisten en UNA llamada RPC transaccional (rpc_fixture_save_atomic)
-                    const oldWinner = oldSnapshotStr ? (() => { const s = JSON.parse(oldSnapshotStr); return s.asignado === 'R1' ? s.residente1 : s.asignado === 'R2' ? s.residente2 : null; })() : null;
-                    const newWinner = slot.asignado === 'R1' ? slot.residente1 : slot.asignado === 'R2' ? slot.residente2 : null;
-                    if (oldWinner != null && oldWinner !== newWinner) {
-                      menuOps.push({
-                        table: menuTable,
-                        action: 'delete',
-                        match: {
-                          id_agente: oldWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
-                          ...(isApertura ? {} : { id_turno: turnoId }),
-                        },
-                        payload: {},
-                      });
-                    }
-                    if (newWinner != null) {
-                      const res = (allResidentsDb || []).find((r: any) => r.id === newWinner);
-                      const convId = agentConvocatoriaMap?.[execDate]?.[newWinner];
-                      if (convId && res) {
-                        const srcDev = fixedWinnerSources[newWinner];
-                        const shouldMove = fixedWinnerSources.hasOwnProperty(newWinner) && srcDev !== parseInt(devId);
-                        if (shouldMove) {
-                          menuOps.push({
-                            table: menuTable,
-                            action: 'update',
-                            match: {
-                              id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: srcDev,
-                              ...(isApertura ? {} : { id_turno: turnoId }),
-                            },
-                            payload: {
-                              id_dispositivo: parseInt(devId), estado_ejecucion: 'planificado',
-                            },
-                          });
-                        } else {
-                          menuOps.push({
-                            table: menuTable,
-                            action: 'upsert',
-                            match: {
-                              id_agente: newWinner, fecha_asignacion: fechaDB, id_dispositivo: parseInt(devId),
-                              ...(isApertura ? {} : { id_turno: turnoId }),
-                            },
-                            payload: {
-                              id_agente: newWinner, id_dispositivo: parseInt(devId),
-                              fecha_asignacion: fechaDB, estado_ejecucion: 'planificado',
-                              id_convocatoria: convId,
-                              ...(isApertura ? {} : { id_turno: turnoId, tipo_organizacion: orgType }),
-                            },
-                          });
-                        }
-                      }
-                    }
-                  });
-
-                  if (changedDevIds.length === 0) return;
-
-                  setIsSavingFixture(true);
-                  try {
-                    // Una sola llamada transaccional: fixture_plan + menu/menu_semana
-                    const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_fixture_save_atomic', {
-                      p_fecha: fechaDB,
-                      p_ops: menuOps,
-                      p_fixture_upserts: fixtureUpserts,
-                    });
-                    if (rpcErr) throw new Error(`[rpc_fixture_save_atomic] ${rpcErr.message}`);
-                    if (rpcRes && rpcRes.ok === false) throw new Error(rpcRes.error || '[rpc_fixture_save_atomic] Fallo sin detalle');
-
-                    // Recién ahora marcamos como guardados TODOS los slots (persistimos el fixture completo).
-                    // Usamos fixtureDataRef.current para evitar closure stale.
-                    const currentFixture = fixtureDataRef.current;
-                    Object.entries(currentFixture).forEach(([devId, slot]) => {
-                      savedFixtureData.current[devId] = JSON.stringify({ residente1: slot.residente1, residente2: slot.residente2, asignado: slot.asignado ?? null, prioridad: slot.prioridad });
-                    });
-                    // El RPC escribe menu/menu_semana: refetch ligero de assignments.
-                    (refreshLight || refresh)();
-                  } catch (err: any) {
-                    console.error('Error saving fixture:', err);
-                    alert(`Error al guardar el fixture: ${err.message || err}`);
-                  } finally {
-                    setIsSavingFixture(false);
-                  }
-                }}
+                onClick={handleSaveFixture}
                 disabled={isSavingFixture || fixtureDirtyCount === 0}
                 className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
               >
@@ -1160,7 +1197,11 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                         <div key={devId} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 border-l-[3px] min-w-0" style={{
                           borderLeftColor: spiso === '1' ? 'hsl(var(--floor-1-border))' : spiso === '2' ? 'hsl(var(--floor-2-border))' : spiso === '3' ? 'hsl(var(--floor-3-border))' : undefined
                         }}>
-                          <span className="text-[10px] font-mono font-bold text-muted-foreground w-6 text-center shrink-0">{slot.prioridad}</span>
+                          <PriorityInput
+                            value={slot.prioridad}
+                            max={dbDevices.length}
+                            onCommit={(prioridad) => setFixtureData(prev => ({ ...prev, [devId]: { ...prev[devId], prioridad } }))}
+                          />
                           <span className={`text-[8px] font-bold px-1 rounded border shrink-0 ${
                             spiso === '1' ? 'bg-[hsl(var(--floor-1-bg))] text-[hsl(var(--floor-1-text))] border-[hsl(var(--floor-1-border))]'
                             : spiso === '2' ? 'bg-[hsl(var(--floor-2-bg))] text-[hsl(var(--floor-2-text))] border-[hsl(var(--floor-2-border))]'
@@ -1168,23 +1209,24 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                             : 'bg-muted text-muted-foreground border-border'
                           }`}>P{spiso}</span>
                           <span className="text-[11px] font-medium truncate flex-1 min-w-0" title={dev.name}>{dev.name}</span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={dbDevices.length}
-                            value={slot.prioridad}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 1;
-                              setFixtureData(prev => ({
-                                ...prev,
-                                [devId]: { ...prev[devId], prioridad: Math.max(1, Math.min(dbDevices.length, val)) }
-                              }));
-                            }}
-                            className="w-12 text-[11px] text-center font-bold py-1 rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
-                          />
                         </div>
                       );
                     })}
+                </div>
+                <div className="p-3 border-t border-border bg-muted/30">
+                  <button
+                    onClick={async () => {
+                      const ok = await handleSaveFixture();
+                      if (ok) setShowFixtureSidebar(false);
+                    }}
+                    disabled={isSavingFixture || fixtureDirtyCount === 0}
+                    className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {isSavingFixture ? '⏳' : '💾'} Guardar orden {fixtureDirtyCount > 0 ? `(${fixtureDirtyCount} cambios)` : ''}
+                  </button>
+                  <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                    Editá todos los números y presioná Guardar para enviarlos a la base de datos.
+                  </p>
                 </div>
               </div>
             )}
