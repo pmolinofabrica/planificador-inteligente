@@ -59,37 +59,50 @@ const mergeAssignmentIntoGroup = (
   };
 };
 
-export const compactPendingMutations = (mutations: PendingMutation[]) => {
-  const ungroupedAssignments = new Map<string, PendingMutation>();
-  const groupedKeys = new Set<string>();
+// Baja al baúl/pool (id_dispositivo 999). El caller siempre valida que sea una
+// escritura de menu_semana antes de usarla.
+const isBaulRemoval = (m: PendingMutation) => m.payload?.id_dispositivo === 999;
 
-  for (const mutation of mutations) {
-    const key = getMenuSemanaDeviceKey(mutation);
-    const group = getMutationGroup(mutation);
-    if (!key || !isMenuSemanaAssignmentWrite(mutation)) continue;
-    if (group == null) {
-      ungroupedAssignments.set(key, mutation);
-    } else {
-      groupedKeys.add(key);
-    }
-  }
+export const compactPendingMutations = (mutations: PendingMutation[]) => {
+  // Escritura SIN grupo de una celda que todavía puede ser absorbida por una
+  // escritura agrupada posterior (índice dentro de `compacted`).
+  const pendingUngrouped = new Map<string, number>();
+  // Índice de la última escritura de la celda (con grupo, sin grupo o baja):
+  // impide que una escritura agrupada "retroceda" por encima de mutaciones
+  // intermedias (p. ej. una baja) al absorber.
+  const lastWriteIndex = new Map<string, number>();
 
   const compacted: PendingMutation[] = [];
   for (const mutation of mutations) {
     const key = getMenuSemanaDeviceKey(mutation);
+    const isWrite = key != null && isMenuSemanaAssignmentWrite(mutation);
     const group = getMutationGroup(mutation);
+    // Bajas (payload id_dispositivo 999): nunca se descartan ni se absorben;
+    // se conservan en su posición para no perderlas al combinar con otras
+    // acciones en la misma guardada (asignar, +G, mover, etc.).
+    const isRemoval = isWrite && isBaulRemoval(mutation);
 
-    if (key && isMenuSemanaAssignmentWrite(mutation) && group == null && groupedKeys.has(key)) {
-      continue;
-    }
-
-    if (key && isMenuSemanaAssignmentWrite(mutation) && group != null) {
-      const assignment = ungroupedAssignments.get(key);
-      compacted.push(assignment ? mergeAssignmentIntoGroup(assignment, mutation) : mutation);
-      continue;
+    // Escritura agrupada: absorbe la escritura sin grupo anterior de la misma
+    // celda solo si no hay mutaciones intermedias (p. ej. una baja), para no
+    // reordenar por encima de ellas.
+    if (isWrite && !isRemoval && group != null && key != null) {
+      const pendingIdx = pendingUngrouped.get(key);
+      if (pendingIdx !== undefined && lastWriteIndex.get(key) === pendingIdx) {
+        compacted[pendingIdx] = mergeAssignmentIntoGroup(compacted[pendingIdx], mutation);
+        pendingUngrouped.delete(key);
+        lastWriteIndex.set(key, pendingIdx);
+        continue;
+      }
     }
 
     compacted.push(mutation);
+
+    if (key == null) continue;
+    const idx = compacted.length - 1;
+    lastWriteIndex.set(key, idx);
+    if (isWrite && !isRemoval && group == null) {
+      pendingUngrouped.set(key, idx);
+    }
   }
 
   return compacted;

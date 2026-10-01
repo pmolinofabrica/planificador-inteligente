@@ -186,19 +186,16 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
         if (g >= 1 && g <= 3) groups.add(g);
       });
     });
-    if (groups.size === 0) {
-      Object.values(dateAssignments).forEach((arr: any) => {
-        arr.forEach((r: any) => {
-          if (Array.isArray(r.numero_grupos)) {
-            r.numero_grupos.forEach((g: number) => {
-              if (g >= 1 && g <= 3) groups.add(g);
-            });
-          }
-          if (r.numero_grupo != null) groups.add(r.numero_grupo);
-        });
+    Object.values(dateAssignments).forEach((arr: any) => {
+      arr.forEach((r: any) => {
+        if (Array.isArray(r.numero_grupos)) {
+          r.numero_grupos.forEach((g: number) => {
+            if (g >= 1 && g <= 3) groups.add(g);
+          });
+        }
+        if (r.numero_grupo != null) groups.add(r.numero_grupo);
       });
-    }
-    if (groups.size === 0) groups.add(1);
+    });
     return Array.from(groups).sort();
   }, [dateAssignments, isRotacionMode, visitasByDate, currentDate]);
 
@@ -469,6 +466,16 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                 const cupo = calendarDb[currentDate]?.[dev.id] || dev.max;
                 const isUnder = assignments.length < dev.min;
                 const isFull = assignments.length >= cupo;
+                // Personas sin grupo: columna propia "S/G" (nunca se muestran dentro de un grupo)
+                const sinGrupoAssignments = assignments.filter(r => {
+                  const gs = Array.isArray(r.numero_grupos) && r.numero_grupos.length > 0
+                    ? r.numero_grupos
+                    : (r.numero_grupo != null ? [r.numero_grupo] : []);
+                  return !gs.some((g) => distinctGroups.includes(g));
+                });
+                const groupCols: (number | null)[] = (isRotacionMode && distinctGroups.length > 0)
+                  ? [...distinctGroups, ...(sinGrupoAssignments.length > 0 ? [null] : [])]
+                  : [];
 
                 return (
                   <div key={dev.id} className={`bg-card rounded-lg border-2 overflow-hidden transition-all ${
@@ -485,20 +492,22 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                       </span>
                     </div>
                     {/* Resident list - horizontal columns for rotación, stacked otherwise */}
-                    {isRotacionMode && distinctGroups.length > 0 ? (
+                    {groupCols.length > 0 ? (
                       <div className="p-1 lg:p-2 flex gap-0.5 lg:gap-1">
-                        {distinctGroups.map(gNum => {
-                          const groupAssignments = assignments.filter(r => {
-                            if (Array.isArray((r as any).numero_grupos) && (r as any).numero_grupos.length > 0) {
-                              return (r as any).numero_grupos.includes(gNum);
-                            }
-                            return (r.numero_grupo ?? distinctGroups[0]) === gNum;
-                          });
+                        {groupCols.map(gNum => {
+                          const groupAssignments = gNum == null
+                            ? sinGrupoAssignments
+                            : assignments.filter(r => {
+                                if (Array.isArray(r.numero_grupos) && r.numero_grupos.length > 0) {
+                                  return r.numero_grupos.includes(gNum);
+                                }
+                                return r.numero_grupo === gNum;
+                              });
                           if (groupAssignments.length === 0) return (
-                            <div key={gNum} className="flex-1 min-w-0" />
+                            <div key={gNum ?? 'sg'} className="flex-1 min-w-0" />
                           );
                           return (
-                            <div key={gNum} className="flex-1 min-w-0 space-y-0.5">
+                            <div key={gNum ?? 'sg'} className="flex-1 min-w-0 space-y-0.5">
                               {groupAssignments.map((res, i) => {
                                 const absent = isAgentAbsent(res.id, currentDate);
                                 const canceled = isAgentCanceled && isAgentCanceled(res.id, currentDate);
@@ -508,7 +517,9 @@ export const MenuView: React.FC<MenuViewProps> = ({ data, year, isLocked = false
                                     isUnavailable ? 'bg-muted border-dashed border-muted-foreground/30 opacity-60'
                                     : (multiDeviceResCounts[res.id] > 1 ? `${getFloorLightBg(getPisoFromDeviceName(dev.name))} border-border` : 'bg-card border-border')
                                   }`}>
-                                    <GroupBadge group={gNum} size="sm" />
+                                    {gNum != null
+                                      ? <GroupBadge group={gNum} size="sm" />
+                                      : <span title="Sin grupo asignado" className="text-[9px] font-bold px-1 py-0.5 rounded border border-dashed border-muted-foreground/40 text-muted-foreground flex-shrink-0">S/G</span>}
                               <span className={`font-bold truncate ${
                                       isUnavailable ? 'line-through text-muted-foreground'
                                       : getResidentColor(res.id)

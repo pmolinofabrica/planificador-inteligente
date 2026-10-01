@@ -174,6 +174,23 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
         if (fetchErr) throw fetchErr;
 
         if (isRotation) {
+          // Solo hereda el grupo que la MISMA persona ya tuviera ese día;
+          // si no tiene grupo previo entra "sin grupo" (NULL).
+          let inheritedGroup: number | null = null;
+          try {
+            const { data: ownRows } = await supabase
+              .from('menu_semana')
+              .select('numero_grupo')
+              .eq('id_agente', selectedVacant.id)
+              .eq('fecha_asignacion', fechaDB)
+              .eq('id_turno', turnoId)
+              .neq('id_dispositivo', 999)
+              .limit(20);
+            inheritedGroup = (ownRows || []).find((r) => r.numero_grupo != null)?.numero_grupo ?? null;
+          } catch (e) {
+            console.error('Error resolviendo grupo previo de la vacante:', e);
+          }
+
           data.addAssignmentDraft({
             id: `assign-${agentId}-${fechaDB}-${data.turnoFilter}`,
             table: 'menu_semana',
@@ -192,7 +209,8 @@ export const VacantActionSidebar: React.FC<VacantActionSidebarProps> = ({
               id_convocatoria: convId,
               id_turno: turnoId,
               tipo_organizacion: orgType,
-              _ui_name: resName
+              _ui_name: resName,
+              ...(inheritedGroup != null ? { numero_grupo: inheritedGroup } : {}),
             },
             uiDate: selectedVacant.date
           });

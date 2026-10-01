@@ -253,6 +253,9 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
         }
 
         if (isRotation) {
+          // Solo hereda el grupo que la MISMA persona ya tuviera ese día.
+          // Si no tiene grupo previo, se asigna sin grupo (NULL) y se agregara
+          // manualmente con +G.
           let inheritedGroup: number | null = null;
           try {
             const { data: existingRows } = await supabase.from('menu_semana')
@@ -261,10 +264,8 @@ export const CellSidebar: React.FC<CellSidebarProps> = ({
               .eq('fecha_asignacion', fechaDB)
               .eq('id_turno', turnoId)
               .neq('id_dispositivo', 999)
-              .limit(1);
-            if (existingRows && existingRows.length > 0 && existingRows[0].numero_grupo != null) {
-              inheritedGroup = existingRows[0].numero_grupo;
-            }
+              .limit(20);
+            inheritedGroup = (existingRows || []).find((r) => r.numero_grupo != null)?.numero_grupo ?? null;
           } catch (e) {}
 
           data.addAssignmentDraft({

@@ -70,7 +70,7 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
       });
 
       const sorted = Array.from(groups).sort((a, b) => a - b);
-      map[date] = sorted.length > 0 ? sorted : [1];
+      map[date] = sorted;
     });
     return map;
   }, [activeDates, tipoOrganizacionMap, visitasByDate, assignmentsDb]);
@@ -420,7 +420,20 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                       const isOverMax = current > device.max;
                       const orgType = tipoOrganizacionMap?.[date] || 'dispositivos fijos';
                       const isRotation = isNonApertura && (orgType === 'rotacion simple' || orgType === 'rotacion completa');
-                      const groupCols = isRotation ? (dateGroupColumns[date] || [1]) : [];
+                      const groupCols = isRotation ? (dateGroupColumns[date] || []) : [];
+                      // Personas de la celda sin grupo: van a una columna propia "S/G"
+                      const ungroupedInCell = isRotation
+                        ? assignments.filter((r) => {
+                            const gs = Array.isArray(r.numero_grupos) && r.numero_grupos.length > 0
+                              ? r.numero_grupos
+                              : (r.numero_grupo != null ? [r.numero_grupo] : []);
+                            return !gs.some((g) => groupCols.includes(g));
+                          })
+                        : [];
+                      const hasSinGrupoCol = isRotation && ungroupedInCell.length > 0;
+                      const visibleCols: (number | null)[] = isRotation
+                        ? [...groupCols, ...(hasSinGrupoCol ? [null] : [])]
+                        : [];
 
                       let statusClass = '';
                       if (isUnderMin) statusClass = 'bg-destructive/5 border-destructive/20';
@@ -438,16 +451,16 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                               <div className="text-center text-muted-foreground/40 text-sm font-mono mt-2">—</div>
                             ) : (
                               <>
-                                {isRotation && groupCols.length > 0 && (
-                                  <div className={`grid gap-1 ${groupCols.length === 1 ? 'grid-cols-1' : groupCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                                    {groupCols.map((g) => (
-                                      <div key={`hdr-${date}-${device.id}-${g}`} className={`text-[9px] font-mono font-bold text-center rounded border px-1 py-0.5 ${getGroupColor(g)}`}>
-                                        G{g}
+                                {isRotation && visibleCols.length > 0 && (
+                                  <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${visibleCols.length}, minmax(0, 1fr))` }}>
+                                    {visibleCols.map((g) => (
+                                      <div key={`hdr-${date}-${device.id}-${g ?? 'siningrupo'}`} title={g != null ? `Grupo ${g}` : 'Sin grupo asignado'} className={`text-[9px] font-mono font-bold text-center rounded border px-1 py-0.5 ${g != null ? getGroupColor(g) : 'border-dashed bg-muted/40 text-muted-foreground'}`}>
+                                        {g != null ? `G${g}` : 'S/G'}
                                       </div>
                                     ))}
                                   </div>
                                 )}
-                                <div className={`grid gap-1.5 ${isRotation ? (groupCols.length === 1 ? 'grid-cols-1' : groupCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3') : 'grid-cols-1'}`}>
+                                <div className={`grid gap-1.5 ${isRotation ? '' : 'grid-cols-1'}`} style={isRotation ? { gridTemplateColumns: `repeat(${visibleCols.length}, minmax(0, 1fr))` } : undefined}>
                                 {assignments.map((res: any, idx: number) => {
                                 const absent = isAgentAbsent(res.id, date);
                                 const metrics = computeRotationMetrics(res.id, String(device.id), totalDeviceCount, data.annualMetricsDb);
@@ -457,10 +470,12 @@ export const PlanningMatrix: React.FC<PlanningMatrixProps> = ({
                                 const matchedCols = resGroups
                                   .filter((g: number) => groupCols.includes(g))
                                   .sort((a: number, b: number) => groupCols.indexOf(a) - groupCols.indexOf(b));
-                                const firstGroup = matchedCols.length > 0 ? matchedCols[0] : (groupCols[0] || 1);
-                                const groupColMin = Math.max(0, groupCols.indexOf(matchedCols.length > 0 ? matchedCols[0] : firstGroup));
+                                // Sin grupo => columna "S/G"; nunca se dibuja dentro de un grupo
+                                const groupColMin = matchedCols.length > 0
+                                  ? groupCols.indexOf(matchedCols[0])
+                                  : (hasSinGrupoCol ? groupCols.length : 0);
                                 const groupColMax = matchedCols.length > 1
-                                  ? Math.max(0, groupCols.indexOf(matchedCols[matchedCols.length - 1]))
+                                  ? groupCols.indexOf(matchedCols[matchedCols.length - 1])
                                   : groupColMin;
                                 return (
                                   <div

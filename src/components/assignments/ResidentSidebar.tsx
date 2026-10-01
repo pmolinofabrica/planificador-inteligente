@@ -131,9 +131,10 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
         }
         const orgType = (tipoOrganizacionMap && tipoOrganizacionMap[date]) || 'rotacion completa';
 
+        // Quitar original (mover al baúl 999 como pendiente en lugar de borrar),
+        // preservando los grupos de la persona que sale.
         const groupsToMove = selectedGroups.length > 0 ? selectedGroups : [null];
         groupsToMove.forEach((groupNum) => {
-          // Quitar original (mover al baúl 999 como pendiente en lugar de borrar)
           data.addAssignmentDraft({
             id: `remove-${selectedResident.id}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}-${groupNum ?? 'null'}`,
             table: 'menu_semana',
@@ -154,27 +155,44 @@ export const ResidentSidebar: React.FC<ResidentSidebarProps> = ({
             },
             uiDate: date
           });
+        });
 
-          // Poner nuevo
-          data.addAssignmentDraft({
-            id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}-${groupNum ?? 'null'}`,
-            table: 'menu_semana',
-            action: 'upsert',
-            matchParams: {
-              id_agente: newResId,
-              fecha_asignacion: fechaDB,
-              id_turno: turnoId,
-              id_dispositivo: Number(disp?.id),
-              ...(groupNum != null ? { numero_grupo: groupNum } : {}),
-            },
-            payload: {
-              id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB,
-              estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
-              tipo_organizacion: orgType, _ui_name: newResName,
-              ...(groupNum != null ? { numero_grupo: groupNum } : {}),
-            },
-            uiDate: date
-          });
+        // La persona NUEVA no hereda el grupo de la que sale: solo conserva el
+        // grupo que ella misma ya tuviera ese día. Si no tiene grupo previo entra
+        // "sin grupo" (numero_grupo NULL) y se le asigna manualmente con +G.
+        let incomingGroup: number | null = null;
+        try {
+          const { data: ownRows } = await supabase
+            .from('menu_semana')
+            .select('numero_grupo')
+            .eq('id_agente', newResId)
+            .eq('fecha_asignacion', fechaDB)
+            .eq('id_turno', turnoId)
+            .neq('id_dispositivo', 999)
+            .limit(20);
+          incomingGroup = (ownRows || []).find((r) => r.numero_grupo != null)?.numero_grupo ?? null;
+        } catch (e) {
+          console.error('Error resolviendo grupo previo de la persona nueva:', e);
+        }
+
+        data.addAssignmentDraft({
+          id: `assign-${newResId}-${fechaDB}-${data.turnoFilter}-${turnoId}-${disp?.id ?? 'na'}`,
+          table: 'menu_semana',
+          action: 'upsert',
+          matchParams: {
+            id_agente: newResId,
+            fecha_asignacion: fechaDB,
+            id_turno: turnoId,
+            id_dispositivo: Number(disp?.id),
+            ...(incomingGroup != null ? { numero_grupo: incomingGroup } : {}),
+          },
+          payload: {
+            id_agente: newResId, id_dispositivo: Number(disp?.id), fecha_asignacion: fechaDB,
+            estado_ejecucion: 'planificado', id_convocatoria: convId, id_turno: turnoId,
+            tipo_organizacion: orgType, _ui_name: newResName,
+            ...(incomingGroup != null ? { numero_grupo: incomingGroup } : {}),
+          },
+          uiDate: date
         });
       }
       setSelectedResident(null);

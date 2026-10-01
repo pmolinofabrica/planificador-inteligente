@@ -25,6 +25,42 @@ const baseAssignment: PendingMutation = {
   uiDate: '10/06',
 };
 
+const groupedAssignment: PendingMutation = {
+  id: 'group-1',
+  table: 'menu_semana',
+  action: 'upsert',
+  matchParams: {
+    id_agente: 1,
+    fecha_asignacion: '2026-06-10',
+    id_turno: 4,
+    id_dispositivo: 7,
+    numero_grupo: 2,
+  },
+  payload: {
+    id_agente: 1,
+    fecha_asignacion: '2026-06-10',
+    id_turno: 4,
+    id_dispositivo: 7,
+    numero_grupo: 2,
+    tipo_organizacion: 'rotacion completa',
+  },
+  uiDate: '10/06',
+};
+
+const removal: PendingMutation = {
+  id: 'remove-1',
+  table: 'menu_semana',
+  action: 'update',
+  matchParams: {
+    id_agente: 1,
+    fecha_asignacion: '2026-06-10',
+    id_turno: 4,
+    id_dispositivo: 7,
+  },
+  payload: { id_dispositivo: 999 },
+  uiDate: '10/06',
+};
+
 describe('draft mutations', () => {
   it('consolidates an ungrouped assignment into a grouped assignment', () => {
     const grouped: PendingMutation = {
@@ -103,6 +139,32 @@ describe('draft mutations', () => {
     expect(compacted).toHaveLength(2);
     expect(compacted[0].id).toBe('group-1');
     expect(compacted[1]).toBe(acompana);
+  });
+
+  it('keeps a removal queued after a grouped assignment', () => {
+    const compacted = compactPendingMutations([groupedAssignment, removal]);
+
+    expect(compacted.map((m) => m.id)).toEqual(['group-1', 'remove-1']);
+    expect(compacted[1].payload).toEqual({ id_dispositivo: 999 });
+  });
+
+  it('keeps a removal queued after an ungrouped assignment', () => {
+    const compacted = compactPendingMutations([baseAssignment, removal]);
+
+    expect(compacted.map((m) => m.id)).toEqual(['assign-1', 'remove-1']);
+  });
+
+  it('keeps a removal before a later grouped assignment', () => {
+    const compacted = compactPendingMutations([removal, groupedAssignment]);
+
+    expect(compacted.map((m) => m.id)).toEqual(['remove-1', 'group-1']);
+  });
+
+  it('does not absorb an ungrouped assignment across an intervening removal', () => {
+    const compacted = compactPendingMutations([baseAssignment, removal, groupedAssignment]);
+
+    expect(compacted.map((m) => m.id)).toEqual(['assign-1', 'remove-1', 'group-1']);
+    expect(compacted[2].payload.numero_grupo).toBe(2);
   });
 
   it('uses group in the mutation key when the row is physical', () => {
