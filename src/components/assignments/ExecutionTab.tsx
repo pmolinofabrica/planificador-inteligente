@@ -161,12 +161,15 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
       const next: Record<string, { prioridad: number; residente1: number | null; residente2: number | null; asignado?: 'R1' | 'R2' | null }> = {};
       dbDevices.forEach((dev: any, idx: number) => {
         const plan = plans?.find((p: any) => String(p.id_dispositivo) === dev.id);
+        // `fixture_plan.asignado` es texto libre en la base; el slot local solo
+        // reconoce R1/R2, así que se descarta cualquier otro valor.
+        const asignadoPlan = plan?.asignado === 'R1' || plan?.asignado === 'R2' ? plan.asignado : null;
         next[dev.id] = plan
           ? {
               prioridad: plan.prioridad,
               residente1: plan.residente1,
               residente2: plan.residente2,
-              asignado: plan.asignado || null,
+              asignado: asignadoPlan,
             }
           : { prioridad: idx + 1, residente1: null, residente2: null, asignado: null };
         // Save snapshot for EVERY device so dirty detection works
@@ -573,7 +576,14 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
         p_fixture_upserts: fixtureUpserts,
       });
       if (rpcErr) throw new Error(`[rpc_fixture_save_atomic] ${rpcErr.message}`);
-      if (rpcRes && rpcRes.ok === false) throw new Error(rpcRes.error || '[rpc_fixture_save_atomic] Fallo sin detalle');
+      // La RPC está declarada como `RETURNS json`, así que el resultado llega
+      // sin forma: hay que estrecharlo antes de leer `ok`/`error`.
+      if (rpcRes && typeof rpcRes === 'object' && (rpcRes as { ok?: unknown }).ok === false) {
+        const detalle = (rpcRes as { error?: unknown }).error;
+        throw new Error(typeof detalle === 'string' && detalle
+          ? `[rpc_fixture_save_atomic] ${detalle}`
+          : '[rpc_fixture_save_atomic] Fallo sin detalle');
+      }
 
       // Recién ahora marcamos como guardados TODOS los slots (persistimos el fixture completo).
       // Usamos fixtureDataRef.current para evitar closure stale.

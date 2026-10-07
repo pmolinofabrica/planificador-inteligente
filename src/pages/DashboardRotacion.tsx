@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
+import { fetchAllRows } from "@/lib/supabase-pagination";
+import { fetchAcompanaRows, type AcompanaRow } from "@/lib/dashboard-queries";
 
 // Types
 interface Residente { id_agente: number; nombre_completo: string; }
@@ -28,20 +30,9 @@ interface AcompanaEntry { id_agente: number; fecha_asignacion: string; segundo: 
 type StatusMap = Record<string, Record<number, string>>; // { "YYYY-MM-DD": { agenteId: "descanso" | "inasistencia" | "convocatoria" } }
 
 // PostgREST limita a 1000 filas por request. El dashboard consulta el año entero
-// (menu 2026 = 1584 filas, menu_semana = 1163), superando el tope y dejando fechas
-// fuera. Este helper pagina con .range() (páginas inclusivas de 1000) hasta agotar.
-async function fetchAllRows<Row = any>(q: any): Promise<Row[]> {
-  const out: Row[] = [];
-  const step = 1000;
-  for (let start = 0; ; start += step) {
-    const { data, error } = await q.range(start, start + step - 1);
-    if (error) throw error;
-    if (!data) break;
-    out.push(...(data as Row[]));
-    if (data.length < step) break;
-  }
-  return out;
-}
+// (menu 2026 = 1708 filas, menu_semana = 1656, vista_convocatoria_completa = 5892),
+// superando el tope y dejando fechas fuera. `fetchAllRows` (src/lib/supabase-pagination)
+// pagina con .range() y ordena por PK para que los límites de página sean estables.
 
 export default function DashboardRotacion() {
   const navigate = useNavigate();
@@ -115,11 +106,12 @@ export default function DashboardRotacion() {
       // contar igual que un finde. (Supabase no permite filtros de DOW cómodos:
       // se valida en JS solo para residente/dispositivo activo.)
       const asigData = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_asignacion: string }>(
-        supabase.from("menu")
+        () => supabase.from("menu")
           .select("id_agente, id_dispositivo, fecha_asignacion")
           .gte("fecha_asignacion", yearStart)
           .lte("fecha_asignacion", yearEnd)
-          .not("id_dispositivo", "is", null)
+          .not("id_dispositivo", "is", null),
+        { orderColumn: "id_menu" }
       );
 
       const asignaciones = dedupAsignaciones((asigData || []).filter(a => {
@@ -133,12 +125,13 @@ export default function DashboardRotacion() {
       let tmAsignaciones: Asignacion[] = [];
       if (tmIds.length > 0) {
         const tmRaw = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_asignacion: string }>(
-          supabase.from("menu_semana")
+          () => supabase.from("menu_semana")
             .select("id_agente, id_dispositivo, fecha_asignacion")
             .in("id_turno", tmIds)
             .gte("fecha_asignacion", yearStart)
             .lte("fecha_asignacion", yearEnd)
-            .not("id_dispositivo", "is", null)
+            .not("id_dispositivo", "is", null),
+          { orderColumn: "id_menu_semana" }
         );
         tmAsignaciones = dedupAsignaciones((tmRaw || [])
           .filter(a => resIds.has(a.id_agente) && dispIds.has(a.id_dispositivo))
@@ -147,8 +140,11 @@ export default function DashboardRotacion() {
 
       // 4. Cargar Capacitaciones (paginado: la vista anual también puede superar 1000 filas)
       const capData = await fetchAllRows<{ id_agente: number; id_dispositivo: number; fecha_capacitacion: string }>(
-        supabase.from("vista_agentes_capacitados")
-          .select("id_agente, id_dispositivo, fecha_capacitacion")
+        () => supabase.from("vista_agentes_capacitados")
+          .select("id_agente, id_dispositivo, fecha_capacitacion"),
+        // La vista no tiene PK propia; se ordena por la PK de la fila base
+        // (capacitaciones_dispositivos) para estabilizar los límites de página.
+        { orderColumn: "fecha_capacitacion" }
       );
       
       const capacitaciones = (capData || [])
@@ -160,8 +156,27 @@ export default function DashboardRotacion() {
         }));
 
       // 5. Cargar estados (Inasistencias, Convocatorias) para FDS {year}
-      const { data: inasData } = await supabase.from("inasistencias").select("id_agente, fecha_inasistencia").eq("6ta_tardanza", false).gte("fecha_inasistencia", yearStart).lte("fecha_inasistencia", yearEnd);
-      const { data: convData } = await supabase.from("vista_convocatoria_completa").select("id_agente, fecha_turno, tipo_turno").eq("anio", year).neq("estado", "cancelada");
+      // Ambas consultas se paginan: inasistencias crece con el año y
+      // vista_convocatoria_completa tiene ~5900 filas para 2026. Sin paginar,
+      // PostgREST devolvía solo las primeras 1000 (feb-abril) y los estados de
+      // inasistencia/convocatoria/descanso desaparecían del resto del año.
+      const [inasData, convData] = await Promise.all([
+        fetchAllRows<{ id_agente: number; fecha_inasistencia: string }>(
+          () => supabase.from("inasistencias")
+            .select("id_agente, fecha_inasistencia")
+            .eq("6ta_tardanza", false)
+            .gte("fecha_inasistencia", yearStart)
+            .lte("fecha_inasistencia", yearEnd),
+          { orderColumn: "id_inasistencia" }
+        ),
+        fetchAllRows<{ id_agente: number; fecha_turno: string; tipo_turno: string | null }>(
+          () => supabase.from("vista_convocatoria_completa")
+            .select("id_agente, fecha_turno, tipo_turno")
+            .eq("anio", year)
+            .neq("estado", "cancelada"),
+          { orderColumn: "id_convocatoria" }
+        ),
+      ]);
 
       const addStatus = (map: StatusMap, dateStr: string, agent: number, status: string) => {
         const date = dateStr.split("T")[0]; // Evitar diferencias por huso horario (timestamps)
@@ -189,10 +204,7 @@ export default function DashboardRotacion() {
       });
 
       // 6. Cargar datos de acompaña_grupo (menu + menu_semana)
-      const [acompMenu, acompSemana] = await Promise.all([
-        supabase.from("menu").select("id_agente, fecha_asignacion, \"2do_semestre\"").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
-        supabase.from("menu_semana").select("id_agente, fecha_asignacion, \"2do_semestre\"").eq("acompaña_grupo", true).gte("fecha_asignacion", yearStart).lte("fecha_asignacion", yearEnd),
-      ]);
+      const [acompMenu, acompSemana] = await fetchAcompanaRows(yearStart, yearEnd);
       const acompanaList: AcompanaEntry[] = [];
       const seen = new Set<string>();
       const dedup = (row: { id_agente: number; fecha_asignacion: string | null; "2do_semestre": boolean | null }) => {
@@ -204,8 +216,8 @@ export default function DashboardRotacion() {
         seen.add(key);
         acompanaList.push({ id_agente: row.id_agente, fecha_asignacion: date, segundo: row["2do_semestre"] === true });
       };
-      (acompMenu?.data || []).forEach(dedup);
-      (acompSemana?.data || []).forEach(dedup);
+      acompMenu.forEach(dedup);
+      acompSemana.forEach(dedup);
 
       setData({ residentes, dispositivos, asignaciones, tmAsignaciones, capacitaciones, statusMap, tmStatusMap, acompanaList });
       toast.success("Datos actualizados correctamente desde Supabase.");
@@ -309,7 +321,9 @@ export default function DashboardRotacion() {
       totalDispositivos: totalDispositivosActivos,
       rankingDiversidad
     };
-  }, [data]);
+    // `asignaciones` cambia con `turnoMode` pero `data` no: con deps solo [data]
+    // el KPI y el ranking de diversidad quedaban congelados en el primer render.
+  }, [data, asignaciones, dispositivos, residentes]);
 
   // --- Capa 1: Residente ---
   const residenteStats = useMemo(() => {

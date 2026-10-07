@@ -113,15 +113,18 @@ export function useTablero(app: TableroApp = 'asignaciones') {
     return { error: error?.message || null };
   };
 
-  const updateEstado = async (id: number, estado: TableroEstado) => {
+  const updateEstado = async (id: number, estado: TableroEstado): Promise<void> => {
     const now = new Date().toISOString();
     setItems(prev => sortByUpdated(prev.map(i => (i.id === id ? { ...i, estado, updated_at: now } : i))));
     const { error } = await supabase
       .from('tablero_items')
       .update({ estado, updated_at: now })
       .eq('id', id);
-    if (error) await loadItems();
-    return { error: error?.message || null };
+    if (error) {
+      console.error('useTablero.updateEstado:', error.message);
+      // Revierte el cambio optimista recargando desde la base.
+      await loadItems();
+    }
   };
 
   const agregarComentario = async (itemId: number, autor: TableroUser, contenido: string) => {

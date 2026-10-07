@@ -109,8 +109,7 @@ export function buildResidentCaps(input: CapsBuilderInput): CapsBuilderOutput {
     }
 
     // Grant if asistio is true OR null (null = not yet marked, not explicitly absent).
-    // The guard above already excluded asistio===false and general absences.
-    if (p.asistio === false) return;
+    // El guard de arriba ya excluyó asistio===false y las inasistencias generales.
     const dispos = capDispos[cId] || [];
     if (capGroups[cId]) {
       const agId = String(p.id_agente);

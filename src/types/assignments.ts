@@ -150,6 +150,7 @@ export interface AssignmentDataContext {
   agentTipoTurnoMap: Record<string, Record<number, string>>;
   tipoOrganizacionMap: Record<string, string>;
   tipoRotacionMap: Record<string, string>;
+  setTipoRotacionMap: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   tipoRotacionSuggestionMap: Record<string, string>;
   // Convocatorias y asistencia
   agentConvocatoriaMap: Record<string, Record<number, number>>;

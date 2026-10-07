@@ -6,14 +6,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { VisitBlock } from './VisitBadge';
 import { ObservacionesPopup } from './ObservacionesPopup';
-import type { AssignmentDataContext, UndoEntry } from '@/types/assignments';
+import type { AssignmentDataContext, SelectedDevice, UndoEntry } from '@/types/assignments';
 
 interface AperturaDevicesPanelProps {
   data: AssignmentDataContext;
   execDate: string;
   pushUndo: (entry: Omit<UndoEntry, '_timestamp'>) => void;
   year: string;
-  setSelectedDevice: (d: { id: string; name: string; date: string } | null) => void;
+  setSelectedDevice: (d: SelectedDevice | null) => void;
   setSelectedDateFilter: (d: string | null) => void;
   visibleGroups?: Record<number, boolean>;
   showCapacitadosColors?: boolean;

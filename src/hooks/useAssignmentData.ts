@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { buildResidentCaps } from '@/lib/caps-builder';
 import { buildMutationKey, compactPendingMutations } from '@/lib/draftMutations';
+import { fetchAllRows } from '@/lib/supabase-pagination';
 import { getActiveCohorteSync } from '@/hooks/useConfig';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
@@ -925,7 +926,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
       try {
         let resiData: any[] | null, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap: Record<number, string>;
-        let capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes;
+        let convocadosMatrizRes, allDiasRes;
         
         if (!hasLoadedStatic.current) {
         // ═══════════════════════════════════════════════════════════
@@ -967,23 +968,35 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         const yearStart = `${yFilt}-01-01`;
         const yearEnd = `${yFilt}-12-31`;
 
-        [capsRep, partsRes, dispoCapsRes, convocadosMatrizRes, allPlanisRes, allDiasRes, inasRes] = await Promise.all([
+        // `.limit(5000)` no evade el tope de 1000 filas de PostgREST: la respuesta
+        // llegaba igual truncada (capacitaciones_participantes tiene 1048 filas y
+        // devolvía 1000, perdiendo 48 asistencias). Estas cuatro tablas se paginan
+        // con fetchAllRows, ordenando por PK para que los límites de página sean estables.
+        const [capsRep, partsData, dispoCapData, convocadosMatrizRes, planisData, allDiasRes, inasistenciasRaw] = await Promise.all([
           supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
-          supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio').limit(5000),
-          supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo').limit(5000),
+          fetchAllRows<{ id_cap: number; id_agente: number; asistio: boolean | null }>(
+            () => supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio'),
+            { orderColumn: 'id_participante' }
+          ),
+          fetchAllRows<{ id_cap: number; id_dispositivo: number }>(
+            () => supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo'),
+            { orderColumn: 'id_cap_dispo' }
+          ),
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
-          supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo').limit(5000),
+          fetchAllRows<{ id_plani: number; id_dia: number; id_turno: number; grupo: string | null }>(
+            () => supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo'),
+            { orderColumn: 'id_plani' }
+          ),
           supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
-          supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').eq('6ta_tardanza', false).limit(5000),
+          fetchAllRows<{ id_agente: number; fecha_inasistencia: string | null; motivo: string | null }>(
+            () => supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').eq('6ta_tardanza', false),
+            { orderColumn: 'id_inasistencia' }
+          ),
         ]);
 
         capData = capsRep.data || [];
-        partsData = partsRes.data || [];
-        dispoCapData = dispoCapsRes.data || [];
         convocadosMatriz = convocadosMatrizRes.data || [];
-        planisData = allPlanisRes.data || [];
         diasData = allDiasRes.data || [];
-        inasistenciasRaw = inasRes.data || [];
 
         // Pre-build inasistencias map for UI usage later
         const inasMap: InasistenciasMap = {};
@@ -1494,7 +1507,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
               if (!aperturaMap[id_agente]) {
                 aperturaMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
               }
-              const repCount = parseInt(repeticiones);
+              const repCount = Number(repeticiones);
               const devStr = String(id_dispositivo);
               aperturaMap[id_agente].totalAssignments += repCount;
               aperturaMap[id_agente].uniqueDevices.add(devStr);
@@ -1512,7 +1525,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
               if (!tardeMananaMap[id_agente]) {
                 tardeMananaMap[id_agente] = { uniqueDevices: new Set(), totalAssignments: 0, deviceReps: {} };
               }
-              const repCount = parseInt(repeticiones);
+              const repCount = Number(repeticiones);
               const devStr = String(id_dispositivo);
               tardeMananaMap[id_agente].totalAssignments += repCount;
               tardeMananaMap[id_agente].uniqueDevices.add(devStr);
@@ -1527,7 +1540,7 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           } else if (acompanaRes.data) {
             acompanaRes.data.forEach(row => {
               const { id_agente, repeticiones } = row;
-              acompanaMap[id_agente] = parseInt(repeticiones);
+              acompanaMap[id_agente] = Number(repeticiones);
             });
             setAcompanaMetricsDb(acompanaMap);
           }
