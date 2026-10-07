@@ -4,7 +4,8 @@ import { getCurrentSchoolYearMonth } from '@/utils/dateUtils';
 import { buildResidentCaps } from '@/lib/caps-builder';
 import { buildMutationKey, compactPendingMutations } from '@/lib/draftMutations';
 import { fetchAllRows } from '@/lib/supabase-pagination';
-import { getActiveCohorteSync } from '@/hooks/useConfig';
+import { getActiveCohorteSync, preloadActiveCohorte, invalidateCohorteCache } from '@/hooks/useConfig';
+import { fetchYearScopedData } from '@/lib/year-scoped-data';
 import type {
   DeviceInfo, ResidentInfo, AssignmentEntry,
   AssignmentsMatrix, CalendarMatrix, ConvocadosMap, InasistenciasMap,
@@ -30,6 +31,13 @@ interface StaticCache {
   diasData: any[];
   inasistenciasRaw: any[];
   turnoTypeMap: Record<number, string>;
+  /**
+   * Año al que pertenecen los datos cacheados. Todo lo de arriba depende del
+   * año (días, capacitaciones, planificación,yhacia la cohorte), así que si el
+   * año cambia hay que volver a leer: si no, el selector de mes mostraría los
+   * datos del año anterior.
+   */
+  year: number;
 }
 
 const DRAFT_AUDIT_ENABLED = true;
@@ -775,6 +783,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
   const hardRefresh = async () => {
     hasLoadedStatic.current = false;
+    // La cohorte activa puede haber cambiado en la base (rotación anual), así que
+    // se descarta su valor cacheado para releerlo de config_cohorte.
+    invalidateCohorteCache();
     setRefreshCounter(c => c + 1);
   };
 
@@ -924,11 +935,22 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         return t.includes('apertura');
       };
 
+      // Cohorte resuelta para esta tanda de cargas. Se reinicia cuando cambia
+      // el año o se invalida el caché (ver más abajo).
+      let cohorteForLoad: number | null = null;
+
       try {
         let resiData: any[] | null, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap: Record<number, string>;
-        let convocadosMatrizRes, allDiasRes;
-        
-        if (!hasLoadedStatic.current) {
+        let convocadosMatrizRes;
+        const cacheYear = Number(yFilt);
+        // El caché está scopeado por año: si el selector de mes cambia de año,
+        // hay que releer todo. Antes solo se invalidaba con hardRefresh, así que
+        // navegar a otro año servía datos del anterior sin avisar.
+        const cacheIsForThisYear = staticCache.current?.year === cacheYear;
+        if (!hasLoadedStatic.current || !cacheIsForThisYear) {
+          // Cambió el año (o se invalidó el caché): la cohorte también puede
+          // haber rotado, así que se vuelve a resolver.
+          cohorteForLoad = null;
         // ═══════════════════════════════════════════════════════════
         // 1. DISPOSITIVOS
         // ═══════════════════════════════════════════════════════════
@@ -951,7 +973,16 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
         // ═══════════════════════════════════════════════════════════
         // 2. RESIDENTES
         // ═══════════════════════════════════════════════════════════
-        const activeCohorte = getActiveCohorteSync();
+        // La cohorte viene de config_cohorte.activo. Antes se leía el reloj,
+        // así que al cambiar de cohorte la app seguía mostrando los agentes
+        // del año anterior hasta que se recarga a mano.
+        //
+        // Se resuelve una vez por carga (y no una vez por mes): al navegar
+        // entre meses del mismo año no tiene sentido volver a leer la cohorte.
+        if (cohorteForLoad === null) {
+          cohorteForLoad = await preloadActiveCohorte();
+        }
+        const activeCohorte = cohorteForLoad;
         const { data: rd } = await supabase
           .from('datos_personales')
           .select('id_agente, nombre, apellido, cohorte, refuerzo, periodo_refuerzo, fecha_nacimiento')
@@ -970,33 +1001,24 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
         // `.limit(5000)` no evade el tope de 1000 filas de PostgREST: la respuesta
         // llegaba igual truncada (capacitaciones_participantes tiene 1048 filas y
-        // devolvía 1000, perdiendo 48 asistencias). Estas cuatro tablas se paginan
-        // con fetchAllRows, ordenando por PK para que los límites de página sean estables.
-        const [capsRep, partsData, dispoCapData, convocadosMatrizRes, planisData, allDiasRes, inasistenciasRaw] = await Promise.all([
-          supabase.from('capacitaciones').select('id_cap, id_dia, id_turno, grupo'),
-          fetchAllRows<{ id_cap: number; id_agente: number; asistio: boolean | null }>(
-            () => supabase.from('capacitaciones_participantes').select('id_cap, id_agente, asistio'),
-            { orderColumn: 'id_participante' }
-          ),
-          fetchAllRows<{ id_cap: number; id_dispositivo: number }>(
-            () => supabase.from('capacitaciones_dispositivos').select('id_cap, id_dispositivo'),
-            { orderColumn: 'id_cap_dispo' }
-          ),
+        // devolvía 1000, perdiendo 48 asistencias). `fetchYearScopedData` pagina
+        // con fetchAllRows ordenando por PK, y además acota todo al año para que
+        // las capacitaciones de 2026 no se crucen con los agentes de 2027.
+        const [yearData, convocadosMatrizRes, inasistenciasRaw] = await Promise.all([
+          fetchYearScopedData(Number(yFilt)),
           supabase.rpc('rpc_obtener_convocados_matriz', { anio_filtro: Number(yFilt) }),
-          fetchAllRows<{ id_plani: number; id_dia: number; id_turno: number; grupo: string | null }>(
-            () => supabase.from('planificacion').select('id_plani, id_dia, id_turno, grupo'),
-            { orderColumn: 'id_plani' }
-          ),
-          supabase.from('dias').select('id_dia, fecha').gte('fecha', yearStart).lte('fecha', yearEnd),
           fetchAllRows<{ id_agente: number; fecha_inasistencia: string | null; motivo: string | null }>(
             () => supabase.from('inasistencias').select('id_agente, fecha_inasistencia, motivo').eq('6ta_tardanza', false),
             { orderColumn: 'id_inasistencia' }
           ),
         ]);
 
-        capData = capsRep.data || [];
+        capData = yearData.caps;
+        partsData = yearData.parts;
+        dispoCapData = yearData.dispos;
+        planisData = yearData.planis;
+        diasData = yearData.dias;
         convocadosMatriz = convocadosMatrizRes.data || [];
-        diasData = allDiasRes.data || [];
 
         // Pre-build inasistencias map for UI usage later
         const inasMap: InasistenciasMap = {};
@@ -1045,10 +1067,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           turnosLookupRes.data.forEach(t => { turnoTypeMap[t.id_turno] = t.tipo_turno; });
         }
 
-          staticCache.current = { resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap };
+          staticCache.current = { resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap, year: cacheYear };
           hasLoadedStatic.current = true;
         } else {
-          ({ resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap } = staticCache.current);
+          ({ resiData, capData, partsData, dispoCapData, convocadosMatriz, planisData, diasData, inasistenciasRaw, turnoTypeMap } = staticCache.current!);
         }
 
         // ═══════════════════════════════════════════════════════════

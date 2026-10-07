@@ -17,6 +17,7 @@ import { es } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { fetchAllRows } from "@/lib/supabase-pagination";
 import { fetchAcompanaRows, type AcompanaRow } from "@/lib/dashboard-queries";
+import { getActiveCohorte } from "@/hooks/useConfig";
 
 // Types
 interface Residente { id_agente: number; nombre_completo: string; }
@@ -69,18 +70,25 @@ export default function DashboardRotacion() {
     return out;
   };
 
-  const year = new Date().getFullYear();
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
+  const [year, setYear] = useState<number | null>(null);
+  const yearStart = year ? `${year}-01-01` : "";
+  const yearEnd = year ? `${year}-12-31` : "";
 
   const loadData = async () => {
     setLoading(true);
     try {
+      // La cohorte viene de config_cohorte.activo y no del reloj: al rotar la
+      // cohorte en enero, el dashboard debe seguir a la nueva sin tocar código.
+      const cohorte = await getActiveCohorte();
+      setYear(cohorte);
+      const yearStart = `${cohorte}-01-01`;
+      const yearEnd = `${cohorte}-12-31`;
+
       // 1. Cargar Residentes
       const { data: resData, error: err1 } = await supabase
         .from("datos_personales")
         .select("id_agente, nombre, apellido")
-        .eq("cohorte", year)
+        .eq("cohorte", cohorte)
         .eq("activo", true);
       if (err1) throw err1;
       
@@ -172,7 +180,7 @@ export default function DashboardRotacion() {
         fetchAllRows<{ id_agente: number; fecha_turno: string; tipo_turno: string | null }>(
           () => supabase.from("vista_convocatoria_completa")
             .select("id_agente, fecha_turno, tipo_turno")
-            .eq("anio", year)
+            .eq("anio", cohorte)
             .neq("estado", "cancelada"),
           { orderColumn: "id_convocatoria" }
         ),
@@ -441,7 +449,7 @@ export default function DashboardRotacion() {
   };
 
 
-  if (!data && loading) return <div className="p-8 flex justify-center"><RefreshCw className="animate-spin w-8 h-8 text-primary" /></div>;
+  if ((!data || year === null) && loading) return <div className="p-8 flex justify-center"><RefreshCw className="animate-spin w-8 h-8 text-primary" /></div>;
 
   return (
     <div className="container mx-auto py-6 space-y-6 max-w-7xl animate-in fade-in zoom-in-95 duration-500">
