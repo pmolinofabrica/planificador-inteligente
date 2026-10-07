@@ -1,8 +1,7 @@
 const { Client } = require('pg');
+const { connectionString } = require('./_env.cjs');
 
-const client = new Client({
-  connectionString: 'postgresql://postgres.zgzqeusbpobrwanvktyz:UcA5EQxfEYd1Nb@aws-1-sa-east-1.pooler.supabase.com:6543/postgres'
-});
+const client = new Client({ connectionString });
 
 async function runPg() {
   await client.connect();
