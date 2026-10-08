@@ -568,7 +568,14 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                     </span>
                   )}
                   {isConvocado && (
-                    <label className="cursor-pointer" title="Usar en autocompletar">
+                    <label
+                      className={`cursor-pointer ${isAusente || isBloqueado ? 'cursor-not-allowed opacity-50' : ''}`}
+                      title={isBloqueado
+                        ? 'No se puede usar en autocompletar: está bloqueado para el fixture de esta fecha y turno'
+                        : isAusente
+                          ? 'No se puede usar en autocompletar: está ausente'
+                          : 'Usar en autocompletar'}
+                    >
                       <input
                         type="checkbox"
                         checked={autoConvocados.has(r.id)}
@@ -580,7 +587,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                             return next;
                           });
                         }}
-                        disabled={isAusente}
+                        disabled={isAusente || isBloqueado}
                         className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
                       />
                     </label>
