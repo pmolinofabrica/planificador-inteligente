@@ -264,6 +264,16 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     return map;
   }, [residentsByDevice]);
 
+  // Residentes que ya tienen al menos un dispositivo real asignado en el menú de
+  // esta fecha/turno. Es "ya fue asignado", distinto de placedInFixtureIds
+  // ("está en una tarjeta del fixture"). assignmentsDb ya viene filtrado por
+  // turnoFilter y excluye el baúl 999, así que no hace falta consultar de nuevo.
+  const enMenuIds = useMemo(() => {
+    const ids = new Set<number>();
+    Object.values(residentsByDevice).forEach(set => set.forEach(id => ids.add(id)));
+    return ids;
+  }, [residentsByDevice]);
+
   const isFixedApertura = turnoFilter === 'apertura' && !allowMultiDispositivoApertura;
 
   // Cards with pending changes (dirty) — used for save button display
@@ -626,7 +636,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 </span>
                 <span className="ml-auto shrink-0 flex items-center gap-1.5">
                   {isAusente && <span className="text-[8px] font-bold bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded border border-stone-300">AUSENTE</span>}
-                  {assignedResidentIds.has(r.id) && <span className="text-[8px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-300">EN TARJETA</span>}
+                  {enMenuIds.has(r.id) && <span className="text-[8px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-300" title="Ya tiene al menos un dispositivo asignado en el menú de esta fecha y turno">EN MENU</span>}
                 </span>
               </label>
             </React.Fragment>
@@ -1608,7 +1618,8 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   </div>
                   <p className="text-[10px] text-muted-foreground text-center leading-tight">
                     Tildá a quien no deba aparecer en el selector de fixture. No saca al residente de una
-                    tarjeta: solo impide volver a elegirlo.
+                    tarjeta: solo impide volver a elegirlo. <span className="font-bold text-emerald-700">EN MENU</span> marca
+                    los que ya tienen un dispositivo asignado en este turno.
                   </p>
                 </div>
                 {renderBloqueosList()}
