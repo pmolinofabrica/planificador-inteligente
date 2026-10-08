@@ -3801,6 +3801,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      fixture_bloqueos: {
+        Row: {
+          created_at: string;
+          fecha: string;
+          id_agente: number;
+          id_bloqueo: number;
+          tipo_turno: string;
+        };
+        Insert: {
+          created_at?: string;
+          fecha: string;
+          id_agente: number;
+          id_bloqueo?: never;
+          tipo_turno: string;
+        };
+        Update: {
+          created_at?: string;
+          fecha?: string;
+          id_agente?: number;
+          id_bloqueo?: number;
+          tipo_turno?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "fixture_bloqueos_id_agente_fkey";
+            columns: ["id_agente"];
+            isOneToOne: false;
+            referencedRelation: "datos_personales";
+            referencedColumns: ["id_agente"];
+          },
+        ];
+      };
       fixture_plan: {
         Row: {
           asignado: string | null;
@@ -8287,6 +8319,15 @@ export type Database = {
       rpc_eliminar_solicitud_cambio: {
         Args: { p_id_transaccion: number };
         Returns: undefined;
+      };
+      rpc_fixture_bloqueos_sync: {
+        Args: {
+          p_bloquear?: number[];
+          p_desbloquear?: number[];
+          p_fecha: string;
+          p_tipo_turno: string;
+        };
+        Returns: Json;
       };
       rpc_fixture_save_atomic: {
         Args: { p_fecha: string; p_fixture_upserts?: Json; p_ops: Json };

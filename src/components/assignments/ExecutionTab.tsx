@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Users, AlertCircle, X as XIcon, Monitor, Search, CheckCircle2, Eraser, Calendar } from 'lucide-react';
+import { Users, AlertCircle, X as XIcon, Monitor, Search, CheckCircle2, Eraser, Calendar, Lock, LockOpen } from 'lucide-react';
 import { getPisoFromDeviceName, getGroupColor, getFloorColor } from '@/lib/floor-utils';
 import type { SelectedResident, SelectedVacant } from '@/types/assignments';
 import { AperturaDevicesPanel } from './AperturaDevicesPanel';
@@ -21,6 +21,13 @@ interface ExecutionTabProps {
   showCapacitadosColors?: boolean;
   showPisoColors?: boolean;
   embedded?: boolean;
+}
+
+// Lo mínimo de un residente que necesitan las listas (orden, checkbox, íconos).
+// Evita arrastrar `any` por el sort compartido entre listas.
+interface ResidentListItem {
+  id: number;
+  name: string;
 }
 
 const floorNames: Record<string, { label: string; bgClass: string; borderClass: string }> = {
@@ -119,6 +126,13 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
   const fixtureLoadedRef = useRef<string>(''); // key to prevent re-initialization
   const fixtureDataRef = useRef(fixtureData); // always points to latest fixtureData
   fixtureDataRef.current = fixtureData;
+  // Bloqueo de residentes para el selector de fixture. Es por (fecha, tipo_turno):
+  // sirve para excluir a quienes ya están asignados o fueron asignados en otro
+  // dispositivo. Se tilda en la barra lateral y se persiste con Guardar.
+  const [showBloqueosSidebar, setShowBloqueosSidebar] = useState(false);
+  const [bloqueados, setBloqueados] = useState<Set<number>>(new Set());
+  const savedBloqueadosRef = useRef<Set<number>>(new Set()); // último estado confirmado en la DB
+  const bloqueadosLoadedRef = useRef<string>(''); // key para no recargar la misma fecha/turno
   const [criteriosConfig, setCriteriosConfig] = useState<{ id: string; label: string; abrev: string; desc: string; active: boolean; showInCards: boolean; order: number }[]>(
     [
       { id: 'coord_disp_total', label: 'Coord. Disp. (Total)', abrev: 'D.Tot.', desc: 'Cantidad total de veces que coordinó el dispositivo', active: true, showInCards: true, order: 1 },
@@ -180,6 +194,31 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     return () => { cancelled = true; };
   }, [modalidad, dbDevices, execDate, fechaDB, turnoFilter]);
 
+  // Carga de los bloqueos de la fecha/turno actuales. Va en su propio efecto
+  // (y no dentro del de arriba) para no depender de que ya haya dispositivos
+  // cargados: el bloqueo tiene que estar disponible apenas se entra a la fecha.
+  useEffect(() => {
+    if (!fechaDB) return;
+    const loadKey = `${fechaDB}-${turnoFilter}`;
+    if (bloqueadosLoadedRef.current === loadKey) return;
+    bloqueadosLoadedRef.current = loadKey;
+
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await supabase
+        .from('fixture_bloqueos')
+        .select('id_agente')
+        .eq('fecha', fechaDB)
+        .eq('tipo_turno', turnoFilter);
+      // Si mientras cargaba se cambió de fecha/turno, el resultado es viejo.
+      if (cancelled || bloqueadosLoadedRef.current !== loadKey) return;
+      const next = new Set<number>(((rows || []) as { id_agente: number }[]).map(r => Number(r.id_agente)));
+      setBloqueados(next);
+      savedBloqueadosRef.current = new Set(next);
+    })();
+    return () => { cancelled = true; };
+  }, [fechaDB, turnoFilter]);
+
   // Criteria enabled globally (from sidebar)
   const activeCriterios = useMemo(() =>
     criteriosConfig.filter(c => c.active).sort((a, b) => a.order - b.order),
@@ -234,6 +273,88 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
       return savedFixtureData.current[devId] !== snapshot;
     }).length;
   }, [fixtureData]);
+
+  // Residentes cargados en alguna tarjeta del fixture (ganador o no). Sirve para
+  // avisar al bloquearlos: el bloqueo no borra nada de las tarjetas.
+  const placedInFixtureIds = useMemo(() => {
+    const ids = new Set<number>();
+    Object.values(fixtureData).forEach(slot => {
+      if (slot.residente1 != null) ids.add(slot.residente1);
+      if (slot.residente2 != null) ids.add(slot.residente2);
+    });
+    return ids;
+  }, [fixtureData]);
+
+  // Diferencia entre los bloqueos de pantalla y los confirmados en la DB. Se
+  // manda como diff (altas y bajas) en vez de "el conjunto completo" para que
+  // destildar no borre lo que otro dispositivo haya bloqueado en el medio.
+  const bloqueadosDiff = useMemo(() => {
+    const bloquear: number[] = [];
+    const desbloquear: number[] = [];
+    bloqueados.forEach(id => { if (!savedBloqueadosRef.current.has(id)) bloquear.push(id); });
+    savedBloqueadosRef.current.forEach(id => { if (!bloqueados.has(id)) desbloquear.push(id); });
+    return { bloquear, desbloquear };
+  }, [bloqueados]);
+
+  const bloqueadosDirty = bloqueadosDiff.bloquear.length > 0 || bloqueadosDiff.desbloquear.length > 0;
+  const bloqueadosCambiosCount = bloqueadosDiff.bloquear.length + bloqueadosDiff.desbloquear.length;
+
+  // El botón de guardar se habilita con cambios de tarjetas o de bloqueos.
+  const hayCambiosParaGuardar = fixtureDirtyCount > 0 || bloqueadosDirty;
+
+  const toggleBloqueado = (resId: number) => {
+    if (!bloqueados.has(resId) && placedInFixtureIds.has(resId)) {
+      const res = (allResidentsDb || []).find((r: ResidentListItem) => r.id === resId);
+      alert(`${res?.name ?? 'El residente'} ya está cargado en una tarjeta de este fixture.\n\nVa a quedar bloqueado para nuevas asignaciones, pero sigue en la tarjeta hasta que lo quites con la X.`);
+    }
+    setBloqueados(prev => {
+      const next = new Set(prev);
+      if (next.has(resId)) next.delete(resId);
+      else next.add(resId);
+      return next;
+    });
+  };
+
+  const handleSaveBloqueos = async (): Promise<boolean> => {
+    if (!fechaDB) {
+      alert('Fecha inválida. No se pueden guardar los bloqueos.');
+      return false;
+    }
+    const bloquear = bloqueadosDiff.bloquear;
+    const desbloquear = bloqueadosDiff.desbloquear;
+    if (bloquear.length === 0 && desbloquear.length === 0) return true;
+
+    setIsSavingFixture(true);
+    try {
+      const { data, error } = await supabase.rpc('rpc_fixture_bloqueos_sync', {
+        p_fecha: fechaDB,
+        p_tipo_turno: turnoFilter,
+        p_bloquear: bloquear,
+        p_desbloquear: desbloquear,
+      });
+      if (error) throw new Error(`[rpc_fixture_bloqueos_sync] ${error.message}`);
+      if (data && typeof data === 'object' && (data as { ok?: unknown }).ok === false) {
+        throw new Error('[rpc_fixture_bloqueos_sync] Fallo sin detalle');
+      }
+      // Releemos lo que quedó en la base y adoptamos esa versión como estado:
+      // si el servidor filtró algún id_agente inexistente, la UI no miente.
+      const { data: rows } = await supabase
+        .from('fixture_bloqueos')
+        .select('id_agente')
+        .eq('fecha', fechaDB)
+        .eq('tipo_turno', turnoFilter);
+      const server = new Set<number>(((rows || []) as { id_agente: number }[]).map(r => Number(r.id_agente)));
+      setBloqueados(server);
+      savedBloqueadosRef.current = server;
+      return true;
+    } catch (err: any) {
+      console.error('Error saving bloqueos:', err);
+      alert(`Error al guardar los bloqueos: ${err.message || err}`);
+      return false;
+    } finally {
+      setIsSavingFixture(false);
+    }
+  };
 
   // Compute criteria values per resident
   const deviceFloorMap = useMemo(() => {
@@ -386,20 +507,24 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [allResidentsDb, convocadoIds, assignmentsDb, execDate, dbDevices, isAgentAbsent]);
 
+  // Orden que comparten la lista de residentes y la de bloqueos: convocados
+  // primero y, dentro de cada grupo, alfabético.
+  const sortResidentsByConvocatoria = (list: ResidentListItem[]): ResidentListItem[] =>
+    list.slice().sort((a, b) => {
+      const aConv = convocadoIds.has(a.id);
+      const bConv = convocadoIds.has(b.id);
+      if (aConv && !bConv) return -1;
+      if (!aConv && bConv) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
   const renderResidentsList = () => (
     <div className="flex-1 overflow-y-auto text-[11px]">
-      {(allResidentsDb || [])
-        .slice()
-        .sort((a: any, b: any) => {
-          const aConv = convocadoIds.has(a.id);
-          const bConv = convocadoIds.has(b.id);
-          if (aConv && !bConv) return -1;
-          if (!aConv && bConv) return 1;
-          return a.name.localeCompare(b.name);
-        })
-        .map((r: any, idx: number, arr: any[]) => {
+      {sortResidentsByConvocatoria(allResidentsDb || [])
+        .map((r, idx, arr) => {
           const isConvocado = convocadoIds.has(r.id);
           const isAssigned = assignedResidentIds.has(r.id);
+          const isBloqueado = bloqueados.has(r.id);
           const isAusente = isAgentAbsent ? isAgentAbsent(r.id, execDate) : false;
           const showHeader = idx === 0 || convocadoIds.has(arr[idx-1].id) !== isConvocado;
           return (
@@ -411,39 +536,46 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 </div>
               )}
               <div className={`px-3 py-1.5 border-b border-border/10 flex items-center gap-1.5 transition-all ${
-                isAssigned ? 'bg-emerald-50' : isConvocado ? '' : 'opacity-40'
+                isAssigned ? 'bg-emerald-50' : isBloqueado ? 'bg-amber-50' : isConvocado ? '' : 'opacity-40'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  isAssigned ? 'bg-emerald-500' : isAusente ? 'bg-red-400' : isConvocado ? 'bg-blue-400' : 'bg-stone-300'
+                  isAssigned ? 'bg-emerald-500' : isBloqueado ? 'bg-amber-500' : isAusente ? 'bg-red-400' : isConvocado ? 'bg-blue-400' : 'bg-stone-300'
                 }`} />
                 <span className={`font-medium truncate ${
                   isAssigned ? 'text-emerald-700 font-bold' : ''
                 } ${isAusente ? 'line-through text-stone-400' : ''}`}>
                   {isAusente ? '🚫 ' : ''}{r.name}
                 </span>
-                {presentes.has(r.id) && (
-                  <span className="ml-auto shrink-0 text-emerald-600" title="Marcó su ingreso">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  </span>
-                )}
-                {isConvocado && (
-                  <label className={`shrink-0 cursor-pointer ${presentes.has(r.id) ? '' : 'ml-auto'}`} title="Usar en autocompletar">
-                    <input
-                      type="checkbox"
-                      checked={autoConvocados.has(r.id)}
-                      onChange={() => {
-                        setAutoConvocados(prev => {
-                          const next = new Set(prev);
-                          if (next.has(r.id)) next.delete(r.id);
-                          else next.add(r.id);
-                          return next;
-                        });
-                      }}
-                      disabled={isAusente}
-                      className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
-                    />
-                  </label>
-                )}
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  {isBloqueado && (
+                    <span className="text-amber-700" title="Bloqueado para el fixture de esta fecha y turno">
+                      <Lock className="w-3.5 h-3.5" />
+                    </span>
+                  )}
+                  {presentes.has(r.id) && (
+                    <span className="text-emerald-600" title="Marcó su ingreso">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </span>
+                  )}
+                  {isConvocado && (
+                    <label className="cursor-pointer" title="Usar en autocompletar">
+                      <input
+                        type="checkbox"
+                        checked={autoConvocados.has(r.id)}
+                        onChange={() => {
+                          setAutoConvocados(prev => {
+                            const next = new Set(prev);
+                            if (next.has(r.id)) next.delete(r.id);
+                            else next.add(r.id);
+                            return next;
+                          });
+                        }}
+                        disabled={isAusente}
+                        className="w-3.5 h-3.5 rounded border-border accent-blue-500 cursor-pointer"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             </React.Fragment>
           );
@@ -451,7 +583,65 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
     </div>
   );
 
+  // Lista de la barra lateral de bloqueos: una fila por checkbox, tildado =
+  // bloqueado para el selector de fixture de esta fecha/turno.
+  const renderBloqueosList = () => {
+    const sorted = sortResidentsByConvocatoria(allResidentsDb || []);
+    if (sorted.length === 0) {
+      return <div className="p-4 text-[11px] text-muted-foreground text-center">No hay residentes para mostrar.</div>;
+    }
+    return (
+      <div className="flex-1 overflow-y-auto text-[11px]">
+        {sorted.map((r, idx, arr) => {
+          const isConvocado = convocadoIds.has(r.id);
+          const isBloqueado = bloqueados.has(r.id);
+          const isAusente = isAgentAbsent ? isAgentAbsent(r.id, execDate) : false;
+          const showHeader = idx === 0 || convocadoIds.has(arr[idx-1].id) !== isConvocado;
+          return (
+            <React.Fragment key={r.id}>
+              {showHeader && (
+                <div className="px-3 py-1 text-[8px] font-bold text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-b border-border/20">
+                  {isConvocado ? 'Convocados' : 'Descanso / Otro turno'}
+                </div>
+              )}
+              <label
+                className={`px-3 py-1.5 border-b border-border/10 flex items-center gap-1.5 cursor-pointer transition-colors hover:bg-amber-50/60 ${
+                  isBloqueado ? 'bg-amber-50' : ''
+                }`}
+                title={isBloqueado
+                  ? 'Ya está bloqueado: destildalo para volver a habilitarlo'
+                  : 'Bloquear para que no aparezca en el selector de fixture'}
+              >
+                <input
+                  type="checkbox"
+                  checked={isBloqueado}
+                  onChange={() => toggleBloqueado(r.id)}
+                  className="w-3.5 h-3.5 rounded border-border accent-amber-500 cursor-pointer shrink-0"
+                />
+                {isBloqueado
+                  ? <Lock className="w-3 h-3 text-amber-700 shrink-0" />
+                  : <LockOpen className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
+                <span className={`font-medium truncate ${isBloqueado ? 'text-amber-800' : ''} ${isAusente ? 'line-through text-stone-400' : ''}`}>
+                  {isAusente ? '🚫 ' : ''}{r.name}
+                </span>
+                <span className="ml-auto shrink-0 flex items-center gap-1.5">
+                  {isAusente && <span className="text-[8px] font-bold bg-stone-200 text-stone-600 px-1.5 py-0.5 rounded border border-stone-300">AUSENTE</span>}
+                  {assignedResidentIds.has(r.id) && <span className="text-[8px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-300">EN TARJETA</span>}
+                </span>
+              </label>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+
   const handleSaveFixture = async (): Promise<boolean> => {
+    // Un solo botón: los bloqueos pendientes se persisten primero, y antes que
+    // cualquier validación del fixture. Así tildar un residente y guardar
+    // nunca se pierde por un id_turno que no se pudo resolver para las tarjetas.
+    if (bloqueadosDirty && !await handleSaveBloqueos()) return false;
+
     const isApertura = turnoFilter === 'apertura';
     const turnoId = isApertura ? undefined : dateTurnoMap?.[execDate];
     if (!isApertura && !turnoId) {
@@ -565,7 +755,12 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
       }
     });
 
-    if (changedDevIds.length === 0) return false;
+    if (changedDevIds.length === 0) {
+      // Puede que no haya cambios en las tarjetas pero sí bloqueos pendientes
+      // (se tildan desde la barra lateral): en ese caso el guardado no es un
+      // no-op y hay que informarlo como guardado.
+      return bloqueadosDirty;
+    }
 
     setIsSavingFixture(true);
     try {
@@ -799,6 +994,22 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                 Residentes
               </button>
               <button
+                onClick={() => setShowBloqueosSidebar(true)}
+                className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                  bloqueados.size > 0
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                    : 'bg-card text-foreground border-border hover:border-primary/40 hover:text-primary'
+                }`}
+                title="Bloquear residentes para el fixture de esta fecha y turno. Sirve para los que ya están asignados o fueron asignados en otro dispositivo."
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Bloquear
+                {bloqueados.size > 0 && (
+                  <span className="font-mono text-[9px] px-1 rounded bg-amber-200 text-amber-900">{bloqueados.size}</span>
+                )}
+                {bloqueadosDirty && <span className="w-1.5 h-1.5 rounded-full bg-destructive" title="Cambios sin guardar" />}
+              </button>
+              <button
                 onClick={() => {
                   const hasAny = Object.values(fixtureData).some(s => s.residente1 != null || s.residente2 != null);
                   if (!hasAny) return;
@@ -826,7 +1037,7 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                       else if (s.asignado === 'R2' && s.residente2 != null) winners.add(s.residente2);
                     });
                     const pool = (allResidentsDb || [])
-                      .filter((r: any) => convocadoIds.has(r.id) && (autoConvocados.has(r.id) || presentes.has(r.id)) && !winners.has(r.id) && !isAgentAbsent?.(r.id, execDate));
+                      .filter((r: any) => convocadoIds.has(r.id) && (autoConvocados.has(r.id) || presentes.has(r.id)) && !winners.has(r.id) && !bloqueados.has(r.id) && !isAgentAbsent?.(r.id, execDate));
                     const shuffled = [...pool].sort(() => Math.random() - 0.5);
                     const used = new Set<number>();
                     setFixtureData(prev => {
@@ -871,10 +1082,10 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
               )}
               <button
                 onClick={handleSaveFixture}
-                disabled={isSavingFixture || fixtureDirtyCount === 0}
+                disabled={isSavingFixture || !hayCambiosParaGuardar}
                 className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
               >
-                {isSavingFixture ? '⏳' : '💾'} Guardar fixture {fixtureDirtyCount > 0 ? `(${fixtureDirtyCount} cambios)` : ''}
+                {isSavingFixture ? '⏳' : '💾'} Guardar fixture {fixtureDirtyCount > 0 ? `(${fixtureDirtyCount} cambios)` : ''}{bloqueadosDirty ? ` · 🔒 ${bloqueadosCambiosCount}` : ''}
               </button>
             </div>
 
@@ -1014,7 +1225,11 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                                   const available = filtered.filter((r: any) =>
                                     r.id !== slot[otherKey] &&
                                     (isRotation || !assignedResidentIds.has(r.id) || r.id === residentId) &&
-                                    (!isFixedApertura || !(elsewhere && elsewhere.has(r.id)) || r.id === residentId)
+                                    (!isFixedApertura || !(elsewhere && elsewhere.has(r.id)) || r.id === residentId) &&
+                                    // Los bloqueados salen del selector, salvo el que ya está en
+                                    // ESTE slot: así se lo puede ver y quitar con la X sin
+                                    // obligar a destildar el bloqueo primero.
+                                    (!bloqueados.has(r.id) || r.id === residentId)
                                   );
                                   if (available.length === 0) return <div className="px-2 py-1.5 text-[10px] text-muted-foreground">Sin resultados</div>;
                                   return available.map((r: any) => (
@@ -1346,6 +1561,57 @@ export const ExecutionTab: React.FC<ExecutionTabProps> = ({
                   </div>
                 </div>
                 {renderResidentsList()}
+              </div>
+            )}
+            {showBloqueosSidebar && (
+              <div className="fixed right-0 top-0 h-full w-80 bg-card border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                    <h3 className="text-sm font-bold truncate">Bloquear residentes</h3>
+                  </div>
+                  <button onClick={() => setShowBloqueosSidebar(false)}
+                    className="p-1 rounded-md hover:bg-muted transition-colors shrink-0">
+                    <XIcon className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <div className="px-4 py-2 border-b border-border bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    Se guardan por{' '}
+                    <span className="font-mono font-bold text-foreground">{fmtFullDate || '—'}</span>
+                    {' · '}
+                    <span className="font-mono font-bold text-foreground">{turnoFilter}</span>
+                  </p>
+                </div>
+                <div className="p-3 border-b border-border bg-muted/30 flex flex-col gap-2">
+                  <button
+                    onClick={async () => {
+                      const ok = await handleSaveFixture();
+                      if (ok) setShowBloqueosSidebar(false);
+                    }}
+                    disabled={isSavingFixture || !hayCambiosParaGuardar}
+                    className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg border transition-all bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {isSavingFixture ? '⏳' : '💾'} Guardar bloqueos {bloqueadosCambiosCount > 0 ? `(${bloqueadosCambiosCount})` : ''}
+                  </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => setBloqueados(new Set())}
+                      disabled={bloqueados.size === 0}
+                      className="text-[10px] font-bold px-2 py-1 rounded border border-border text-amber-800 hover:bg-amber-50 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Destildar todos
+                    </button>
+                    <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">
+                      {bloqueados.size} bloqueados{bloqueadosDirty ? ' · sin guardar' : ''}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                    Tildá a quien no deba aparecer en el selector de fixture. No saca al residente de una
+                    tarjeta: solo impide volver a elegirlo.
+                  </p>
+                </div>
+                {renderBloqueosList()}
               </div>
             )}
           </>
