@@ -392,16 +392,26 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
             .maybeSingle();
           if (diaErr || !diaData?.id_dia) return null;
 
-          let q = supabase
+          const base = () => supabase
             .from('convocatoria')
             .select('id_convocatoria, planificacion!inner(id_dia, id_turno)')
             .eq('id_agente', agentId)
-            .eq('estado', 'vigente')
             .eq('planificacion.id_dia', diaData.id_dia);
 
+          // 1) Convocatoria vigente (preferida).
+          let q = base().eq('estado', 'vigente');
           if (turnoId != null) q = q.eq('planificacion.id_turno', turnoId);
           const { data: convRows } = await q.limit(1);
-          return convRows?.[0]?.id_convocatoria ?? null;
+          if (convRows?.[0]?.id_convocatoria != null) return convRows[0].id_convocatoria;
+
+          // 2) Fallback: la convocatoria de ese día/turno aunque esté 'cancelada'.
+          //    id_convocatoria es NOT NULL en menu_semana, y una baja (fila al baúl
+          //    999) o una reasignación no puede quedar sin convocatoria. Antes este
+          //    fallback no existía y el INSERT moría con 23502.
+          let q2 = base().neq('estado', 'vigente');
+          if (turnoId != null) q2 = q2.eq('planificacion.id_turno', turnoId);
+          const { data: convRows2 } = await q2.limit(1);
+          return convRows2?.[0]?.id_convocatoria ?? null;
         };
 
         const isMenuSemanaMultiDevice =
@@ -642,6 +652,35 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           const { error: updErr } = await updQ;
           if (updErr) throw new Error(`[${table}] Update final failed: ${updErr.message}`);
           return;
+        }
+
+        // Una BAJA (id_dispositivo 999) es una operación de movimientos, no de
+        // alta: si la fila de origen no existe ya, el estado pedido está
+        // cumplido y no hay nada que escribir. Sin este early-return la baja
+        // caía en el INSERT de abajo y, cuando `id_convocatoria` no se podía
+        // resolver (p. ej. convocatoria cancelada), Supabase respondía 23502
+        // "null value in column id_convocatoria" abortando todo el guardado.
+        // También provocaba el síntoma de "guardó una parte y dejó otra",
+        // porque saveDrafts conserva solo las mutaciones NO procesadas.
+        const isRemoval = cleanPayload?.id_dispositivo === 999;
+        if (isRemoval && existingRows && existingRows.length === 0) {
+          if (DRAFT_AUDIT_ENABLED) {
+            console.info('[DraftAudit] sql-plan', {
+              table,
+              action,
+              logicalKey,
+              statement: 'baja sin fila de origen → no-op (ya está en el estado pedido)',
+            });
+          }
+          return;
+        }
+
+        if (finalRow.id_convocatoria == null) {
+          const readable = `agente ${finalRow.id_agente}, fecha ${finalRow.fecha_asignacion}, turno ${finalRow.id_turno ?? '-'}`;
+          throw new Error(
+            `[${table}] No se pudo determinar id_convocatoria para ${readable}. ` +
+            `Revisá que exista una convocatoria (vigente o cancelada) para ese día y turno.`
+          );
         }
 
         const { error: insErr } = await supabase.from(table).insert(finalRow);
