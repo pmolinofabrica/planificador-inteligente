@@ -1232,6 +1232,14 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
           // For tarde/manana: use `menu_semana` table
           const isApertura = turnoFilter === 'apertura';
 
+          // NOTA: menu/menu_semana son un SNAPSHOT de "a que dispositivo quedo
+          // asignado cada uno", NO la fuente de verdad de "quien esta
+          // convocado". Un cambio de convocatoria hace UPDATE de
+          // convocatoria.id_agente y NO toca estas filas, asi que seguirian
+          // apuntando al agente viejo y lo Sumarian como convocado aunque ya
+          // no cubra ese turno (caso real: menu 24363, agente 71 el 10-12).
+          // Por eso YA NO se suman a convocadosList aca: "quien esta
+          // convocado" se deriva SOLO de convocatoria, mas abajo.
           if (isApertura) {
             menuData.forEach(a => {
               if (!a.fecha_asignacion) return;
@@ -1239,13 +1247,9 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
               if (y !== yFilt || m !== mmFilt) return;
               const uiDate = formatUiDate(d, m);
 
-              if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-              if (!convocadosList[uiDate].includes(a.id_agente)) {
-                convocadosList[uiDate].push(a.id_agente);
-                convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-              }
-
-              // Populate conv map from menu row
+              // Fallback del FK: si el agente no tiene convocatoria en el
+              // scope, se usa la del menu. La convocatoria real pisa esto
+              // despues (ver seccion 6).
               if (a.id_convocatoria) {
                 if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
                 dateAgentConv[uiDate][a.id_agente] = a.id_convocatoria;
@@ -1280,13 +1284,8 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
               if (y !== yFilt || m !== mmFilt) return;
               const uiDate = formatUiDate(d, m);
 
-              if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
-              if (!convocadosList[uiDate].includes(ms.id_agente)) {
-                convocadosList[uiDate].push(ms.id_agente);
-                convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
-              }
-
-              // Populate conv map from menu_semana row
+              // Mismo criterio que `menu`: no alimenta convocadosList.
+              // Fallback del FK, la convocatoria real pisa esto despues.
               if (ms.id_convocatoria) {
                 if (!dateAgentConv[uiDate]) dateAgentConv[uiDate] = {};
                 dateAgentConv[uiDate][ms.id_agente] = ms.id_convocatoria;
@@ -1346,16 +1345,18 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
 
               const agentTipo: Record<string, Record<number, string>> = {};
 
+              let convocatoriaOk = false;
               if (filteredPlaniIds.length > 0) {
                 // Fetch only for these planiIds to avoid hitting the 1000 row API limit
                 // Notice we removed .eq('estado', 'vigente') so we can also track 'cancelada'
                 const { data: convsData, error: convErr } = await supabase.from('convocatoria')
-                  .select('id_convocatoria, id_agente, id_plani, estado')
+                  .select('id_convocatoria, id_agente, id_plani, estado, turno_cancelado')
                   .in('id_plani', filteredPlaniIds);
-                
+
                 if (convErr) {
                   console.error("Error fetching convocatoria:", convErr);
                 } else if (convsData) {
+                  convocatoriaOk = true;
                   convsData.forEach(c => {
                     const uiDate = planiToUiDate[c.id_plani];
                     if (!uiDate) return;
@@ -1364,10 +1365,10 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
                     if (!dateAgentConvStatus[uiDate]) dateAgentConvStatus[uiDate] = {};
                     if (!agentTipo[uiDate]) agentTipo[uiDate] = {};
 
-                    // Save id_convocatoria so we can reference it, even if canceled (we'll filter visually)
-                    if (!dateAgentConv[uiDate][c.id_agente]) {
-                      dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
-                    }
+                    // La convocatoria real PISA el valor que haya puesto
+                    // menu/menu_semana: es la fuente de verdad y siempre esta
+                    // actualizada (un cambio de convocatoria la reescribe).
+                    dateAgentConv[uiDate][c.id_agente] = c.id_convocatoria;
 
                     // Track status
                     dateAgentConvStatus[uiDate][c.id_agente] = c.estado || 'vigente';
@@ -1375,8 +1376,12 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
                     // Track tipo_turno per agent per date (from planification -> turnos)
                     agentTipo[uiDate][c.id_agente] = planiTipoMap[c.id_plani] || '';
 
-                    // Only count them as "active" in the UI pool if they are actually vigente
-                    if (c.estado === 'vigente') {
+                    // Unico lugar donde se decide quien esta convocado.
+                    // Requiere estado vigente Y turno no cancelado: hay filas
+                    // estado='vigente' con turno_cancelado=true, y el motor
+                    // (supabase/functions/motor-asignacion-apertura) ya filtra
+                    // por las dos condiciones.
+                    if (c.estado === 'vigente' && !c.turno_cancelado) {
                       if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
                       if (!convocadosList[uiDate].includes(c.id_agente)) {
                         convocadosList[uiDate].push(c.id_agente);
@@ -1385,6 +1390,25 @@ export function useAssignmentData({ selectedMonth, turnoFilter = 'apertura', all
                     }
                   });
                 }
+              }
+
+              // Fallback: si la query de convocatoria falla (o no hay planis),
+              // derivar de menu/menu_semana para no mostrar "0 convocados"
+              // por un error transitorio de red.
+              if (!convocatoriaOk) {
+                const sembrarDesdeMenu = (a: { fecha_asignacion?: string | null; id_agente: number }) => {
+                  if (!a.fecha_asignacion) return;
+                  const [y, m, d] = a.fecha_asignacion.split("-");
+                  if (y !== yFilt || m !== mmFilt) return;
+                  const uiDate = formatUiDate(d, m);
+                  if (!convocadosList[uiDate]) convocadosList[uiDate] = [];
+                  if (!convocadosList[uiDate].includes(a.id_agente)) {
+                    convocadosList[uiDate].push(a.id_agente);
+                    convocadosCount[uiDate] = (convocadosCount[uiDate] || 0) + 1;
+                  }
+                };
+                if (isApertura) menuData.forEach(sembrarDesdeMenu);
+                else menuSemanaData.forEach(sembrarDesdeMenu);
               }
               setAgentConvocatoriaMap(dateAgentConv);
               setAgentConvocatoriaStatusMap(dateAgentConvStatus);
